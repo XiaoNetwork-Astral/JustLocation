@@ -28,6 +28,8 @@ const pages = [
   { id: 'settings', label: '设置', icon: Settings },
 ] as const;
 const coordinates = (p: Position) => `${p.latitude.toFixed(6)}, ${p.longitude.toFixed(6)}`;
+/** 把"系统定位"那一项的状态说清楚：区分后台未连接、接口未接、等待接入与已就绪。 */
+const readyText = (ready?: boolean, connected?: boolean) => ready ? '已就绪' : connected ? '等待接口接入' : '等待系统连接';
 
 function readPlaces(): Place[] {
   try {
@@ -334,7 +336,16 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
             })}</div>
           </section>
           <BackupPanel onImported={() => setPlaces(readPlaces())} />
-          <section className="settings-card"><h2>运行环境</h2><dl><div><dt>模块</dt><dd>JustLocation 0.1.0</dd></div><div><dt>控制入口</dt><dd>KernelSU WebUI</dd></div><div><dt>后台</dt><dd>{state ? '已连接' : '未连接'}</dd></div><div><dt>系统定位 Hook</dt><dd>{state?.location_hook_ready ? '已就绪' : state?.hook_connected ? '等待接口接入' : '等待系统连接'}</dd></div></dl></section>
+          <section className="settings-card"><h2>系统通道</h2><p>这些开关决定应用能不能读到系统返回的模拟数据。</p>
+            <dl>
+              <div><dt>系统定位</dt><dd>{readyText(state?.location_hook_ready, !!state?.hook_connected)}</dd></div>
+              <div><dt>GNSS 状态</dt><dd>{state?.gnss_hook_ready ? '已就绪' : state ? '尚未接入' : '后台未连接'}</dd></div>
+              <div><dt>NMEA 报文</dt><dd>{state?.nmea_hook_ready ? '已就绪' : state ? '尚未接入' : '后台未连接'}</dd></div>
+              <div><dt>基站查询</dt><dd>{state?.cell_query_hook_ready ? '已就绪' : state ? '尚未接入' : '后台未连接'}</dd></div>
+              <div><dt>基站回调</dt><dd>{state?.cell_callback_hook_ready ? '已就绪' : state ? '尚未接入' : '后台未连接'}</dd></div>
+              <div><dt>电话服务</dt><dd>{state?.phone_connected ? '已连接' : state ? '等待连接' : '后台未连接'}</dd></div>
+            </dl></section>
+          <section className="settings-card"><h2>运行环境</h2><dl><div><dt>模块</dt><dd>JustLocation 0.1.0</dd></div><div><dt>控制入口</dt><dd>KernelSU WebUI</dd></div><div><dt>后台</dt><dd>{state ? '已连接' : '未连接'}</dd></div></dl></section>
         </>}
         {page === 'routes' && <RoutePanel state={state} busy={busy} scope={scope} onCommand={routeCommand} onScope={() => navigate('scope')} />}
         {page === 'wifi' && <section className="empty-state feature-placeholder"><Wifi size={36} /><h2>Wi-Fi 功能正在接入</h2><p>已保存网络和模拟设置会在这里管理。</p></section>}

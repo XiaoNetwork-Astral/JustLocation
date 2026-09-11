@@ -10,6 +10,9 @@ export interface State {
   requested_active: boolean; config: Config | null; hook_connected?: boolean; location_hook_ready?: boolean; route?: RouteState | null;
   phone_connected?: boolean; detected_subscriptions?: DetectedSubscription[] | null;
   telephony?: TelephonyConfig; cell_hook_ready?: boolean; sim_hook_ready?: boolean;
+  /** 后端已经上报、前端此前没有声明的通道就绪位，用于在设置页展示。 */
+  gnss_hook_ready?: boolean; nmea_hook_ready?: boolean;
+  cell_query_hook_ready?: boolean; cell_callback_hook_ready?: boolean;
   telephony_output?: { availability: 'disabled' | 'ready' | 'missing_region' | 'outside_region'; groups: { cells: unknown[] }[] } | null;
 }
 export type Command = { op: 'status' | 'stop' | 'pause_route' | 'resume_route' } | { op: 'start'; config: Config } | { op: 'update'; position: Position }

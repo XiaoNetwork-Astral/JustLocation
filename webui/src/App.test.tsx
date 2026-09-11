@@ -152,6 +152,21 @@ it('starts and stops a route from the route manager', async () => {
   expect(await screen.findByRole('button', { name: '新建路线' })).toBeTruthy();
 });
 
+it('reports which system channels are ready instead of hiding them', async () => {
+  const client = vi.fn().mockResolvedValue({ requested_active: false, config: null,
+    hook_connected: true, location_hook_ready: true, gnss_hook_ready: true, nmea_hook_ready: false,
+    cell_query_hook_ready: false, cell_callback_hook_ready: false, phone_connected: true });
+  render(<App client={client} />);
+  await screen.findByText('后台已连接');
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: '设置' }));
+  // 已就绪与尚未接入要一眼能区分开，不能让用户以为所有通道都可用。
+  expect(screen.getByText('GNSS 状态').nextElementSibling?.textContent).toBe('已就绪');
+  expect(screen.getByText('NMEA 报文').nextElementSibling?.textContent).toBe('尚未接入');
+  expect(screen.getByText('基站查询').nextElementSibling?.textContent).toBe('尚未接入');
+  expect(screen.getByText('电话服务').nextElementSibling?.textContent).toBe('已连接');
+});
+
 it('shows a connection failure and never presents an active session', async () => {
   render(<App client={async () => { throw new Error('后台未启动'); }} />);
   expect(await screen.findByRole('alert')).toHaveProperty('textContent', expect.stringContaining('后台未启动'));
