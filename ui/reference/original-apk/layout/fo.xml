@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout android:layout_gravity="bottom" android:background="@drawable/gj" android:layout_width="match_parent" android:layout_height="match_parent" android:elevation="16.0dp"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <WebView android:id="@id/a52" android:layout_width="match_parent" android:layout_height="match_parent" />
+    <ProgressBar android:id="@id/zp" android:visibility="gone" android:layout_width="match_parent" android:layout_height="4.0dp" android:indeterminate="false" style="?android:progressBarStyleHorizontal" />
+</FrameLayout>

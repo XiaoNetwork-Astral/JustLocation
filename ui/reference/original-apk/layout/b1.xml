@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<carbon.widget.FrameLayout android:id="@id/h8" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <carbon.widget.FrameLayout android:id="@id/gp" android:visibility="invisible" android:layout_width="wrap_content" android:layout_height="wrap_content" app:f8="p1" app:fz="p1">
+        <carbon.widget.ImageView android:layout_width="wrap_content" android:layout_height="wrap_content" app:gi="@raw/b" app:h5="?k0" />
+        <carbon.widget.TextView android:textAppearance="?go" android:textSize="10.0sp" android:gravity="center" android:id="@id/h1" android:layout_width="26.0dp" android:layout_height="26.0dp" android:maxLines="1" />
+    </carbon.widget.FrameLayout>
+</carbon.widget.FrameLayout>

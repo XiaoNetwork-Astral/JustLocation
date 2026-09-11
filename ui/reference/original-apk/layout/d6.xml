@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="horizontal" android:paddingLeft="@dimen/fa" android:paddingTop="@dimen/f6" android:paddingRight="@dimen/fa" android:paddingBottom="@dimen/f6" android:layout_width="match_parent" android:layout_height="wrap_content" android:foreground="?a5g"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <carbon.widget.FrameLayout android:background="@color/ix" android:padding="@dimen/f3" android:layout_width="@dimen/fn" android:layout_height="@dimen/fn" app:eh="@dimen/fd">
+        <carbon.widget.ImageView android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/o2" app:h5="@color/a1e" />
+    </carbon.widget.FrameLayout>
+    <LinearLayout android:orientation="vertical" android:layout_width="0.0dp" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fa" android:layout_weight="1.0">
+        <TextView android:textSize="@dimen/fa" android:textStyle="bold" android:textColor="@color/l5" android:ellipsize="end" android:id="@id/rw" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="NONE" android:singleLine="true" />
+        <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <TextView android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/l5" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="BSSID:" />
+            <TextView android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/ix" android:id="@id/rv" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fm" android:text="NONE" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

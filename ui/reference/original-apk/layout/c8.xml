@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:paddingLeft="@dimen/f3" android:paddingTop="@dimen/fy" android:paddingRight="@dimen/f3" android:paddingBottom="@dimen/fy" android:layout_width="240.0dp" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <carbon.widget.LinearLayout android:orientation="horizontal" android:paddingBottom="@dimen/fm" android:layout_width="match_parent" android:layout_height="wrap_content" app:g9="@color/ix">
+        <TextView android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/l5" android:id="@id/l3" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/ks" />
+        <EditText android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/ix" android:gravity="right|center" android:id="@id/l2" android:background="@null" android:paddingRight="@dimen/fy" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="2" android:hint="              " android:singleLine="true" android:maxLength="5" android:digits="1234567890" android:layout_weight="1.0" android:inputType="number" android:imeOptions="actionDone" />
+        <TextView android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/ix" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/kt" />
+    </carbon.widget.LinearLayout>
+    <carbon.widget.LinearLayout android:orientation="horizontal" android:paddingTop="@dimen/fm" android:paddingBottom="@dimen/fm" android:layout_width="match_parent" android:layout_height="wrap_content" app:g9="@color/ix">
+        <TextView android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/l5" android:id="@id/l4" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/kr" />
+        <EditText android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/ix" android:gravity="right|bottom" android:id="@id/l1" android:background="@null" android:paddingRight="@dimen/fy" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0" android:hint="              " android:singleLine="true" android:maxLength="50" android:digits="1234567890" android:layout_weight="1.0" android:inputType="number" android:imeOptions="actionDone" />
+        <TextView android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/ix" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/kq" />
+    </carbon.widget.LinearLayout>
+</LinearLayout>

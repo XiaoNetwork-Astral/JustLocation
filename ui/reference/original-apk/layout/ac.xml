@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <com.lerist.lib.factory.widget.LFragmentContainer android:id="@id/by" android:layout_width="match_parent" android:layout_height="match_parent" />
+    <com.google.android.material.floatingactionbutton.FloatingActionButton android:layout_gravity="right|bottom" android:id="@id/bz" android:clickable="true" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="@dimen/f4" android:tint="@color/ix" android:layout_marginEnd="@dimen/ff" app:bm="@color/a1e" app:qe="vj" app:a73="@drawable/nl" />
+</FrameLayout>

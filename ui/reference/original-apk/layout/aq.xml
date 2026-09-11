@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<carbon.widget.RelativeLayout android:clickable="true" android:layout_width="wrap_content" android:layout_height="match_parent" android:minWidth="@dimen/bv" app:fu="@dimen/bu" app:g9="?g9" app:gc="fm"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <carbon.widget.TextMarker android:id="@id/go" android:layout_width="1.0dp" android:layout_height="wrap_content" android:layout_marginBottom="10.0dp" android:layout_alignParentBottom="true" app:gl="I" app:h1="@id/gn" />
+    <carbon.widget.TextView android:textSize="12.0sp" android:textColor="?f6" android:id="@id/gn" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignBaseline="@id/go" android:layout_centerHorizontal="true" app:ev="RobotoRegular" />
+    <carbon.widget.ImageView android:id="@id/gm" android:layout_width="@dimen/cl" android:layout_height="@dimen/cl" android:layout_marginBottom="6.0dp" android:layout_above="@id/go" android:layout_centerHorizontal="true" app:h5="?f6" />
+</carbon.widget.RelativeLayout>

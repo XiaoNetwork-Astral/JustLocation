@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="@integer/an" android:layout_width="wrap_content" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <include layout="@layout/en" />
+    <LinearLayout android:orientation="vertical" android:id="@id/vx" android:layout_width="wrap_content" android:layout_height="match_parent">
+        <androidx.fragment.app.FragmentContainerView android:id="@id/vw" android:paddingLeft="@dimen/sz" android:paddingRight="@dimen/sz" android:paddingBottom="@dimen/sy" android:layout_width="match_parent" android:layout_height="0.0dp" android:layout_weight="1.0" android:paddingStart="@dimen/sz" android:paddingEnd="@dimen/sz" />
+        <include android:layout_width="match_parent" android:layout_height="@dimen/sw" layout="@layout/ek" />
+    </LinearLayout>
+</LinearLayout>

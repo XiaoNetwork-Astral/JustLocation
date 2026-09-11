@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:id="@id/um" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <com.lerist.lib.factory.widget.LWebView android:id="@id/a52" android:layout_width="match_parent" android:layout_height="match_parent" app:w5="yg" app:wa="yg" app:wu="yg" app:wy="yg" />
+    <ProgressBar android:id="@id/a53" android:background="@color/a1e" android:visibility="gone" android:layout_width="match_parent" android:layout_height="2.0dp" style="?android:progressBarStyleHorizontal" />
+</androidx.constraintlayout.widget.ConstraintLayout>

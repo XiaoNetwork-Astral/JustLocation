@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.lerist.lib.factory.widget.LViewSwitcher android:id="@id/b2" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <LinearLayout android:orientation="vertical" android:id="@id/b1" android:background="@color/a1e" android:layout_width="match_parent" android:layout_height="match_parent">
+        <ScrollView android:visibility="gone" android:layout_width="match_parent" android:layout_height="0.0dp" android:layout_marginLeft="@dimen/fa" android:layout_marginTop="@dimen/fa" android:layout_marginRight="@dimen/fa" android:layout_weight="1.0">
+            <TextView android:gravity="center" android:layout_gravity="center" android:id="@id/b8" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_margin="@dimen/fa" android:text="加载中..." />
+        </ScrollView>
+        <com.lerist.lib.factory.widget.LWebView android:id="@id/b9" android:layout_width="match_parent" android:layout_height="0.0dp" android:layout_weight="1.0" />
+        <Button android:textSize="@dimen/fb" android:textColor="@color/a1e" android:id="@id/b0" android:padding="@dimen/fa" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/ff" android:layout_marginTop="@dimen/fy" android:layout_marginRight="@dimen/ff" android:layout_marginBottom="@dimen/ff" android:text="同意协议并开始答题" android:backgroundTint="@color/ix" />
+    </LinearLayout>
+    <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent">
+        <androidx.cardview.widget.CardView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fa" android:layout_marginTop="@dimen/fa" app:hg="#22222222" app:hh="@dimen/fy" app:hi="0.0dp" app:m5="@dimen/fy">
+            <TextView android:textSize="@dimen/fa" android:textColor="@color/l5" android:id="@id/b5" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="倒计时 05:00" />
+        </androidx.cardview.widget.CardView>
+        <ProgressBar android:id="@id/b3" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fa" android:layout_marginTop="@dimen/fa" android:layout_marginRight="@dimen/fa" android:layout_marginBottom="@dimen/fa" android:indeterminate="false" style="@style/wg" />
+        <androidx.core.widget.NestedScrollView android:id="@id/b4" android:layout_width="match_parent" android:layout_height="0.0dp" android:layout_marginLeft="@dimen/fa" android:layout_marginRight="@dimen/fa" android:layout_weight="1.0" />
+        <Button android:textSize="@dimen/fb" android:textColor="@color/a1e" android:id="@id/az" android:padding="@dimen/fa" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/ff" android:layout_marginTop="@dimen/fy" android:layout_marginRight="@dimen/ff" android:layout_marginBottom="@dimen/ff" android:text="下一题" android:backgroundTint="@color/ix" />
+    </LinearLayout>
+    <LinearLayout android:orientation="vertical" android:background="@color/a1e" android:layout_width="match_parent" android:layout_height="match_parent">
+        <ScrollView android:layout_width="match_parent" android:layout_height="0.0dp" android:layout_marginLeft="@dimen/fa" android:layout_marginTop="@dimen/fa" android:layout_marginRight="@dimen/fa" android:layout_weight="1.0">
+            <LinearLayout android:gravity="center" android:layout_gravity="center_horizontal" android:orientation="vertical" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fq">
+                <TextView android:textSize="64.0dp" android:textColor="@color/iy" android:id="@id/b7" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_margin="@dimen/fa" android:text="0分" />
+                <TextView android:id="@id/b6" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="加载中..." />
+            </LinearLayout>
+        </ScrollView>
+    </LinearLayout>
+</com.lerist.lib.factory.widget.LViewSwitcher>

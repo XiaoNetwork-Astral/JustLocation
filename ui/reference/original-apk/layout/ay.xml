@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<carbon.widget.FrameLayout android:id="@id/h8" android:padding="@dimen/cu" android:visibility="invisible" android:layout_width="match_parent" android:layout_height="match_parent" app:f8="p1" app:fz="p1"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <carbon.widget.FrameLayout android:id="@id/h9" android:background="?ec" android:layout_width="match_parent" android:layout_height="match_parent" app:ep="@dimen/cb">
+        <carbon.widget.RecyclerView android:id="@id/zy" android:paddingTop="@dimen/cv" android:paddingBottom="@dimen/cv" android:layout_width="match_parent" android:layout_height="match_parent" android:fadeScrollbars="false" />
+    </carbon.widget.FrameLayout>
+</carbon.widget.FrameLayout>

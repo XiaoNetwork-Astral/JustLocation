@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fy" android:layout_marginTop="@dimen/fm" android:layout_marginRight="@dimen/fy" android:layout_marginBottom="@dimen/fm" app:hh="@dimen/fc">
+        <carbon.widget.LinearLayout android:orientation="horizontal" android:background="@color/a1e" android:layout_width="match_parent" android:layout_height="@dimen/fq" app:eh="@dimen/fc">
+            <androidx.appcompat.widget.AppCompatImageView android:id="@id/tr" android:padding="@dimen/f6" android:clickable="true" android:layout_width="@dimen/fq" android:layout_height="@dimen/fq" android:foreground="?android:actionBarItemBackground" android:tint="@color/iw" app:h5="@color/iw" app:a73="@drawable/di" />
+            <AutoCompleteTextView android:textSize="@dimen/xn" android:textColor="@color/iw" android:textColorHint="@color/l7" android:gravity="center_vertical" android:id="@id/tu" android:background="@null" android:layout_width="0.0dp" android:layout_height="match_parent" android:layout_marginLeft="@dimen/fy" android:layout_marginRight="@dimen/fy" android:hint="搜索" android:maxLines="1" android:singleLine="true" android:layout_weight="1.0" android:imeOptions="actionSearch" />
+            <FrameLayout android:layout_width="@dimen/fq" android:layout_height="@dimen/fq">
+                <androidx.appcompat.widget.AppCompatImageView android:id="@id/ts" android:padding="@dimen/f6" android:visibility="gone" android:clickable="true" android:layout_width="match_parent" android:layout_height="match_parent" android:foreground="?android:actionBarItemBackground" android:tint="@color/iw" app:h5="@color/iw" app:a73="@drawable/dl" />
+                <androidx.appcompat.widget.AppCompatImageView android:id="@id/tt" android:padding="@dimen/f6" android:clickable="true" android:layout_width="match_parent" android:layout_height="match_parent" android:foreground="?android:actionBarItemBackground" android:tint="@color/iw" app:h5="@color/iw" app:a73="@drawable/e9" />
+            </FrameLayout>
+        </carbon.widget.LinearLayout>
+    </androidx.cardview.widget.CardView>
+</LinearLayout>

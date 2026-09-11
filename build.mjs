@@ -23,11 +23,12 @@ function run(program, args, cwd = root, extraEnv = {}, capture = false) {
   return result.stdout;
 }
 
+/** 面板（ui/）是独立目录：自带 package.json、测试与参考材料，只通过后台协议与本模块耦合。 */
 function npm(args) {
   const cli = join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
   const cache = ['--cache', join(output, 'cache', 'npm'), '--no-audit', '--no-fund'];
-  if (win) run(process.execPath, [cli, ...args, ...cache], join(root, 'webui'));
-  else run('npm', [...args, ...cache], join(root, 'webui'));
+  if (win) run(process.execPath, [cli, ...args, ...cache], join(root, 'ui'));
+  else run('npm', [...args, ...cache], join(root, 'ui'));
 }
 
 function sdk() {
@@ -174,18 +175,18 @@ function pack() {
     ['build/native/_deps/shadowhook-src/shadowhook/src/main/cpp/third_party/xdl/LICENSE', 'licenses/xdl.txt'],
     ['build/native/_deps/shadowhook-src/shadowhook/src/main/cpp/third_party/lss/LICENSE', 'licenses/lss.txt'],
     ['native/include/zygisk.hpp', 'licenses/zygisk.hpp'],
-    ['webui/node_modules/react/LICENSE', 'licenses/react.txt'],
-    ['webui/node_modules/react-dom/LICENSE', 'licenses/react-dom.txt'],
-    ['webui/node_modules/kernelsu/package.json', 'licenses/kernelsu-package.json'],
-    ['webui/node_modules/lucide-react/LICENSE', 'licenses/lucide.txt'],
-    ['webui/node_modules/leaflet/LICENSE', 'licenses/leaflet.txt'],
+    ['ui/node_modules/react/LICENSE', 'licenses/react.txt'],
+    ['ui/node_modules/react-dom/LICENSE', 'licenses/react-dom.txt'],
+    ['ui/node_modules/kernelsu/package.json', 'licenses/kernelsu-package.json'],
+    ['ui/node_modules/lucide-react/LICENSE', 'licenses/lucide.txt'],
+    ['ui/node_modules/leaflet/LICENSE', 'licenses/leaflet.txt'],
   ];
   for (const [source, target] of inputs) {
     const destination = join(stage, target);
     mkdirSync(dirname(destination), { recursive: true });
     copyFileSync(join(root, source), destination);
   }
-  cpSync(join(root, 'webui/dist'), join(stage, 'webroot'), { recursive: true });
+  cpSync(join(root, 'ui/dist'), join(stage, 'webroot'), { recursive: true });
   writeChecksums(stage);
   mkdirSync(join(root, 'dist'), { recursive: true });
   const jar = process.env.JAVA_HOME ? join(process.env.JAVA_HOME, 'bin', `jar${exe}`) : `jar${exe}`;
@@ -239,12 +240,12 @@ try {
       break;
     case 'native': native(); break;
     case 'backend': backend(); break;
-    case 'webui': npm(['run', 'build']); break;
+    case 'ui': npm(['run', 'build']); break;
     case 'android': android(); break;
     case 'pack': pack(); break;
     case 'build': native(); backend(); npm(['run', 'build']); android(); pack(); break;
     case 'help':
-      console.log('node build.mjs <setup|test|test:e2e|test:android|test:device <serial>|test:transport <serial>|test:transport-io <serial>|build|pack|native|backend|webui|android>');
+      console.log('node build.mjs <setup|test|test:e2e|test:android|test:device <serial>|test:transport <serial>|test:transport-io <serial>|build|pack|native|backend|ui|android>');
       break;
     default: throw new Error(`Unknown command: ${command}`);
   }

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <com.google.android.material.card.MaterialCardView android:id="@id/hy" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_margin="5.0dp">
+        <androidx.constraintlayout.widget.ConstraintLayout android:layout_width="match_parent" android:layout_height="wrap_content">
+            <com.stripe.android.view.CardMultilineWidget android:id="@id/hx" android:layout_width="match_parent" android:layout_height="wrap_content" app:wu="yg" app:wy="yg" app:a60="false" />
+            <com.stripe.android.view.CountryTextInputLayout android:id="@id/j8" android:layout_width="match_parent" android:layout_height="wrap_content" app:n0="@style/l7" app:n1="@layout/gc" app:w6="@id/j9" app:wa="yg" app:wu="yg" app:wx="@id/hx" style="@style/l8" />
+            <View android:id="@id/j9" android:background="@color/yu" android:layout_width="match_parent" android:layout_height="1.0dp" app:w6="@id/zh" app:wx="@id/j8" />
+            <com.google.android.material.textfield.TextInputLayout android:id="@id/zh" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="@string/y9" app:wa="yg" app:wu="yg" app:wx="@id/j9" style="@style/l_">
+                <com.stripe.android.view.PostalCodeEditText android:id="@id/zg" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textPostalAddress" style="@style/l9" />
+            </com.google.android.material.textfield.TextInputLayout>
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </com.google.android.material.card.MaterialCardView>
+    <TextView android:id="@id/mr" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" app:wu="yg" app:wx="@id/zh" style="@style/l6" />
+</merge>

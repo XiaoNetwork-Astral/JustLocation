@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout android:id="@id/p9" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <LinearLayout android:gravity="center_horizontal" android:orientation="vertical" android:id="@id/p2" android:layout_width="match_parent" android:layout_height="match_parent" />
+    <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent">
+        <LinearLayout android:orientation="vertical" android:id="@id/p5" android:layout_width="match_parent" android:layout_height="wrap_content" />
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout android:id="@id/p8" android:layout_width="match_parent" android:layout_height="0.0dp" android:layout_weight="1.0">
+            <com.lerist.lib.factory.widget.LRecyclerView android:id="@id/p6" android:focusableInTouchMode="true" android:scrollbars="vertical" android:clipToPadding="false" android:layout_width="match_parent" android:layout_height="match_parent" />
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+        <LinearLayout android:orientation="vertical" android:id="@id/p3" android:layout_width="match_parent" android:layout_height="wrap_content" />
+    </LinearLayout>
+    <LinearLayout android:gravity="center_horizontal" android:orientation="vertical" android:id="@id/p4" android:layout_width="match_parent" android:layout_height="match_parent" />
+    <com.google.android.material.floatingactionbutton.FloatingActionButton android:layout_gravity="right|bottom" android:id="@id/p7" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginRight="@dimen/fa" android:layout_marginBottom="@dimen/ff" app:bm="@color/ix" app:a46="6.0dp" />
+</FrameLayout>

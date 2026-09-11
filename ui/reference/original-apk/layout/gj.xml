@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent" android:animateLayoutChanges="true"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <LinearLayout android:orientation="horizontal" android:id="@id/a59" android:focusable="true" android:visibility="gone" android:clickable="true" android:layout_width="match_parent" android:layout_height="wrap_content">
+        <com.stripe.android.stripe3ds2.views.ThreeDS2TextView android:enabled="false" android:id="@id/a5_" android:layout_width="0.0dp" android:layout_height="wrap_content" android:layout_weight="1.0" style="@style/kt" />
+        <androidx.appcompat.widget.AppCompatImageView android:enabled="false" android:id="@id/a58" android:layout_width="24.0dp" android:layout_height="24.0dp" app:a73="@drawable/ga" style="@style/ks" />
+    </LinearLayout>
+    <com.stripe.android.stripe3ds2.views.ThreeDS2TextView android:id="@id/a5a" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/yn" android:accessibilityLiveRegion="polite" style="@style/ku" />
+    <LinearLayout android:orientation="horizontal" android:id="@id/n8" android:focusable="true" android:visibility="gone" android:clickable="true" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/yo">
+        <com.stripe.android.stripe3ds2.views.ThreeDS2TextView android:enabled="false" android:id="@id/n9" android:layout_width="0.0dp" android:layout_height="wrap_content" android:layout_weight="1.0" style="@style/kt" />
+        <androidx.appcompat.widget.AppCompatImageView android:enabled="false" android:id="@id/n7" android:layout_width="24.0dp" android:layout_height="24.0dp" app:a73="@drawable/ga" style="@style/ks" />
+    </LinearLayout>
+    <com.stripe.android.stripe3ds2.views.ThreeDS2TextView android:id="@id/n_" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/yn" android:accessibilityLiveRegion="polite" style="@style/ku" />
+</LinearLayout>

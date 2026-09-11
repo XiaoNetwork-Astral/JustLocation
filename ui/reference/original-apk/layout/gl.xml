@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.appcompat.widget.AppCompatImageView android:layout_gravity="start|center" android:id="@id/fu" android:layout_width="@dimen/zr" android:layout_height="@dimen/zq" app:a73="@drawable/l_" />
+    <androidx.appcompat.widget.AppCompatTextView android:textAppearance="@android:style/TextAppearance.DeviceDefault.Medium" android:layout_gravity="start|center" android:id="@id/lq" android:layout_width="0.0dp" android:layout_height="wrap_content" android:layout_weight="1.0" android:layout_marginStart="@dimen/zo" />
+    <androidx.appcompat.widget.AppCompatImageView android:layout_gravity="center" android:id="@id/ib" android:visibility="invisible" android:layout_width="@dimen/zr" android:layout_height="wrap_content" app:a73="@drawable/hk" />
+</merge>

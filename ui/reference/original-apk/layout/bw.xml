@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:background="@color/a1e" android:padding="10.0dp" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <TextView android:textSize="18.0sp" android:textStyle="bold" android:textColor="@color/b2" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="8.0dp" android:layout_marginTop="8.0dp" android:layout_marginBottom="16.0dp" android:text="支持开发者" />
+    <TextView android:textSize="15.0sp" android:textColor="@color/l_" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="8.0dp" android:text="如果您觉得这个应用还不错的话，可以捐赠支持一下，给开发者提供更多的动力维护它。\n\n无论多少，都是支持！:) " />
+    <LinearLayout android:gravity="right|center" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16.0dp">
+        <androidx.appcompat.widget.AppCompatButton android:textSize="14.0sp" android:textStyle="bold" android:textColor="@color/it" android:id="@id/kc" android:background="@android:color/transparent" android:layout_width="wrap_content" android:layout_height="32.0dp" android:layout_marginRight="28.0dp" android:foreground="?a5g" android:minWidth="56.0dp" android:text="取消" />
+        <androidx.appcompat.widget.AppCompatButton android:textSize="14.0sp" android:textColor="@color/it" android:id="@id/kd" android:background="@null" android:visibility="visible" android:layout_width="72.0dp" android:layout_height="32.0dp" android:foreground="?a5g" android:text="PayPal" />
+        <androidx.appcompat.widget.AppCompatButton android:textSize="14.0sp" android:textStyle="bold" android:textColor="@color/it" android:id="@id/ke" android:background="@null" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="32.0dp" android:foreground="?a5g" android:minWidth="50.0dp" android:text="微信" />
+        <androidx.appcompat.widget.AppCompatButton android:textSize="14.0sp" android:textStyle="bold" android:textColor="@color/it" android:id="@id/kb" android:background="@null" android:layout_width="wrap_content" android:layout_height="32.0dp" android:foreground="?a5g" android:minWidth="64.0dp" android:text="支付宝" />
+    </LinearLayout>
+</LinearLayout>

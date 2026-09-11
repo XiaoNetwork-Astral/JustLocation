@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.drawerlayout.widget.DrawerLayout android:id="@id/m_" android:background="@color/j3" android:fitsSystemWindows="true" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <include android:layout_width="match_parent" android:layout_height="match_parent" layout="@layout/ai" />
+    <com.google.android.material.navigation.NavigationView android:layout_gravity="start" android:id="@id/xa" android:background="@color/j3" android:fitsSystemWindows="true" android:layout_width="wrap_content" android:layout_height="match_parent" app:su="@layout/eu" app:a0d="@menu/c" />
+</androidx.drawerlayout.widget.DrawerLayout>

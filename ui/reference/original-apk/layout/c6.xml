@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:padding="24.0dp" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <androidx.appcompat.widget.AppCompatEditText android:textSize="@dimen/fb" android:textStyle="bold" android:id="@id/kv" android:layout_width="match_parent" android:layout_height="wrap_content" android:digits="1234567890.-" android:inputType="number" />
+</LinearLayout>

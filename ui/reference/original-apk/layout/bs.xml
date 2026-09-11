@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:paddingLeft="@dimen/ff" android:paddingRight="@dimen/fa" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <TextView android:textSize="@dimen/f9" android:textColor="@color/ix" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fa" android:text="@string/hc" />
+    <TextView android:textSize="@dimen/fb" android:textStyle="bold" android:textColor="@color/l5" android:ellipsize="end" android:id="@id/k4" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fy" android:text="NONE" android:singleLine="true" />
+    <TextView android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/l5" android:ellipsize="end" android:id="@id/k2" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fm" android:text="NONE • NONE" android:singleLine="true" />
+    <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fm">
+        <TextView android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/l5" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/px" />
+        <TextView android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/ix" android:id="@id/k3" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fy" android:text="" />
+    </LinearLayout>
+    <TextView android:textSize="@dimen/f9" android:textColor="@color/ix" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/f9" android:layout_marginBottom="@dimen/fu" android:text="@string/hd" />
+    <CheckBox android:textSize="@dimen/f9" android:textColor="@color/jp" android:gravity="center_vertical" android:id="@id/k0" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/he" />
+    <CheckBox android:textSize="@dimen/f9" android:textColor="@color/jp" android:id="@id/k1" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/hf" />
+</LinearLayout>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:paddingBottom="2.0dp" android:layout_width="wrap_content" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <TextView android:id="@id/qc" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="16.0dp" android:text="@string/uh" android:importantForAccessibility="no" android:layout_marginStart="24.0dp" app:wu="yg" app:wy="yg" style="?a02" />
+    <com.google.android.material.timepicker.TimePickerView android:id="@id/vd" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="24.0dp" android:layout_marginTop="@dimen/r2" android:layout_marginRight="24.0dp" android:layout_marginBottom="@dimen/r1" app:w6="@id/vb" app:wa="yg" app:wu="yg" app:wy="yg" />
+    <ViewStub android:id="@id/v9" android:layout="@layout/dw" android:inflatedId="@id/v9" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="24.0dp" android:layout_marginTop="44.0dp" android:layout_marginRight="24.0dp" android:layout_marginBottom="@dimen/r1" app:w6="@id/vb" app:wa="yg" app:wu="yg" app:wy="yg" />
+    <com.google.android.material.button.MaterialButton android:id="@id/vb" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="12.0dp" app:w5="yg" app:wu="yg" style="?tq" />
+    <Button android:id="@id/v_" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2.0dp" android:minWidth="72.0dp" android:text="@string/vq" android:layout_marginEnd="8.0dp" app:wb="@id/vc" app:wy="@id/vb" style="?co" />
+    <Button android:id="@id/vc" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2.0dp" android:minWidth="64.0dp" android:text="@string/vr" android:layout_marginEnd="8.0dp" app:wa="yg" app:wy="@id/vb" style="?co" />
+</androidx.constraintlayout.widget.ConstraintLayout>

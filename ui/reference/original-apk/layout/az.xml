@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<carbon.widget.FrameLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" app:g9="?g9"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <carbon.widget.TextView android:textAppearance="?gx" android:gravity="center_vertical" android:id="@id/h0" android:paddingLeft="@dimen/cu" android:paddingRight="@dimen/cu" android:layout_width="match_parent" android:layout_height="@dimen/co" android:maxLines="1" android:singleLine="true" />
+</carbon.widget.FrameLayout>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <LinearLayout android:gravity="bottom" android:orientation="vertical" android:paddingLeft="@dimen/ff" android:paddingTop="@dimen/f6" android:paddingRight="@dimen/f6" android:paddingBottom="@dimen/fy" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content">
+        <com.google.android.material.textfield.TextInputLayout android:textColorHint="@color/it" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="@string/i4">
+            <androidx.appcompat.widget.AppCompatEditText android:textSize="@dimen/f9" android:textColor="@color/l5" android:id="@id/ka" android:focusableInTouchMode="true" android:layout_width="match_parent" android:layout_height="wrap_content" />
+        </com.google.android.material.textfield.TextInputLayout>
+        <Button android:textSize="@dimen/f6" android:layout_gravity="right" android:id="@id/k_" android:layout_width="wrap_content" android:layout_height="@dimen/fn" android:text="@string/i3" />
+    </LinearLayout>
+</LinearLayout>

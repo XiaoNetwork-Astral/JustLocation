@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:layout_width="wrap_content" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.cardview.widget.CardView android:id="@id/t7" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fm" android:layout_marginTop="@dimen/fc" android:layout_marginRight="@dimen/fm" android:layout_marginBottom="@dimen/fy" app:hg="@color/a1e" app:hh="@dimen/fm" app:hi="@dimen/fi">
+        <com.lerist.lib.factory.widget.LViewSwitcher android:id="@id/to" android:layout_width="wrap_content" android:layout_height="wrap_content">
+            <LinearLayout android:orientation="vertical" android:layout_width="220.0dp" android:layout_height="240.0dp">
+                <ScrollView android:layout_width="match_parent" android:layout_height="0.0dp" android:layout_weight="1.0">
+                    <LinearLayout android:orientation="vertical" android:paddingLeft="@dimen/f9" android:paddingTop="@dimen/f9" android:paddingRight="@dimen/f9" android:layout_width="match_parent" android:layout_height="wrap_content">
+                        <carbon.widget.LinearLayout android:orientation="horizontal" android:id="@id/td" android:paddingBottom="@dimen/fy" android:layout_width="match_parent" android:layout_height="wrap_content">
+                            <TextView android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/l5" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/sq" />
+                            <View android:layout_width="0.0dp" android:layout_height="1.0dp" android:layout_weight="1.0" />
+                            <TextView android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/ix" android:gravity="right|center" android:id="@id/te" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fy" android:text="Relative to Device" />
+                        </carbon.widget.LinearLayout>
+                        <include layout="@layout/d8" />
+                        <carbon.widget.LinearLayout android:orientation="horizontal" android:id="@id/ti" android:paddingTop="@dimen/fy" android:paddingBottom="@dimen/fm" android:layout_width="match_parent" android:layout_height="wrap_content" app:g9="@color/ix">
+                            <TextView android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/l5" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/sw" />
+                            <View android:layout_width="0.0dp" android:layout_height="0.0dp" android:layout_weight="1.0" />
+                            <EditText android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/ix" android:gravity="right" android:id="@id/tj" android:background="@null" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="10" android:hint="      " android:singleLine="true" android:maxLength="5" android:digits="1234567890." android:inputType="number" android:imeOptions="actionDone" />
+                            <TextView android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/ix" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text=" m/s" />
+                        </carbon.widget.LinearLayout>
+                        <SeekBar android:id="@id/tk" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/g0" android:layout_marginRight="@dimen/g0" android:max="40" android:progressTint="@color/ix" android:progressBackgroundTint="@color/ix" android:secondaryProgressTint="@color/ix" android:backgroundTint="@color/ix" android:thumbTint="@color/ix" />
+                        <LinearLayout android:orientation="horizontal" android:paddingBottom="@dimen/fy" android:layout_width="match_parent" android:layout_height="wrap_content">
+                            <ImageView android:layout_width="@dimen/fa" android:layout_height="@dimen/fa" android:src="@mipmap/ap" android:tint="@color/ix" />
+                            <View android:layout_width="0.0dp" android:layout_height="0.0dp" android:layout_weight="1.0" />
+                            <ImageView android:layout_width="@dimen/fa" android:layout_height="@dimen/fa" android:src="@mipmap/aq" android:tint="@color/ix" />
+                            <View android:layout_width="0.0dp" android:layout_height="0.0dp" android:layout_weight="1.0" />
+                            <ImageView android:layout_width="@dimen/fa" android:layout_height="@dimen/fa" android:src="@mipmap/ar" android:tint="@color/ix" />
+                            <View android:layout_width="0.0dp" android:layout_height="0.0dp" android:layout_weight="1.0" />
+                            <ImageView android:layout_width="@dimen/fa" android:layout_height="@dimen/fa" android:src="@mipmap/as" android:tint="@color/ix" />
+                            <View android:layout_width="0.0dp" android:layout_height="0.0dp" android:layout_weight="1.0" />
+                            <ImageView android:layout_width="@dimen/fa" android:layout_height="@dimen/fa" android:src="@mipmap/at" android:tint="@color/ix" />
+                        </LinearLayout>
+                        <include layout="@layout/d8" />
+                        <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fm" android:layout_marginBottom="@dimen/fm">
+                            <TextView android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/l5" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/su" />
+                            <View android:layout_width="0.0dp" android:layout_height="0.0dp" android:layout_weight="1.0" />
+                            <Switch android:textSize="@dimen/f9" android:textStyle="bold" android:id="@id/tg" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                        </LinearLayout>
+                        <include layout="@layout/d8" />
+                        <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fm" android:layout_marginBottom="@dimen/fm">
+                            <TextView android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/l5" android:id="@id/tc" android:layout_width="0.0dp" android:layout_height="wrap_content" android:text="@string/ku" android:layout_weight="1.0" />
+                            <Switch android:textSize="@dimen/f9" android:textStyle="bold" android:id="@id/tb" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                        </LinearLayout>
+                        <LinearLayout android:orientation="horizontal" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="@dimen/fy">
+                            <TextView android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/l5" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/kx" />
+                            <EditText android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/ix" android:gravity="right" android:id="@id/t8" android:background="@null" android:paddingRight="@dimen/fy" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="1" android:hint="      " android:singleLine="true" android:maxLength="6" android:digits="1234567890." android:layout_weight="1.0" android:inputType="number" android:imeOptions="actionDone" />
+                            <TextView android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/ix" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/ky" />
+                        </LinearLayout>
+                        <include layout="@layout/d8" />
+                        <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fm" android:layout_marginBottom="@dimen/fm">
+                            <TextView android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/l5" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/sp" />
+                            <View android:layout_width="0.0dp" android:layout_height="0.0dp" android:layout_weight="1.0" />
+                            <Switch android:textSize="@dimen/f9" android:textStyle="bold" android:id="@id/ta" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                        </LinearLayout>
+                        <include layout="@layout/d8" />
+                        <carbon.widget.LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:id="@id/t9" android:paddingTop="@dimen/fy" android:paddingBottom="@dimen/fy" android:layout_width="match_parent" android:layout_height="wrap_content">
+                            <TextView android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/l5" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/so" />
+                            <View android:layout_width="0.0dp" android:layout_height="0.0dp" android:layout_weight="1.0" />
+                            <ImageView android:layout_width="@dimen/fd" android:layout_height="@dimen/fd" android:src="@drawable/nm" android:tint="@color/ix" />
+                        </carbon.widget.LinearLayout>
+                        <include layout="@layout/d8" />
+                        <carbon.widget.LinearLayout android:orientation="horizontal" android:id="@id/t_" android:paddingTop="@dimen/fy" android:paddingBottom="@dimen/fy" android:layout_width="match_parent" android:layout_height="wrap_content">
+                            <TextView android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/l5" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/sn" />
+                        </carbon.widget.LinearLayout>
+                        <include layout="@layout/d8" />
+                    </LinearLayout>
+                </ScrollView>
+                <LinearLayout android:orientation="vertical" android:paddingLeft="@dimen/f9" android:paddingRight="@dimen/f9" android:paddingBottom="@dimen/f9" android:layout_width="match_parent" android:layout_height="wrap_content">
+                    <LinearLayout android:gravity="center" android:orientation="horizontal" android:paddingTop="@dimen/fy" android:layout_width="match_parent" android:layout_height="wrap_content">
+                        <Switch android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/l5" android:id="@id/th" android:layout_width="0.0dp" android:layout_height="wrap_content" android:layout_marginRight="@dimen/fy" android:text="@string/sv" android:layout_weight="1.0" />
+                        <include layout="@layout/d_" />
+                        <TextView android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/l5" android:gravity="center" android:id="@id/tf" android:layout_width="0.0dp" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fy" android:text="@string/st" android:layout_weight="1.0" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+            <LinearLayout android:orientation="vertical" android:background="@color/a1e" android:layout_width="220.0dp" android:layout_height="240.0dp">
+                <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="40.0dp">
+                    <carbon.widget.ImageView android:id="@id/tm" android:paddingLeft="@dimen/fy" android:layout_width="wrap_content" android:layout_height="match_parent" android:src="@drawable/nn" app:h5="@color/iy" />
+                    <TextView android:textSize="@dimen/fa" android:textStyle="bold" android:textColor="@color/ix" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fa" android:text="@string/sx" android:layout_weight="1.0" />
+                    <carbon.widget.ImageView android:id="@id/tl" android:paddingRight="@dimen/fy" android:layout_width="wrap_content" android:layout_height="match_parent" android:src="@drawable/nl" app:h5="@color/iy" />
+                </LinearLayout>
+                <com.lerist.lib.factory.widget.LRecyclerView android:id="@id/tn" android:paddingTop="@dimen/fm" android:paddingBottom="@dimen/fy" android:clipToPadding="false" android:layout_width="match_parent" android:layout_height="match_parent" />
+            </LinearLayout>
+        </com.lerist.lib.factory.widget.LViewSwitcher>
+    </androidx.cardview.widget.CardView>
+</LinearLayout>

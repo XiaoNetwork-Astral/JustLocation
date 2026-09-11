@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:paddingTop="8.0dp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layoutDirection="ltr"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <include android:id="@id/v4" layout="@layout/dp" />
+    <include layout="@layout/dr" />
+    <include android:id="@id/v7" layout="@layout/dp" />
+</LinearLayout>

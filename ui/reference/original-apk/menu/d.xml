@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item android:icon="@mipmap/a2" android:id="@id/uh" android:title="Filter" app:a62="en">
+        <menu>
+            <item android:id="@id/ui" android:title="@string/ts" android:checkable="true" app:a62="xj" />
+            <item android:id="@id/uj" android:title="@string/tt" android:checkable="true" app:a62="xj" />
+            <item android:id="@id/uk" android:title="@string/tu" android:checkable="true" app:a62="xj" />
+        </menu>
+    </item>
+    <item android:icon="@mipmap/ad" android:id="@id/ul" android:title="Search" app:a62="en" />
+</menu>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:paddingLeft="@dimen/ff" android:paddingRight="@dimen/fa" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <TextView android:textSize="@dimen/f9" android:textColor="@color/ix" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fa" android:text="API Key" />
+    <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fy">
+        <TextView android:textSize="@dimen/xt" android:textStyle="bold" android:textColor="@color/l5" android:ellipsize="end" android:id="@id/kp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="NONE" android:singleLine="true" android:layout_weight="1.0" />
+        <Button android:textSize="@dimen/f6" android:textColor="@color/a1e" android:id="@id/ko" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fy" android:text="@string/ja" android:backgroundTint="?kv" />
+    </LinearLayout>
+    <TextView android:textSize="@dimen/f9" android:textColor="@color/ix" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/f9" android:layout_marginBottom="@dimen/fy" android:text="@string/jb" />
+    <TextView android:textSize="@dimen/f9" android:textColor="@color/jp" android:gravity="center_vertical" android:id="@id/kq" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/jc" android:textIsSelectable="true" />
+</LinearLayout>

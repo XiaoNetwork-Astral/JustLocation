@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <androidx.appcompat.widget.Toolbar android:theme="@style/ln" android:id="@id/a3v" android:background="?kv" android:layout_width="match_parent" android:layout_height="?g" android:layout_alignParentTop="true" android:elevation="@dimen/a0s" />
+    <ViewStub android:id="@id/a4t" android:layout_width="match_parent" android:layout_height="match_parent" android:layout_below="@id/a3v" />
+    <com.google.android.material.progressindicator.LinearProgressIndicator android:id="@id/zr" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" android:indeterminate="true" android:layout_below="@id/a3v" style="@style/a22" />
+</RelativeLayout>

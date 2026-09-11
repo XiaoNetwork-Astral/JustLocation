@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<carbon.widget.LinearLayout android:id="@id/h4" android:padding="@dimen/cu" android:visibility="invisible" android:layout_width="wrap_content" android:layout_height="wrap_content" app:f8="p1" app:fz="p1"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <carbon.widget.LinearLayout android:orientation="horizontal" android:id="@id/h5" android:background="?ec" android:paddingLeft="@dimen/cv" android:paddingRight="@dimen/cv" android:layout_width="wrap_content" android:layout_height="@dimen/cs" app:ep="@dimen/cb">
+        <carbon.widget.Button android:id="@id/gv" android:paddingLeft="@dimen/cu" android:paddingRight="@dimen/cu" android:layout_width="wrap_content" android:layout_height="match_parent" android:minWidth="0.0dp" android:text="cut" style="@style/a3u" />
+        <carbon.widget.Button android:id="@id/gu" android:paddingLeft="@dimen/cu" android:paddingRight="@dimen/cu" android:layout_width="wrap_content" android:layout_height="match_parent" android:minWidth="0.0dp" android:text="copy" style="@style/a3u" />
+        <carbon.widget.Button android:id="@id/h7" android:paddingLeft="@dimen/cu" android:paddingRight="@dimen/cu" android:layout_width="wrap_content" android:layout_height="match_parent" android:minWidth="0.0dp" android:text="paste" style="@style/a3u" />
+        <carbon.widget.Button android:id="@id/he" android:paddingLeft="@dimen/cu" android:paddingRight="@dimen/cu" android:layout_width="wrap_content" android:layout_height="match_parent" android:minWidth="0.0dp" android:text="select all" style="@style/a3u" />
+    </carbon.widget.LinearLayout>
+</carbon.widget.LinearLayout>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content">
+        <FrameLayout android:background="@color/iy" android:layout_width="match_parent" android:layout_height="@dimen/f4">
+            <ImageView android:layout_gravity="right" android:layout_width="200.0dp" android:layout_height="200.0dp" android:layout_marginTop="-20.0dp" android:layout_marginRight="-90.0dp" android:src="@mipmap/ic_launcher" android:scaleType="fitCenter" android:minHeight="100.0dp" android:alpha="0.1" />
+            <LinearLayout android:layout_gravity="center_vertical" android:orientation="vertical" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/ff">
+                <TextView android:textSize="28.0sp" android:textStyle="bold" android:textColor="@color/a1e" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="FL - Pro" />
+                <TextView android:textSize="16.0sp" android:textColor="@color/a1e" android:id="@id/k7" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="30 Days" />
+            </LinearLayout>
+        </FrameLayout>
+        <LinearLayout android:orientation="vertical" android:padding="@dimen/f3" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <LinearLayout android:gravity="bottom" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content">
+                <TextView android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/a0y" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/je" />
+                <TextView android:textSize="38.0sp" android:textStyle="bold" android:textColor="@color/a0z" android:textColorHint="@color/a0z" android:id="@id/k6" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fy" android:hint="$0.00" android:maxLines="1" android:textIsSelectable="true" app:b6="38.0sp" app:b7="12.0sp" app:b9="2.0sp" app:b_="a4c" />
+            </LinearLayout>
+            <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content">
+                <TextView android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/a0y" android:textColorHint="@color/a0y" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/jo" />
+                <TextView android:textSize="14.0sp" android:textStyle="bold" android:textColor="@color/a0y" android:textColorHint="@color/a0y" android:id="@id/k8" android:layout_width="wrap_content" android:layout_height="wrap_content" android:hint="@string/jj" android:maxLines="1" android:textIsSelectable="true" app:b6="14.0sp" app:b7="10.0sp" app:b9="2.0sp" app:b_="a4c" />
+                <carbon.widget.TextView android:textSize="@dimen/f6" android:textStyle="bold" android:textColor="@color/a1e" android:id="@id/k5" android:background="@color/a0y" android:paddingLeft="4.0dp" android:paddingTop="2.0dp" android:paddingRight="4.0dp" android:paddingBottom="2.0dp" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="8.0dp" android:text="COPY" app:eh="2.0dp" />
+            </LinearLayout>
+            <carbon.widget.LinearLayout android:orientation="vertical" android:background="@color/j3" android:padding="@dimen/fy" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fy" app:eh="@dimen/fc">
+                <TextView android:textSize="@dimen/f6" android:textStyle="bold" android:textColor="@color/a0y" android:id="@id/k9" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/jp" />
+            </carbon.widget.LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <LinearLayout android:orientation="vertical" android:padding="8.0dp" android:layout_width="match_parent" android:layout_height="wrap_content">
+        <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:baselineAligned="false" android:weightSum="2.0">
+            <com.google.android.material.textfield.TextInputLayout android:id="@id/wl" android:nextFocusRight="@id/mk" android:nextFocusDown="@id/mk" android:layout_width="0.0dp" android:layout_height="wrap_content" android:hint="@string/a1c" android:layout_weight="1.0" android:nextFocusForward="@id/mk" style="@style/x6">
+                <com.stripe.android.view.StripeEditText android:id="@id/wk" android:layout_width="match_parent" android:layout_height="wrap_content" android:imeOptions="actionNext" style="@style/kh" />
+            </com.google.android.material.textfield.TextInputLayout>
+            <com.google.android.material.textfield.TextInputLayout android:id="@id/mk" android:nextFocusLeft="@id/wl" android:nextFocusRight="@id/g4" android:nextFocusUp="@id/wl" android:nextFocusDown="@id/g4" android:layout_width="0.0dp" android:layout_height="wrap_content" android:hint="@string/a1_" android:layout_weight="1.0" android:nextFocusForward="@id/g4" style="@style/x6">
+                <com.stripe.android.view.EmailEditText android:id="@id/mj" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textEmailAddress" android:imeOptions="actionNext" style="@style/kh" />
+            </com.google.android.material.textfield.TextInputLayout>
+        </LinearLayout>
+        <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24.0dp" android:baselineAligned="false" android:weightSum="2.0">
+            <com.google.android.material.textfield.TextInputLayout android:id="@id/g4" android:nextFocusLeft="@id/mk" android:nextFocusRight="@id/dm" android:nextFocusUp="@id/mk" android:nextFocusDown="@id/dm" android:layout_width="0.0dp" android:layout_height="wrap_content" android:hint="@string/a17" android:layout_weight="1.0" android:nextFocusForward="@id/dm" style="@style/x6">
+                <com.stripe.android.view.BecsDebitBsbEditText android:id="@id/g3" android:layout_width="match_parent" android:layout_height="wrap_content" android:imeOptions="actionNext" android:drawableStart="@drawable/gx" style="@style/kh" />
+            </com.google.android.material.textfield.TextInputLayout>
+            <com.google.android.material.textfield.TextInputLayout android:id="@id/dm" android:nextFocusLeft="@id/g4" android:nextFocusUp="@id/g4" android:layout_width="0.0dp" android:layout_height="wrap_content" android:hint="@string/a14" android:layout_weight="1.0" style="@style/x6">
+                <com.stripe.android.view.BecsDebitAccountNumberEditText android:id="@id/dl" android:layout_width="match_parent" android:layout_height="wrap_content" android:imeOptions="actionDone" style="@style/kh" />
+            </com.google.android.material.textfield.TextInputLayout>
+        </LinearLayout>
+        <com.stripe.android.view.BecsDebitMandateAcceptanceTextView android:id="@id/un" android:layout_width="match_parent" android:layout_height="wrap_content" style="@style/ki" />
+    </LinearLayout>
+</merge>

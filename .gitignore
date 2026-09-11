@@ -15,7 +15,7 @@ target/
 # React / Node.js
 node_modules/
 .vite/
-/webui/dist/
+/ui/dist/
 
 # Android / Gradle
 .gradle/

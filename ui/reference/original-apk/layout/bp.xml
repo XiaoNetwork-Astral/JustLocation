@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:paddingLeft="@dimen/ff" android:paddingTop="@dimen/fa" android:paddingRight="@dimen/ff" android:paddingBottom="@dimen/fy" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <com.google.android.material.textfield.TextInputLayout android:textColorHint="@color/it" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="App Name">
+        <com.google.android.material.textfield.TextInputEditText android:textSize="@dimen/fa" android:textStyle="bold" android:textColor="@color/l5" android:id="@id/jy" android:layout_width="match_parent" android:layout_height="wrap_content" />
+    </com.google.android.material.textfield.TextInputLayout>
+    <com.google.android.material.textfield.TextInputLayout android:textColorHint="@color/it" android:id="@id/jz" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fy" android:hint="Package Name" app:sw="e.g. com.example.app" app:sx="true">
+        <com.google.android.material.textfield.TextInputEditText android:textSize="@dimen/fa" android:textStyle="bold" android:textColor="@color/l5" android:id="@id/jx" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textEmailAddress" />
+    </com.google.android.material.textfield.TextInputLayout>
+</LinearLayout>

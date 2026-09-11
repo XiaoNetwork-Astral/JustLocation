@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:paddingTop="@dimen/fm" android:paddingBottom="@dimen/fm" android:focusable="true" android:layout_width="match_parent" android:layout_height="wrap_content" android:foreground="?a5g"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <CheckedTextView android:textAppearance="?android:textAppearanceMedium" android:textColor="?a_p" android:gravity="center_vertical" android:id="@id/rs" android:paddingLeft="@dimen/av" android:paddingRight="@dimen/fy" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minHeight="?y6" android:text="" android:drawableLeft="?android:listChoiceIndicatorSingle" android:drawablePadding="@dimen/fa" android:drawableStart="?android:listChoiceIndicatorSingle" android:paddingStart="@dimen/av" android:paddingEnd="@dimen/fy" />
+    <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content">
+        <TextView android:textAppearance="?android:textAppearanceMedium" android:textColor="?a_p" android:id="@id/rt" android:paddingRight="@dimen/fa" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="ROOT" />
+        <TextView android:textSize="@dimen/f6" android:textStyle="bold" android:id="@id/ru" android:paddingRight="@dimen/fa" android:clickable="true" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/l7" />
+    </LinearLayout>
+</LinearLayout>

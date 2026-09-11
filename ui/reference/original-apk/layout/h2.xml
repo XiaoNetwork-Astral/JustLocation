@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <TextView android:textSize="@dimen/fb" android:textStyle="bold" android:textColor="@color/l5" android:id="@id/a4a" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="问答题" />
+    <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fa" app:hg="#22888888" app:hh="@dimen/fa" app:hi="0.0dp" app:m5="@dimen/fa">
+        <EditText android:gravity="left|top" android:id="@id/mz" android:background="@null" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="请输入..." android:minLines="6" />
+    </androidx.cardview.widget.CardView>
+</LinearLayout>

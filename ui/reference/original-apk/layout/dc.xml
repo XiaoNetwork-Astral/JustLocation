@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <LinearLayout android:orientation="horizontal" android:id="@id/sy" android:layout_width="match_parent" android:layout_height="wrap_content">
+        <carbon.widget.ImageView android:layout_width="@dimen/ff" android:layout_height="@dimen/ff" android:src="@mipmap/a3" app:h5="@color/ix" />
+        <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fa">
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/a8" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/cf" />
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/l_" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fm" android:text="@string/ce" />
+        </LinearLayout>
+    </LinearLayout>
+    <LinearLayout android:orientation="horizontal" android:id="@id/sx" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/ff">
+        <carbon.widget.ImageView android:layout_width="@dimen/ff" android:layout_height="@dimen/ff" android:src="@mipmap/a4" app:h5="@color/ix" />
+        <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fa">
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/a8" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/cw" />
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/l_" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fm" android:text="@string/cv" />
+        </LinearLayout>
+    </LinearLayout>
+    <LinearLayout android:orientation="horizontal" android:id="@id/sv" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/ff">
+        <carbon.widget.ImageView android:layout_width="@dimen/ff" android:layout_height="@dimen/ff" android:src="@mipmap/a1" app:h5="@color/iy" />
+        <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fa">
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/a8" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/cn" />
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/l_" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fm" android:text="@string/cm" />
+        </LinearLayout>
+    </LinearLayout>
+    <LinearLayout android:orientation="horizontal" android:id="@id/t1" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/ff">
+        <carbon.widget.ImageView android:layout_width="@dimen/ff" android:layout_height="@dimen/ff" android:src="@drawable/o1" app:h5="@color/ix" />
+        <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fa">
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/a8" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/cp" />
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/l_" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fm" android:text="@string/co" />
+        </LinearLayout>
+    </LinearLayout>
+    <LinearLayout android:orientation="horizontal" android:id="@id/t2" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/ff">
+        <carbon.widget.ImageView android:layout_width="@dimen/ff" android:layout_height="@dimen/ff" android:src="@mipmap/aq" app:h5="@color/ix" />
+        <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fa">
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/a8" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/cr" />
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/l_" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fm" android:text="@string/cq" />
+        </LinearLayout>
+    </LinearLayout>
+    <LinearLayout android:orientation="horizontal" android:id="@id/t3" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/ff">
+        <carbon.widget.ImageView android:layout_width="@dimen/ff" android:layout_height="@dimen/ff" android:src="@drawable/o2" app:h5="@color/ix" />
+        <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fa">
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/a8" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/ct" />
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/l_" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fm" android:text="@string/cs" />
+        </LinearLayout>
+    </LinearLayout>
+    <LinearLayout android:orientation="horizontal" android:id="@id/sw" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/ff">
+        <carbon.widget.ImageView android:layout_width="@dimen/ff" android:layout_height="@dimen/ff" android:src="@mipmap/v" app:h5="@color/ix" />
+        <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fa">
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/a8" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/er" />
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/l_" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fm" android:text="@string/eq" />
+        </LinearLayout>
+    </LinearLayout>
+    <LinearLayout android:orientation="horizontal" android:id="@id/t0" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/ff">
+        <carbon.widget.ImageView android:layout_width="@dimen/ff" android:layout_height="@dimen/ff" android:src="@mipmap/am" app:h5="@color/ix" />
+        <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fa">
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/a8" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/ev" />
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/l_" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fm" android:text="@string/eu" />
+        </LinearLayout>
+    </LinearLayout>
+    <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/ff">
+        <carbon.widget.ImageView android:layout_width="@dimen/ff" android:layout_height="@dimen/ff" android:src="@mipmap/aj" app:h5="@color/ix" />
+        <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fa">
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/a8" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/cj" />
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/l_" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fm" android:text="@string/ci" />
+        </LinearLayout>
+    </LinearLayout>
+    <LinearLayout android:orientation="horizontal" android:id="@id/su" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/ff">
+        <carbon.widget.ImageView android:layout_width="@dimen/ff" android:layout_height="@dimen/ff" android:src="@drawable/nx" app:h5="@color/ix" />
+        <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fa">
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/a8" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/cl" />
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/l_" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fm" android:text="@string/ck" />
+        </LinearLayout>
+    </LinearLayout>
+    <LinearLayout android:orientation="horizontal" android:id="@id/sz" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/ff">
+        <carbon.widget.ImageView android:layout_width="@dimen/ff" android:layout_height="@dimen/ff" android:src="@mipmap/a6" app:h5="@color/ix" />
+        <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fa">
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/a8" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/ch" />
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/l_" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fm" android:text="@string/cg" />
+        </LinearLayout>
+    </LinearLayout>
+    <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/ff">
+        <carbon.widget.ImageView android:layout_width="@dimen/ff" android:layout_height="@dimen/ff" android:src="@mipmap/ai" app:h5="@color/ix" />
+        <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fa">
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/a8" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/c_" />
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/l_" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fm" android:text="@string/c9" />
+        </LinearLayout>
+    </LinearLayout>
+    <LinearLayout android:orientation="horizontal" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/ff">
+        <carbon.widget.ImageView android:layout_width="@dimen/ff" android:layout_height="@dimen/ff" android:src="@mipmap/o" app:h5="@color/ix" />
+        <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fa">
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/a8" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/cb" />
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/l_" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fm" android:text="@string/ca" />
+        </LinearLayout>
+    </LinearLayout>
+    <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/ff">
+        <carbon.widget.ImageView android:layout_width="@dimen/ff" android:layout_height="@dimen/ff" android:src="@mipmap/ak" app:h5="@color/ix" />
+        <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fa">
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/a8" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/cd" />
+            <TextView android:textSize="@dimen/f9" android:textColor="@color/l_" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fm" android:text="@string/cc" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

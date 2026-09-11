@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.core.widget.NestedScrollView android:layout_width="match_parent" android:layout_height="match_parent">
+        <LinearLayout android:orientation="vertical" android:paddingBottom="@dimen/ff" android:focusable="true" android:focusableInTouchMode="true" android:layout_width="match_parent" android:layout_height="match_parent">
+            <androidx.cardview.widget.CardView android:background="@color/a1e" android:addStatesFromChildren="true" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fy" android:layout_marginTop="@dimen/fy" android:layout_marginRight="@dimen/fy" android:layout_marginBottom="@dimen/f6" android:foreground="?a5g" app:hi="@dimen/fm" app:m5="@dimen/fa">
+                <LinearLayout android:orientation="vertical" android:id="@id/ng" android:layout_width="match_parent" android:layout_height="wrap_content">
+                    <TextView android:textSize="@dimen/f9" android:textColor="@color/ix" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="TARGET" />
+                    <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fa" android:layout_marginBottom="@dimen/fa">
+                        <TextView android:textSize="@dimen/fd" android:textStyle="bold" android:textColor="@color/l5" android:textColorHint="@color/l5" android:ellipsize="end" android:id="@id/nj" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="For Mock Location, Route, WiFi" android:hint="NONE" android:singleLine="true" />
+                    </LinearLayout>
+                    <LinearLayout android:orientation="horizontal" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fc">
+                        <TextView android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/l5" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                        <TextView android:textSize="@dimen/f9" android:textStyle="bold" android:textColor="@color/ix" android:textColorHint="@color/ix" android:id="@id/nk" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fy" android:hint="NONE" />
+                    </LinearLayout>
+                    <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fy">
+                        <carbon.widget.LinearLayout android:gravity="center" android:orientation="horizontal" android:id="@id/nd" android:background="@drawable/dg" android:paddingLeft="@dimen/fa" android:paddingRight="@dimen/fy" android:layout_width="wrap_content" android:layout_height="@dimen/fh" app:eh="@dimen/f9" app:g9="@color/l7">
+                            <carbon.widget.TextView android:textSize="@dimen/f9" android:textColor="@color/a1e" android:gravity="center" android:id="@id/nm" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginRight="@dimen/fy" android:text="@string/ny" />
+                            <ProgressBar android:theme="@style/r" android:id="@id/ni" android:visibility="gone" android:layout_width="@dimen/fa" android:layout_height="@dimen/fa" />
+                        </carbon.widget.LinearLayout>
+                        <View android:layout_width="0.0dp" android:layout_height="0.0dp" android:layout_weight="1.0" />
+                        <carbon.widget.TextView android:textSize="@dimen/f6" android:textStyle="bold" android:textColor="@color/l_" android:gravity="center" android:id="@id/nl" android:background="@color/l9" android:paddingLeft="@dimen/fm" android:paddingRight="@dimen/fm" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="@dimen/ff" android:layout_marginRight="@dimen/fm" android:minWidth="@dimen/ff" android:hint="+1" app:eh="@dimen/f6" />
+                        <ImageView android:visibility="gone" android:layout_width="@dimen/ff" android:layout_height="@dimen/ff" android:src="@drawable/nm" />
+                    </LinearLayout>
+                    <LinearLayout android:orientation="vertical" android:id="@id/ne" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fa">
+                        <include layout="@layout/d8" />
+                        <com.lerist.lib.ads.widget.AdHtmlView android:textSize="@dimen/f6" android:textStyle="bold" android:id="@id/nf" android:paddingTop="@dimen/f3" android:layout_width="match_parent" android:layout_height="wrap_content" />
+                    </LinearLayout>
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+            <FrameLayout android:layout_width="match_parent" android:layout_height="wrap_content">
+                <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content">
+                    <TextView android:textSize="@dimen/f9" android:textColor="@color/l7" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/ff" android:layout_marginTop="@dimen/f6" android:layout_marginRight="@dimen/ff" android:layout_marginBottom="@dimen/f6" android:text="@string/nw" />
+                    <View android:layout_width="0.0dp" android:layout_height="wrap_content" android:layout_weight="1.0" />
+                    <ImageView android:id="@id/no" android:padding="@dimen/fu" android:layout_width="@dimen/fk" android:layout_height="@dimen/fk" android:layout_marginRight="@dimen/fa" android:foreground="?a5g" android:src="@mipmap/ad" android:tint="@color/l7" />
+                </LinearLayout>
+            </FrameLayout>
+            <FrameLayout android:layout_width="match_parent" android:layout_height="wrap_content">
+                <include android:layout_gravity="center" android:id="@id/oh" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fq" layout="@layout/h0" />
+                <androidx.cardview.widget.CardView android:background="@color/a1e" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/fy" android:layout_marginRight="@dimen/fy" android:layout_marginBottom="@dimen/ff" app:hi="@dimen/fm">
+                    <com.lerist.lib.factory.widget.LRecyclerView android:id="@id/nh" android:layout_width="match_parent" android:layout_height="wrap_content" />
+                </androidx.cardview.widget.CardView>
+            </FrameLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>
