@@ -9,6 +9,7 @@ import { FeatureMenus } from './FeatureMenus';
 import { BackupPanel } from './BackupPanel';
 import { CellPanel } from './CellPanel';
 import { ImportPlaceSheet } from './ImportPlaceSheet';
+import { WifiPanel } from './WifiPanel';
 import { Segmented, SwitchRow } from './Controls';
 import { colorModes, readColorMode, readStyle, saveTheme, styleFamilies, type ColorMode, type StyleFamily } from './theme';
 import type { Place } from './backup';
@@ -373,7 +374,7 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
           <section className="settings-card"><h2>运行环境</h2><dl><div><dt>模块</dt><dd>JustLocation 0.1.0</dd></div><div><dt>控制入口</dt><dd>KernelSU WebUI</dd></div><div><dt>后台</dt><dd>{state ? '已连接' : '未连接'}</dd></div></dl></section>
         </>}
         {page === 'routes' && <RoutePanel state={state} busy={busy} scope={scope} onCommand={routeCommand} onScope={() => navigate('scope')} />}
-        {page === 'wifi' && <section className="empty-state feature-placeholder"><Wifi size={36} /><h2>Wi-Fi 功能正在接入</h2><p>已保存网络和模拟设置会在这里管理。</p></section>}
+        {page === 'wifi' && <WifiPanel />}
       </div>
     </main>
     {cellsOpen && <CellPanel target={position} state={state} controlBusy={busy}

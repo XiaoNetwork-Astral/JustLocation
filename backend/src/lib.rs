@@ -11,6 +11,7 @@ pub mod protocol;
 pub mod route;
 pub mod telephony;
 pub mod transport;
+pub mod wifi;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
