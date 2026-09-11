@@ -50,10 +50,8 @@ it('keeps the application scope and sends it on the next start', async () => {
   render(<App client={client} loadApps={async () => [{ packageName: 'example.selected', appLabel: '地图', isSystem: false }]} />);
   await screen.findByText('后台已连接');
   const user = userEvent.setup();
-  // 作用范围与基站在默认视图里就是开关，不再需要先展开菜单。
-  expect(screen.getByRole('checkbox', { name: '作用范围' })).toHaveProperty('checked', true);
-  expect(screen.getByRole('checkbox', { name: '基站模拟' })).toHaveProperty('checked', false);
-  await user.click(screen.getByRole('button', { name: '选择应用' }));
+  // 首页不再放作用范围开关：入口在目标卡操作行，点进去才是选应用页。
+  await user.click(screen.getByRole('button', { name: '作用范围（已选 1 个）' }));
   expect(await screen.findByRole('checkbox', { name: /地图/ })).toHaveProperty('checked', true);
   await user.click(screen.getByRole('button', { name: '完成' }));
   await user.click(screen.getByRole('button', { name: '开始模拟' }));
@@ -61,29 +59,33 @@ it('keeps the application scope and sends it on the next start', async () => {
     scope: { mode: 'apps', packages: ['example.selected'] } } });
 });
 
-it('switches the scope between all apps and the saved selection without losing it', async () => {
+it('switches the scope back to all apps from the scope page without losing the selection', async () => {
   const client = vi.fn().mockResolvedValue({ requested_active: false,
     config: { position, scope: { mode: 'apps', packages: ['example.selected'] } } });
   render(<App client={client} />);
   await screen.findByText('后台已连接');
   const user = userEvent.setup();
-  await user.click(screen.getByRole('checkbox', { name: '作用范围' }));
+  // 「改为全部应用」在作用范围页里：它只清掉限定、不动已勾选的应用。
+  await user.click(screen.getByRole('button', { name: '作用范围（已选 1 个）' }));
+  await user.click(screen.getByRole('button', { name: '改为全部应用' }));
   expect(JSON.parse(localStorage.getItem('justlocation.scope')!)).toEqual({ mode: 'all', packages: ['example.selected'] });
-  await user.click(screen.getByRole('checkbox', { name: '作用范围' }));
-  expect(JSON.parse(localStorage.getItem('justlocation.scope')!).mode).toBe('apps');
-  expect(JSON.parse(localStorage.getItem('justlocation.scope')!).packages).toEqual(['example.selected']);
+  expect(await screen.findByText('所有应用都会使用模拟位置。之前勾选的应用已保留。')).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: '完成' }));
+  expect(screen.getByRole('button', { name: '作用范围' })).toBeTruthy();
 });
 
-it('refuses to limit the scope while no application is selected', async () => {
+it('lets an empty scope open the picker again instead of trapping the user', async () => {
   const client = vi.fn().mockResolvedValue({ requested_active: false,
     config: { position, scope: { mode: 'all' } } });
-  render(<App client={client} />);
+  render(<App client={client} loadApps={async () => [{ packageName: 'example.one', appLabel: '一个应用', isSystem: false }]} />);
   await screen.findByText('后台已连接');
   const user = userEvent.setup();
-  expect(screen.getByRole('checkbox', { name: '作用范围' })).toHaveProperty('checked', false);
-  await user.click(screen.getByRole('checkbox', { name: '作用范围' }));
-  expect(await screen.findByRole('alert')).toHaveProperty('textContent', expect.stringContaining('请先选择要模拟的应用'));
-  expect(JSON.parse(localStorage.getItem('justlocation.scope') || 'null')?.mode ?? 'all').toBe('all');
+  // 一个应用都没勾选时也必须进得去：否则在作用范围页取消勾选后就再也回不来了。
+  await user.click(screen.getByRole('button', { name: '作用范围' }));
+  expect(await screen.findByRole('heading', { name: '作用范围' })).toBeTruthy();
+  expect(await screen.findByRole('checkbox', { name: /一个应用/ })).toHaveProperty('checked', false);
+  await user.click(screen.getByRole('button', { name: '完成' }));
+  expect(await screen.findByRole('heading', { name: '位置模拟' })).toBeTruthy();
 });
 
 it('submits the checked apps as the start scope and blocks an empty selection', async () => {
@@ -95,11 +97,12 @@ it('submits the checked apps as the start scope and blocks an empty selection', 
   ]} />);
   await screen.findByText('后台已连接');
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '选择应用' }));
+  await user.click(screen.getByRole('button', { name: '作用范围（已选 1 个）' }));
   await user.click(await screen.findByRole('checkbox', { name: /旧应用/ }));
   await user.click(screen.getByRole('button', { name: '完成' }));
   expect(screen.getByRole('button', { name: '开始模拟' })).toHaveProperty('disabled', true);
-  await user.click(screen.getByRole('button', { name: '选择应用' }));
+  // 再次进入只勾新应用：入口在限定模式下按勾选数量命名，不再依赖模式名。
+  await user.click(screen.getByRole('button', { name: '作用范围（已选 0 个）' }));
   await user.click(await screen.findByRole('checkbox', { name: /新应用/ }));
   await user.click(screen.getByRole('button', { name: '完成' }));
   await user.click(screen.getByRole('button', { name: '开始模拟' }));
@@ -200,12 +203,14 @@ it('reads a shared map link and lets the coordinate system be corrected', async 
   expect(saved.position.latitude).toBeGreaterThan(39.90);
 });
 
-it('writes the satellite switches straight to the backend', async () => {
+it('writes the satellite switches straight to the backend from their own panel', async () => {
   const client = vi.fn().mockResolvedValue({ requested_active: false, config: null,
     gnss: { gnss_enabled: false, nmea_enabled: true }, gnss_hook_ready: true, nmea_hook_ready: false });
   render(<App client={client} />);
   await screen.findByText('后台已连接');
   const user = userEvent.setup();
+  // 卫星开关不在首页：从目标卡的入口进面板。
+  await user.click(screen.getByRole('button', { name: '卫星' }));
   const gnss = screen.getByRole('checkbox', { name: 'GNSS 状态' });
   // 状态以后端返回为准，不是本地默认值。
   expect(gnss).toHaveProperty('checked', false);
@@ -214,6 +219,8 @@ it('writes the satellite switches straight to the backend', async () => {
   expect(client).toHaveBeenLastCalledWith({ op: 'set_gnss', config: { gnss_enabled: true, nmea_enabled: true } });
   // 未开始模拟时要说清"已启用但要等模拟开始"，不能显示成已生效。
   expect(screen.getByText('已启用，开始位置模拟后生效')).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: '完成' }));
+  expect(screen.queryByRole('checkbox', { name: 'GNSS 状态' })).toBeNull();
 });
 
 it('manages saved Wi-Fi networks, writes them to the backend, and says the output is not wired up yet', async () => {
@@ -330,21 +337,25 @@ it('opens the cell data page from the cell switch when no operator is configured
   render(<App client={client} />);
   await screen.findByText('后台已连接');
   const user = userEvent.setup();
-  await user.click(screen.getByRole('checkbox', { name: '基站模拟' }));
+  // 基站开关在目标卡操作行的"基站"入口里（原版也是把基站放在这一行）。
+  await user.click(screen.getByRole('button', { name: '基站模拟设置' }));
   expect(await screen.findByText('还没有查询结果。上面的按钮会按目标位置取这一带的基站，也可以直接导入离线数据。')).toBeTruthy();
   // 没有可配置的运营商时不应该偷偷改动后台配置。
   expect(client.mock.calls.filter(call => call[0]?.op === 'set_telephony')).toHaveLength(0);
 });
 
-it('toggles configured cell simulation without stopping location or losing the operator settings', async () => {
+it('toggles configured cell simulation from the cell panel without stopping location', async () => {
   const telephony = { cells_enabled: true, sim_enabled: true, radius_m: 700,
     subscriptions: [{ id: 7, slot: 0, mcc: '460', mnc: '001', country: 'cn', carrier: 'Test', enabled: true }] };
   const client = vi.fn().mockResolvedValue({ requested_active: true, config: null, telephony });
   render(<App client={client} />);
   await screen.findByText('后台已连接');
   const user = userEvent.setup();
-  expect(screen.getByRole('checkbox', { name: '基站模拟' })).toHaveProperty('checked', true);
-  await user.click(screen.getByRole('checkbox', { name: '基站模拟' }));
+  await user.click(screen.getByRole('button', { name: '基站模拟设置' }));
+  // 面板里的总开关叫「启用基站模拟」，运营商那一组在它下面。
+  const cells = await screen.findByRole('checkbox', { name: '启用基站模拟' });
+  expect(cells).toHaveProperty('checked', true);
+  await user.click(cells);
   // 前端状态以后台返回为准，所以这里只断言发出的指令。
   expect(client).toHaveBeenLastCalledWith({ op: 'set_telephony', config: { ...telephony, cells_enabled: false } });
   expect(client).not.toHaveBeenCalledWith({ op: 'stop' });

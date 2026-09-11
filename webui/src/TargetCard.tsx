@@ -1,4 +1,4 @@
-import { RadioTower } from 'lucide-react';
+import { AppWindow, RadioTower, Satellite } from 'lucide-react';
 import type { Position } from './control';
 import { useTranslate } from './useTranslate';
 
@@ -20,9 +20,16 @@ type Props = {
   setJoystickSpeed(value: string): void;
   /** 基站入口：原版是操作行里的文字加圆形图标按钮 */
   cellsEnabled: boolean;
+  /** 作用范围入口：原版把"独立模拟"做成独立页面，首页只留入口 */
+  scopeLimited: boolean;
+  scopeCount: number;
+  /** 卫星通道是否有开关打开；原版没有这一项，属于本项目自己的入口 */
+  satelliteOn: boolean;
   onToggle(): void;
   onEdit(): void;
   onCells(): void;
+  onScope(): void;
+  onSatellite(): void;
   onToggleJoystick(next: boolean): void;
 };
 
@@ -33,8 +40,10 @@ type Props = {
  * 「经纬度:」加加粗绿色坐标 → 一行操作区：绿色药丸「启动模拟」在左，
  * 弹簧撑开，右侧依次是「基站」文字、圆形图标按钮与「摇杆」开关。
  *
- * 原版的摇杆与基站都在这一行里，而不是另开卡片；之前把它们挪到单独的
- * "模拟功能"卡片里，是偏离原版最明显的一处，这里改回内联。
+ * 原版的摇杆与基站都在这一行里，而不是另开卡片；「独立模拟」则是一个
+ * **独立页面**（`cf.xml`），首页只有入口——本项目的"作用范围"照此处理，
+ * 所以这里多一个「作用范围」入口。卫星是本项目自己的通道，同样收进
+ * 独立面板，只用这个入口表示它的开关状态。
  */
 export function TargetCard(props: Props) {
   const t = useTranslate();
@@ -59,9 +68,20 @@ export function TargetCard(props: Props) {
         {props.busy ? t('action.processing') : props.active ? t('location.stop') : t('location.start')}
       </button>
       <span className="spacer" />
+      {/* 作用范围入口：一个按钮、一个名字，进的是原版的"独立模拟"页。
+          限定生效时用徽标显示已选数量；"改为全部应用"在那一页里。 */}
+      <button className={`anchor-entry${props.scopeLimited ? ' on' : ''}`} onClick={props.onScope} disabled={props.busy}
+        aria-label={props.scopeLimited ? `作用范围（已选 ${props.scopeCount} 个）` : '作用范围'}>
+        <AppWindow size={18} />
+        <span>{props.scopeLimited ? `已选 ${props.scopeCount} 个` : '作用范围'}</span>
+      </button>
       <span className={`cells-label ${props.cellsEnabled ? 'on' : ''}`}>{t('location.cellsLabel')}</span>
-      <button className="round-icon" aria-label={t('feature.cellsOpen')} title={t('feature.cellsOpen')} onClick={props.onCells}>
+      <button className="round-icon" aria-label="基站模拟设置" title="基站模拟设置" onClick={props.onCells}>
         <RadioTower size={18} />
+      </button>
+      <button className={`anchor-entry${props.satelliteOn ? ' on' : ''}`} onClick={props.onSatellite} disabled={props.busy}>
+        <Satellite size={18} />
+        <span>卫星</span>
       </button>
       <label className="joystick-toggle switch-row">
         <span>{t('feature.joystick')}</span>

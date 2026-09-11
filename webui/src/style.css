@@ -552,9 +552,11 @@ main { min-width: 0; display: flex; flex-direction: column; min-height: 100dvh; 
    并带自定义滚动行为），所以这里也让 FAB 悬浮在内容区右上角，而不是固定在窗口上。 */
 .page-body { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
 /* FAB 组：原版地图页是竖排 FAB，主界面只有一个"添加"。
-   位置取 end + 底部（原版只有 `a3x` = end 有资源依据，纵向位置无依据）。
-   贴在右下角而不是内容区右上角：右上角会压住页面顶部的提示条和它的关闭按钮。 */
-.fab-stack { position: absolute; bottom: max(16px, env(safe-area-inset-bottom)); right: max(12px, calc((100% - 860px) / 2 - 56px)); display: grid; gap: 10px; justify-items: center; z-index: 5; }
+   位置取 end 侧、纵向偏上——原版主界面 FAB 的 `app:vu="mm|a3x"` 只有
+   `a3x` = end 能对上，`mm` 这个 id 的含义在混淆资源里查不出来，纵向位置
+   没有资源依据；这里按"右侧、偏上"放置，并且不进提示条那一行，免得挡住
+   它的关闭按钮。 */
+.fab-stack { position: absolute; top: 28%; right: max(12px, calc((100% - 860px) / 2 - 56px)); display: grid; gap: 10px; justify-items: center; z-index: 5; }
 .fab {
   display: inline-flex; align-items: center; justify-content: center;
   width: 48px; height: 48px; border-radius: 50%;
@@ -647,6 +649,16 @@ h1 { font-weight: var(--weightStrong); font-size: 30px; line-height: 1.3; letter
 .primary.pill.stop, .pill.stop { background: var(--errorContainer); color: var(--error); box-shadow: none; }
 .cells-label { font-size: 14px; font-weight: var(--weightStrong); color: var(--primary); }
 .cells-label:not(.on) { color: var(--onSurfaceVariant); }
+/* 目标卡操作行里的面板入口（作用范围、卫星）：原版只有少数几行是"整行可点"，
+   参数类操作走锚定小面板，所以这里做成文字加图标的轻量按钮，开启时用主色表示。 */
+.anchor-entry {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+  padding: 6px 8px; border-radius: var(--radiusPill);
+  font-size: 14px; font-weight: var(--weightStrong); color: var(--onSurfaceVariant);
+}
+.anchor-entry.on { color: var(--primary); }
+.anchor-entry:hover { background: color-mix(in srgb, var(--primary) 10%, transparent); }
+.anchor-entry:disabled { opacity: .5; }
 .round-icon {
   display: inline-flex; align-items: center; justify-content: center;
   width: 30px; height: 30px; border-radius: 15px; flex-shrink: 0;

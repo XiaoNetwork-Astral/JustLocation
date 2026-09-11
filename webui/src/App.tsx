@@ -5,7 +5,6 @@ import { PositionEditor } from './PositionEditor';
 import { AppPicker, loadInstalledApps, type LoadApps } from './AppPicker';
 import { RoutePanel } from './RoutePanel';
 import { joystickControl, type Joystick } from './joystick';
-import { FeatureMenus } from './FeatureMenus';
 import { BackupPanel } from './BackupPanel';
 import { CellPanel } from './CellPanel';
 import { ImportPlaceSheet } from './ImportPlaceSheet';
@@ -13,6 +12,8 @@ import { TargetCard } from './TargetCard';
 import { SectionHeader } from './SectionHeader';
 import { RowCard } from './RowCard';
 import { EmptyBox } from './EmptyBox';
+import { SatellitePanel } from './SatellitePanel';
+import { ScopePage } from './ScopePage';
 import { WifiPanel } from './WifiPanel';
 import { Segmented, SwitchRow } from './Controls';
 import { colorModes, readColorMode, readStyle, saveTheme, styleFamilies, type ColorMode, type StyleFamily } from './theme';
@@ -38,9 +39,6 @@ const coordinates = (p: Position) => `${p.latitude.toFixed(6)}, ${p.longitude.to
 const DISCLAIMER = '声明：本程序仅供开发人员调试使用，严禁用于一切侵权、侵害他人利益、违法违禁等不当行为和目的。';
 /** 把"系统定位"那一项的状态说清楚：区分后台未连接、接口未接、等待接入与已就绪。 */
 const readyText = (ready?: boolean, connected?: boolean) => ready ? '已就绪' : connected ? '等待接口接入' : '等待系统连接';
-/** 卫星开关的说明文字：把"开关开着但接口没接上"和"已生效"区分开，避免误以为已经在投递。 */
-const gnssNote = (enabled: boolean | undefined, ready: boolean | undefined, active: boolean, purpose: string) =>
-  !enabled ? purpose : !active ? '已启用，开始位置模拟后生效' : ready ? '已连接系统接口' : '等待系统接口接入';
 
 function readPlaces(): Place[] {
   try {
@@ -59,7 +57,10 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
   const [name, setName] = useState('');
   const [scopeDraft, setScopeDraft] = useState<ScopeDraft>(() => readScopeDraft() || { mode: 'apps', packages: [] });
   const scope: Scope = scopeDraft.mode === 'all' ? { mode: 'all' } : { mode: 'apps', packages: scopeDraft.packages };
-  const [scopeReturn, setScopeReturn] = useState<Page>('location');
+  // 作用范围与卫星都是独立页面/面板，各带自己的返回目标；用页面状态而不是 history，
+  // 这样"进入选应用、完成返回原页"的行为不依赖浏览器历史，面板里点按更直接。
+  const [scopePage, setScopePage] = useState(false);
+  const [satelliteOpen, setSatelliteOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [places, setPlaces] = useState(readPlaces);
@@ -162,29 +163,29 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
   }, [style, mode]);
 
   function navigate(next: Page) {
-    if (next === 'scope' && page !== 'scope') {
-      setScopeReturn(page === 'routes' ? 'routes' : 'location');
-      window.history.pushState({ justlocationScope: true }, '');
-    }
     setPage(next); setDrawer(false);
   }
+  function openScope() {
+    // 入口在目标卡上：进入作用范围页，并把模式切到"只对指定应用生效"。
+    // 一个应用都没勾选时**必须仍然能进来**，否则取消勾选后就再也进不去选应用了。
+    if (scopeDraft.mode !== 'apps') editScope({ ...scopeDraft, mode: 'apps' });
+    setScopePage(true);
+  }
+  /** 清掉范围限制，回到"所有应用"。勾选本身在作用范围页里完成。 */
+  function clearScope() {
+    if (locked) return;
+    editScope({ mode: 'all', packages: scopeDraft.packages });
+  }
   useEffect(() => {
-    const back = () => { setPage(current => current === 'scope' ? scopeReturn : current); setCellsOpen(false); };
+    // 浏览器返回键只负责关掉基站页（作用范围与卫星由各自的返回按钮关闭）。
+    const back = () => setCellsOpen(false);
     window.addEventListener('popstate', back);
     return () => window.removeEventListener('popstate', back);
-  }, [scopeReturn]);
-  function closeScope() { window.history.back(); }
+  }, []);
   function editScope(next: ScopeDraft) {
     setScopeDraft(next);
     try { localStorage.setItem('justlocation.scope', JSON.stringify(next)); }
     catch { setError('应用选择保存失败，关闭面板后可能丢失'); }
-  }
-  /** 作用范围只能由首页的开关切换，这里只切换模式并保留已选应用。 */
-  function toggleScopeMode() {
-    if (locked) return;
-    const next = scopeDraft.mode === 'apps' ? 'all' : 'apps';
-    if (next === 'apps' && !scopeDraft.packages.length) { setError('请先选择要模拟的应用，再打开作用范围'); return; }
-    editScope({ ...scopeDraft, mode: next });
   }
   async function routeCommand(command: Command) {
     if (busy || !state) return;
@@ -296,26 +297,11 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
   const visiblePlaces = places.filter(p => `${p.name} ${coordinates(p.position)}`.toLowerCase().includes(query.toLowerCase()))
     .sort((a, b) => Number(b.pinned) - Number(a.pinned));
   const scopeLimited = scopeDraft.mode === 'apps';
-  const scopeSummary = scopeLimited
-    ? (scopeDraft.packages.length ? `仅在这些应用中生效 · 已选 ${scopeDraft.packages.length} 个` : '还没有选择应用')
-    : '所有应用都使用模拟位置';
 
-  if (page === 'scope') return <main className="scope-screen full-screen">
-    <header className="scope-topbar screen-topbar">
-      <button className="icon-button" aria-label="返回" onClick={closeScope}><ArrowLeft size={20} /></button>
-      <h1>作用范围</h1><button className="text-button" onClick={closeScope}>完成</button>
-    </header>
-    <div className="scope-content">
-      {/* 模式由首页开关决定，这里不再提供切换，只负责选应用。 */}
-      <p className="scope-note">{scopeLimited
-        ? '只有勾选的应用会使用模拟位置，其他应用保持真实定位。'
-        : '当前是所有应用都使用模拟位置，回到位置模拟页打开“作用范围”开关即可改为只对指定应用生效。'}</p>
-      <p className="scope-hint">{state?.requested_active ? '模拟中，停止后可修改' : '选择自动保存，下次开始模拟时生效'}</p>
-      {error && <p className="form-error" role="alert">{error}</p>}
-      {scopeLimited ? <AppPicker selected={scopeDraft.packages} disabled={locked} loadApps={loadApps}
-        onChange={packages => editScope({ mode: 'apps', packages })} /> : <p className="scope-all-note">所有应用都会使用模拟位置。之前勾选的应用已保留。</p>}
-    </div>
-  </main>;
+  // 作用范围与卫星都是独立页面，首页只剩 目标卡 / 区块头 / 点位列表 三段。
+  if (scopePage) return <ScopePage limited={scopeLimited} packages={scopeDraft.packages} locked={locked} error={error}
+    loadApps={loadApps} onChange={packages => editScope({ mode: 'apps', packages })}
+    onClearScope={clearScope} canClear={scopeLimited} onClose={() => setScopePage(false)} />;
 
   return <div className="app-shell">
     {drawer && <button className="scrim" aria-label="关闭导航" onClick={() => setDrawer(false)} />}
@@ -337,28 +323,14 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
           {/* 目标卡按原版 ci.xml：小标题、主值、副值、坐标行，操作区在同一行内联。 */}
           <TargetCard position={position} name={name} summary="" active={!!state?.requested_active} busy={busy} canStart={canStart}
             joystickOpen={joystickOpen} joystickDisabled={state?.route ? true : !joystickOpen && (!state || !(state.requested_active || canStart))}
-            cellsEnabled={!!state?.telephony?.cells_enabled}
+            cellsEnabled={!!state?.telephony?.cells_enabled} scopeLimited={scopeLimited} scopeCount={scopeDraft.packages.length}
+            satelliteOn={!!state?.gnss?.gnss_enabled || !!state?.gnss?.nmea_enabled}
             joystickNote={state?.route ? '请先停止路线播放，再使用摇杆。' : joystickNote}
             joystickSpeed={joystickSpeed} setJoystickSpeed={setJoystickSpeed}
             onToggle={() => void toggle()} onEdit={() => setEditing(true)} onCells={openCells}
+            onScope={openScope} onSatellite={() => setSatelliteOpen(true)}
             onToggleJoystick={open => void controlJoystick(open)} />
-          <p className="session-note">{state?.requested_active ? (state.location_hook_ready ? '模拟已开启，关闭面板后仍会继续。' : '模拟已开启，正在连接系统定位服务。') : !position ? '先选择位置，再决定要模拟哪些应用。' : !canStart ? '还没有选择应用，请打开“作用范围”开关并选择应用。' : '准备好了，点击“开始模拟”即可。'}</p>
-          <FeatureMenus scopeLimited={scopeLimited} scopeSummary={scopeSummary} scopeLocked={locked}
-            toggleScope={toggleScopeMode} openScope={() => navigate('scope')}
-            cellsEnabled={!!state?.telephony?.cells_enabled}
-            cellNote={!state?.telephony ? '读取当前状态中' : !state.telephony.cells_enabled ? '使用目标位置附近的基站数据' : !state.requested_active ? '已启用，开始位置模拟后生效' : state.cell_hook_ready ? '已连接基站服务' : '等待基站服务连接'}
-            busy={busy} toggleCells={(next: boolean) => void toggleCells(next)} openCells={openCells} />
-          <section className="card" aria-label="卫星">
-            <h2>卫星</h2>
-            <div className="feature-list">
-              <SwitchRow title="GNSS 状态" checked={!!state?.gnss?.gnss_enabled} disabled={busy || !state}
-                summary={gnssNote(state?.gnss?.gnss_enabled, state?.gnss_hook_ready, !!state?.requested_active, '投递预置的卫星状态与首次定位回调')}
-                onChange={next => void toggleGnss({ gnss_enabled: next })} />
-              <SwitchRow title="NMEA 报文" checked={!!state?.gnss?.nmea_enabled} disabled={busy || !state}
-                summary={gnssNote(state?.gnss?.nmea_enabled, state?.nmea_hook_ready, !!state?.requested_active, '命中范围时丢弃系统的 NMEA 回调，不合成报文')}
-                onChange={next => void toggleGnss({ nmea_enabled: next })} />
-            </div>
-          </section>
+          <p className="session-note">{state?.requested_active ? (state.location_hook_ready ? '模拟已开启，关闭面板后仍会继续。' : '模拟已开启，正在连接系统定位服务。') : !position ? '先选择位置，再决定要模拟哪些应用。' : !canStart ? '还没有选择应用，请打开“作用范围”并选择应用。' : '准备好了，点击“开始模拟”即可。'}</p>
           <section className="history" ref={historyRef}>
             <SectionHeader title="历史位置" count={places.length} actionLabel="查看全部" onAction={focusHistory} />
             <label className="search-field"><Search size={20} /><input ref={searchRef} aria-label="搜索历史位置" placeholder="搜索名称或坐标" value={query} onChange={e => setQuery(e.target.value)} /></label>
@@ -398,7 +370,7 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
             </dl></section>
           <section className="settings-card"><h2>运行环境</h2><dl><div><dt>模块</dt><dd>JustLocation 0.1.0</dd></div><div><dt>控制入口</dt><dd>KernelSU WebUI</dd></div><div><dt>后台</dt><dd>{state ? '已连接' : '未连接'}</dd></div></dl></section>
         </>}
-        {page === 'routes' && <RoutePanel state={state} busy={busy} scope={scope} onCommand={routeCommand} onScope={() => navigate('scope')} />}
+        {page === 'routes' && <RoutePanel state={state} busy={busy} scope={scope} onCommand={routeCommand} onScope={openScope} />}
         {page === 'wifi' && <WifiPanel state={state} onConfigure={async config => { await environmentCommand({ op: 'set_wifi', config }); }} />}
         <p className="page-footer">{DISCLAIMER}</p>
       </div>
@@ -411,6 +383,7 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
     {cellsOpen && <CellPanel target={position} state={state} controlBusy={busy}
       onConfigure={config => environmentCommand({ op: 'set_telephony', config })}
       onApply={region => environmentCommand({ op: 'set_cell_region', region })} onClose={() => window.history.back()} />}
+    {satelliteOpen && <SatellitePanel state={state} busy={busy} onToggle={patch => void toggleGnss(patch)} onClose={() => setSatelliteOpen(false)} />}
     {editing && <PositionEditor initial={position} name={name} onClose={() => setEditing(false)} onSave={async (p, label) => {
       if (!await select(p, label)) throw new Error('位置更新失败，请重试');
       savePlaces([{ id: crypto.randomUUID(), name: label, position: p, pinned: false }, ...places]);
