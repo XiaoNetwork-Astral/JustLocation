@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -185,11 +186,35 @@ function pack() {
     copyFileSync(join(root, source), destination);
   }
   cpSync(join(root, 'webui/dist'), join(stage, 'webroot'), { recursive: true });
+  writeChecksums(stage);
   mkdirSync(join(root, 'dist'), { recursive: true });
   const jar = process.env.JAVA_HOME ? join(process.env.JAVA_HOME, 'bin', `jar${exe}`) : `jar${exe}`;
   const zip = join(root, 'dist/justlocation-0.1.0-dev-arm64.zip');
   run(jar, ['--create', '--file', zip, '--no-manifest', '-C', stage, '.']);
   run(jar, ['--list', '--file', zip]);
+}
+
+/**
+ * 给组装出来的每个文件写一份 `.sha256` 清单，与模块包一起分发。
+ *
+ * 这样安装脚本可以在设备上逐个核对（模块自带的 util_functions.sh 提供 verify_tree），
+ * 运行脚本也能在启动后台前确认二进制没被改动。清单必须在打包时生成，不能提交到仓库：
+ * 它描述的是这一次构建的字节内容。
+ */
+function writeChecksums(stage) {
+  const walk = directory => readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+    const full = join(directory, entry.name);
+    if (entry.isDirectory()) return walk(full);
+    // 清单文件自身不再生成清单，否则会无限递归。
+    return entry.name.endsWith('.sha256') ? [] : [full];
+  });
+  let count = 0;
+  for (const file of walk(stage)) {
+    const digest = createHash('sha256').update(readFileSync(file)).digest('hex');
+    writeFileSync(`${file}.sha256`, `${digest}\n`);
+    count += 1;
+  }
+  console.log(`checksums: ${count} files`);
 }
 
 try {

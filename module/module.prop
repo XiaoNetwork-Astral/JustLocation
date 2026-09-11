@@ -1,6 +1,6 @@
 id=justlocation
-name=JustLocation
+name=Zygisk - JustLocation
 version=0.1.0-dev
 versionCode=1
-author=JustLocation
-description=Personal Android location simulation
+author=BlueFunny19
+description=Location, route, Wi-Fi and satellite simulation for the system location stack through Zygisk. Requires Zygisk Next; the control panel opens from the KernelSU WebUI.
