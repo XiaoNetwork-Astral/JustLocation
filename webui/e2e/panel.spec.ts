@@ -1,6 +1,15 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 
-test('feature menus fit small screens and stop color follows confirmed state', async ({ page }) => {
+/**
+ * 功能开关是隐藏的原生 checkbox（1×1、opacity:0、pointer-events:none，行和可视开关都没有点击处理），
+ * 鼠标/触摸点不到它，只能像键盘用户那样聚焦后按空格切换。
+ */
+async function toggleSwitch(page: Page, box: Locator) {
+  await box.focus();
+  await page.keyboard.press('Space');
+}
+
+test('feature switches fit small screens and stop color follows confirmed state', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 740 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.addInitScript(() => {
@@ -31,28 +40,30 @@ test('feature menus fit small screens and stop color follows confirmed state', a
   await page.evaluate(() => (window as any).confirmStart());
   await expect(primary).toHaveText('停止模拟');
   expect(await primary.evaluate(element => getComputedStyle(element).backgroundColor)).not.toBe(initialColor);
+  // 三个功能入口现在是同一张卡片里的整行开关，窄屏下每行都不能溢出。
   for (const theme of ['light', 'dark']) {
     await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
-    for (const name of ['独立模拟', '基站', '摇杆']) {
-      await page.getByRole('button', { name: `${name}菜单` }).click();
-      const popup = page.getByRole('dialog', { name, exact: true });
-      await expect(popup).toBeVisible();
-      const bounds = (await popup.boundingBox())!;
+    for (const name of ['作用范围', '基站模拟', '摇杆']) {
+      const row = page.locator(`.switch-row:has(input[aria-label="${name}"])`);
+      await expect(row).toBeVisible();
+      const bounds = (await row.boundingBox())!;
       expect(bounds.x).toBeGreaterThanOrEqual(0);
       expect(bounds.x + bounds.width).toBeLessThanOrEqual(320);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-      await page.screenshot({ path: `../build/webui-menu-${name}-${theme}.png`, fullPage: true });
-      await page.keyboard.press('Escape');
-      await expect(popup).toHaveCount(0);
     }
+    await page.screenshot({ path: `../build/webui-feature-switches-${theme}.png`, fullPage: true });
   }
-  await page.getByRole('button', { name: '摇杆菜单' }).click();
+  // 摇杆开关：打开会真的发出 am start 命令，关掉后位置模拟继续。
+  const joystick = page.getByRole('checkbox', { name: '摇杆' });
+  await toggleSwitch(page, joystick);
+  await expect(page.getByText('摇杆已打开，拖动即可移动位置。')).toBeVisible();
+  expect(await page.evaluate(() => (window as any).commands.some((command: string) => command.includes('--es speed 5.4 --ez open true')))).toBe(true);
   await page.getByLabel('最高速度（km/h）').fill('7.2');
-  await page.getByRole('button', { name: '打开摇杆', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('已请求打开摇杆');
+  await toggleSwitch(page, joystick);
+  await expect(page.getByText('摇杆已关闭，位置模拟会保持当前状态。')).toBeVisible();
+  await toggleSwitch(page, joystick);
+  await expect(page.getByText('摇杆已打开，拖动即可移动位置。')).toBeVisible();
   expect(await page.evaluate(() => (window as any).commands.some((command: string) => command.includes('--es speed 7.2 --ez open true')))).toBe(true);
-  await page.getByRole('button', { name: '关闭摇杆', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('摇杆已关闭');
   await primary.click();
   await expect(primary).toHaveText('开始模拟');
   await expect(primary).not.toHaveClass(/stop/);
@@ -60,9 +71,21 @@ test('feature menus fit small screens and stop color follows confirmed state', a
 
 test('GPX import previews separate segments and keeps the draft after reload', async ({ page }) => {
   await page.setViewportSize({ width: 393, height: 852 });
+  await page.addInitScript(() => {
+    const host = window as any;
+    const state = { requested_active: false, location_hook_ready: true, config: {
+      position: { latitude: 31.2, longitude: 121.5, altitude: 12, accuracy: 5, speed: 0, bearing: 0 },
+      scope: { mode: 'all' },
+    } };
+    host.ksu = { exec: (command: string, _options: string, callback: string) => {
+      host[callback](0, JSON.stringify({ version: 1, ok: true, state }), '');
+    } };
+  });
   await page.goto('/');
   await page.getByRole('button', { name: '打开导航' }).click();
   await page.getByRole('button', { name: '路线模拟', exact: true }).click();
+  // 路线页默认是“路线管理”，导入 GPX 要先新建一条路线进入点编辑。
+  await page.getByRole('button', { name: '新建路线' }).click();
   await page.locator('input[type=file]').setInputFiles({ name: 'walk.gpx', mimeType: 'application/gpx+xml',
     buffer: Buffer.from('<gpx><trk><name>散步</name><trkseg><trkpt lat="31.2" lon="121.5"/><trkpt lat="31.201" lon="121.5"/></trkseg><trkseg><trkpt lat="30" lon="120"/><trkpt lat="30.001" lon="120"/></trkseg></trk></gpx>') });
   await expect(page.getByLabel('选择路线')).toBeVisible();
@@ -73,6 +96,12 @@ test('GPX import previews separate segments and keeps the draft after reload', a
   await page.reload();
   await page.getByRole('button', { name: '打开导航' }).click();
   await page.getByRole('button', { name: '路线模拟', exact: true }).click();
+  // 刷新后回到路线管理。“新建路线”会主动丢弃草稿，所以用“保存路线”把恢复出来的草稿存进路线库，
+  // 再打开它，确认草稿里的点是导入的那一段而不是空草稿。
+  await page.getByRole('button', { name: '保存路线' }).click();
+  await page.getByLabel('路线名称').fill('导入的路线');
+  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await page.getByRole('button', { name: '编辑导入的路线' }).click();
   await expect(page.getByLabel('点 2 纬度', { exact: true })).toHaveValue('30.001');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
@@ -100,6 +129,8 @@ test('mobile route editor reorders points, validates input and restores a runnin
   await page.goto('/');
   await page.getByRole('button', { name: '打开导航' }).click();
   await page.getByRole('button', { name: '路线模拟', exact: true }).click();
+  // 点编辑是路线管理里的第二个页面，先新建路线才有点位输入。
+  await page.getByRole('button', { name: '新建路线' }).click();
   await page.getByRole('button', { name: '开始路线' }).click();
   await expect(page.getByRole('alert')).toContainText('点 1');
   for (const index of [1, 2]) {
@@ -113,21 +144,25 @@ test('mobile route editor reorders points, validates input and restores a runnin
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: '../build/webui-route-editor.png', fullPage: true });
   await page.getByRole('button', { name: '开始路线' }).click();
+  // 路线播放中：点编辑被锁住（刷新后会回到管理页，所以在这里验证锁定）。
+  await expect(page.getByLabel('点 1 经度', { exact: true })).toBeDisabled();
+  await expect(page.getByLabel('播放次数')).toHaveValue('3');
+  await page.getByRole('button', { name: '返回路线管理' }).click();
   await expect(page.getByRole('button', { name: '暂停路线' })).toBeVisible();
   await page.reload();
   await page.getByRole('button', { name: '打开导航' }).click();
   await page.getByRole('button', { name: '路线模拟', exact: true }).click();
-  await expect(page.getByLabel('点 1 经度', { exact: true })).toHaveValue('121.501');
-  await expect(page.getByLabel('点 1 经度', { exact: true })).toBeDisabled();
-  await expect(page.getByLabel('播放次数')).toHaveValue('3');
+  // 刷新后从后台恢复的运行中路线：进度、轮次、等待间隔都在管理页上。
   await expect(page.getByRole('heading', { name: '等待下一轮' })).toBeVisible();
   await expect(page.getByText('10 秒后回到起点')).toBeVisible();
+  await expect(page.getByText(/第 1 \/ 3 次/)).toBeVisible();
   await page.getByRole('button', { name: '暂停路线' }).click();
   await expect(page.getByRole('heading', { name: '路线已暂停' })).toBeVisible();
   await expect(page.getByText('剩余间隔 10 秒')).toBeVisible();
   await page.screenshot({ path: '../build/webui-route-paused.png', fullPage: true });
   await page.getByRole('button', { name: '继续路线' }).click();
   await page.getByRole('button', { name: '停止路线' }).click();
+  await page.getByRole('button', { name: '新建路线' }).click();
   await expect(page.getByLabel('点 1 经度', { exact: true })).toBeEnabled();
 });
 
@@ -155,8 +190,9 @@ test('mobile app picker uses KernelSU metadata and submits selected packages', a
     };
   });
   await page.goto('/');
-  await page.getByRole('button', { name: '独立模拟菜单' }).click();
-  await page.getByRole('button', { name: '作用范围', exact: true }).click();
+  // 作用范围不再是弹层：开关打开时行内出现“选择应用”。
+  await expect(page.getByRole('checkbox', { name: '作用范围' })).toBeChecked();
+  await page.getByRole('button', { name: '选择应用' }).click();
   await expect(page.getByRole('navigation')).toHaveCount(0);
   const topbar = page.locator('.scope-topbar');
   const top = (await topbar.boundingBox())!.y;
@@ -165,17 +201,30 @@ test('mobile app picker uses KernelSU metadata and submits selected packages', a
   expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight)).toBe(true);
   await page.getByRole('searchbox').fill('justlocation');
   await page.getByRole('checkbox', { name: /JustLocation/ }).check();
-  await page.getByRole('radio', { name: '全部应用', exact: true }).check();
-  await page.getByRole('radio', { name: '指定应用', exact: true }).check();
   await expect(page.getByRole('checkbox', { name: /JustLocation/ })).toBeChecked();
   await page.screenshot({ path: '../build/webui-app-picker.png', fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole('button', { name: '返回', exact: true }).click();
   await expect(page.getByRole('heading', { name: '位置模拟', exact: true })).toBeVisible();
+  // 模式只能由首页开关切换：关掉再打开必须保留已选应用（原来那两个单选就是干这个的）。
+  const scopeSwitch = page.getByRole('checkbox', { name: '作用范围' });
+  await toggleSwitch(page, scopeSwitch);
+  await expect(scopeSwitch).not.toBeChecked();
+  await expect(page.getByText('所有应用都使用模拟位置')).toBeVisible();
+  await expect(page.getByRole('button', { name: '选择应用' })).toHaveCount(0);
+  await toggleSwitch(page, scopeSwitch);
+  await expect(scopeSwitch).toBeChecked();
+  await expect(page.getByText('仅在这些应用中生效 · 已选 1 个')).toBeVisible();
+  await page.getByRole('button', { name: '选择应用' }).click();
+  await expect(page.getByRole('checkbox', { name: /JustLocation/ })).toBeChecked();
+  await page.getByRole('button', { name: '完成', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '位置模拟', exact: true })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('button', { name: '独立模拟菜单' })).toHaveClass(/selected/);
+  // 刷新后仍是限定应用模式（原来是断言“独立模拟菜单”处于 selected 状态）。
+  await expect(page.getByRole('checkbox', { name: '作用范围' })).toBeChecked();
   await page.getByRole('button', { name: '打开导航' }).click();
-  await expect(page.getByRole('button', { name: '作用范围', exact: true })).toHaveCount(0);
+  // 侧栏里仍然没有“作用范围”入口：导航只有这四个页面。
+  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['位置模拟', '路线模拟', 'Wi-Fi 模拟', '设置']);
   await page.getByRole('button', { name: '路线模拟', exact: true }).click();
   await page.getByRole('button', { name: '作用范围', exact: true }).click();
   await page.goBack();
@@ -188,9 +237,59 @@ test('mobile app picker uses KernelSU metadata and submits selected packages', a
   await page.getByRole('button', { name: '开始模拟' }).click();
   await expect(page.getByRole('button', { name: '停止模拟' })).toBeVisible();
   expect(await page.evaluate(() => (window as any).startedScope)).toEqual({ mode: 'apps', packages: ['me.idk.justlocation.companion'] });
-  await page.getByRole('button', { name: '独立模拟菜单' }).click();
+  // 模拟进行中不能再改应用选择，作用范围页从路线页进入。
+  await page.getByRole('button', { name: '打开导航' }).click();
+  await page.getByRole('button', { name: '路线模拟', exact: true }).click();
   await page.getByRole('button', { name: '作用范围', exact: true }).click();
   await expect(page.getByRole('checkbox', { name: /JustLocation/ })).toBeDisabled();
+});
+
+test('scope page drops the all/apps choice and follows the feature switch', async ({ page }) => {
+  await page.setViewportSize({ width: 393, height: 852 });
+  await page.addInitScript(() => {
+    const host = window as unknown as Record<string, any>;
+    const apps = [
+      { packageName: 'me.idk.justlocation.companion', appLabel: 'JustLocation', isSystem: false },
+      { packageName: 'com.example.maps', appLabel: '地图', isSystem: false },
+    ];
+    const state = { requested_active: false, location_hook_ready: true, config: {
+      position: { latitude: 31.2, longitude: 121.5, altitude: 12, accuracy: 5, speed: 0, bearing: 0 },
+      scope: { mode: 'apps', packages: ['me.idk.justlocation.companion'] },
+    } };
+    host.ksu = {
+      listPackages: () => JSON.stringify(apps.map(app => app.packageName)),
+      getPackagesInfo: () => JSON.stringify(apps),
+      exec: (command: string, _options: string, callback: string) => {
+        host[callback](0, JSON.stringify({ version: 1, ok: true, state }), '');
+      },
+    };
+  });
+  await page.goto('/');
+  // 模式就是首页那个开关，首页上也没有“全部应用 / 指定应用”这类单选。
+  await expect(page.getByRole('checkbox', { name: '作用范围' })).toBeChecked();
+  await expect(page.getByRole('radio')).toHaveCount(0);
+  await page.getByRole('button', { name: '选择应用' }).click();
+  await expect(page.getByRole('heading', { name: '作用范围', exact: true })).toBeVisible();
+  // 限定应用时只讲清范围并给出列表，不再要求先选模式。
+  await expect(page.getByRole('radio')).toHaveCount(0);
+  await expect(page.getByText('全部应用', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('指定应用', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('只有勾选的应用会使用模拟位置，其他应用保持真实定位。')).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: /JustLocation/ })).toBeChecked();
+  await page.screenshot({ path: '../build/webui-scope-apps.png', fullPage: true });
+  await page.getByRole('button', { name: '完成', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '位置模拟', exact: true })).toBeVisible();
+  // 关掉开关就是全部应用：行内不再有应用入口，页面只说明勾选被保留。
+  await toggleSwitch(page, page.getByRole('checkbox', { name: '作用范围' }));
+  await expect(page.getByRole('checkbox', { name: '作用范围' })).not.toBeChecked();
+  await expect(page.getByRole('button', { name: '选择应用' })).toHaveCount(0);
+  await page.getByRole('button', { name: '打开导航' }).click();
+  await page.getByRole('button', { name: '路线模拟', exact: true }).click();
+  await page.getByRole('button', { name: '作用范围', exact: true }).click();
+  await expect(page.getByText('所有应用都会使用模拟位置。之前勾选的应用已保留。')).toBeVisible();
+  await expect(page.getByRole('radio')).toHaveCount(0);
+  await expect(page.getByRole('searchbox')).toHaveCount(0);
+  await page.screenshot({ path: '../build/webui-scope-all-apps.png', fullPage: true });
 });
 
 test('mobile coordinate entry, navigation and dark theme', async ({ page }) => {
@@ -219,4 +318,3 @@ test('mobile coordinate entry, navigation and dark theme', async ({ page }) => {
   await expect(page.getByRole('navigation')).toBeVisible();
   await page.screenshot({ path: '../build/webui-desktop.png', fullPage: true });
 });
-

@@ -1,4 +1,39 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+
+/** 路线页的“新建路线”在后台未就绪时不可点，这里给一个最小后台桩。 */
+async function withBackend(page: Page) {
+  await page.addInitScript(() => {
+    const host = window;
+    host.__stubErrors = [];
+    host.__stubCommands = [];
+    try {
+      host.ksu = {
+        exec: (command, _options, callback) => {
+          host.__stubCommands.push(command);
+          const call = host[callback];
+          if (typeof call !== 'function') { host.__stubErrors.push(`缺少回调 ${callback}`); return; }
+          if (command.indexOf('pm path') === 0) { call(0, 'package:/data/app/companion.apk', ''); return; }
+          if (command.indexOf('am start') === 0) { call(0, 'Starting: Intent', ''); return; }
+          if (command.indexOf('am stopservice') === 0) { call(1, 'Service stopped', ''); return; }
+          if (command.indexOf('dumpsys') === 0) { call(0, '', ''); return; }
+          call(0, JSON.stringify({ version: 1, ok: true, state: { requested_active: false, config: {
+            position: { latitude: 31.2, longitude: 121.5, altitude: 12, accuracy: 5, speed: 0, bearing: 0 },
+            scope: { mode: 'apps', packages: ['me.idk.justlocation.companion'] },
+          } } }), '');
+        },
+      };
+    } catch (error) {
+      host.__stubErrors.push(String(error));
+    }
+  });
+}
+
+/** 记录编辑前的位置，供“返回后表单不丢”的断言使用。 */
+async function openRouteEditor(page: Page) {
+  await page.getByRole('button', { name: '打开导航' }).click();
+  await page.getByRole('button', { name: '路线模拟', exact: true }).click();
+  await page.getByRole('button', { name: '新建路线' }).click();
+}
 
 test.beforeEach(async ({ page }) => {
   // No requests to public map servers during automated tests.
@@ -48,7 +83,7 @@ test('keeps coordinate entry available after a tile failure and map cancellation
   await page.route('https://tile.openstreetmap.org/**', route => route.abort());
   await page.getByRole('button', { name: '添加位置', exact: true }).click();
   await page.getByRole('button', { name: '地图选点', exact: true }).click();
-  await expect(page.getByText('地图加载失败，可以返回填写坐标。')).toBeVisible();
+  await expect(page.getByText(/地图加载失败/)).toBeVisible();
   await page.getByRole('button', { name: '返回位置编辑' }).click();
   await expect(page.getByLabel('纬度', { exact: true })).toHaveValue('');
   await page.getByLabel('纬度', { exact: true }).fill('0');
@@ -57,9 +92,39 @@ test('keeps coordinate entry available after a tile failure and map cancellation
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
+test('searches a place, moves to the current position and switches the map source', async ({ page }) => {
+  await page.route('https://nominatim.openstreetmap.org/**', route => route.fulfill({ contentType: 'application/json', body:
+    JSON.stringify([{ name: '上海火车站', display_name: '上海火车站, 静安区, 上海市', lat: '31.2497', lon: '121.4553' }]) }));
+  await page.getByRole('button', { name: '添加位置', exact: true }).click();
+  await page.getByRole('button', { name: '地图选点', exact: true }).click();
+  await page.getByLabel('搜索地点').fill('上海火车站');
+  await page.getByRole('button', { name: '搜索', exact: true }).click();
+  await page.getByRole('listitem').first().click();
+  await expect(page.getByLabel('所选坐标')).toHaveText('31.249700, 121.455300');
+  await page.getByRole('button', { name: '使用此位置' }).click();
+  await expect(page.getByLabel('纬度', { exact: true })).toHaveValue('31.2497');
+  // 直接输入经纬度不需要联网。
+  await page.getByRole('button', { name: '地图选点', exact: true }).click();
+  await page.getByLabel('搜索地点').fill('30.5, 120.5');
+  await page.getByRole('button', { name: '搜索', exact: true }).click();
+  await expect(page.getByLabel('所选坐标')).toHaveText('30.500000, 120.500000');
+  await page.screenshot({ path: '../build/webui-map-search.png' });
+  // 换图源只影响底图，内部始终是 WGS84。
+  await page.getByLabel('地图图源').selectOption('amap');
+  await expect(page.getByText(/已换算/)).toBeVisible();
+  await expect(page.getByLabel('所选坐标')).toHaveText('30.500000, 120.500000');
+  await page.screenshot({ path: '../build/webui-map-amap.png' });
+  await page.getByLabel('地图图源').selectOption('custom');
+  await expect(page.getByLabel('自定义图源地址')).toBeVisible();
+  await expect(page.getByText(/还没有可用地址/)).toBeVisible();
+  await page.screenshot({ path: '../build/webui-map-providers.png' });
+});
+
 test('changes one route point on the map without changing speed or starting playback', async ({ page }) => {
-  await page.getByRole('button', { name: '打开导航' }).click();
-  await page.getByRole('button', { name: '路线模拟', exact: true }).click();
+  // addInitScript 只对之后的文档加载生效，所以桩要在导航之前注册。
+  await withBackend(page);
+  await page.goto('/');
+  await openRouteEditor(page);
   await page.getByLabel('点 1 纬度', { exact: true }).fill('31.2');
   await page.getByLabel('点 1 经度', { exact: true }).fill('121.5');
   await page.getByRole('button', { name: '在地图上选择点 1', exact: true }).click();
@@ -72,8 +137,11 @@ test('changes one route point on the map without changing speed or starting play
 });
 
 test('plans a route on the map, undoes a point, and commits only on confirmation', async ({ page }) => {
-  await page.getByRole('button', { name: '打开导航' }).click();
-  await page.getByRole('button', { name: '路线模拟', exact: true }).click();
+  await withBackend(page);
+  await page.goto('/');
+  await openRouteEditor(page);
+  await page.getByLabel('点 1 纬度', { exact: true }).fill('31.2');
+  await page.getByLabel('点 1 经度', { exact: true }).fill('121.5');
   await page.getByRole('button', { name: '地图规划', exact: true }).click();
   await expect(page.getByRole('button', { name: '完成路线' })).toBeDisabled();
   await page.getByRole('button', { name: '添加到路线' }).click();

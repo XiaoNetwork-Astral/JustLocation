@@ -57,6 +57,8 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
   const [joystickSpeed, setJoystickSpeed] = useState(() => localStorage.getItem('justlocation.joystick.speed') || '5.4');
   // 摇杆是否真的开着，之前前端完全不记录，所以"关闭摇杆"永远可点、图标也没有状态。
   const [joystickOpen, setJoystickOpen] = useState(false);
+  // 是否已经从系统查到过真实状态。查不到时不做判断，避免把开着的摇杆显示成关着。
+  const [joystickKnown, setJoystickKnown] = useState(false);
   const [joystickNote, setJoystickNote] = useState('拖到屏幕边缘可收起，点边缘把手展开。');
   const [style, setStyle] = useState<StyleFamily>(readStyle);
   const [mode, setMode] = useState<ColorMode>(readColorMode);
@@ -76,6 +78,19 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
         }
       }
       initialized.current = true;
+      // 页面刷新后本地不记得摇杆状态，向系统确认一次，免得重复打开或显示成关着。
+      // 读不到状态时保持原样：这只是附加信息，绝不能因为它失败而让整次刷新中断。
+      if (next.requested_active) {
+        let running: boolean | null = null;
+        try { running = await joystick.read(); } catch { running = null; }
+        if (running !== null) {
+          setJoystickKnown(true);
+          setJoystickOpen(running);
+          if (running) setJoystickNote('摇杆正在运行。');
+        }
+      } else {
+        setJoystickOpen(false);
+      }
     } catch (e) { setState(null); setError(String(e instanceof Error ? e.message : e)); }
     finally { setBusy(false); }
   }
@@ -163,13 +178,15 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
     try { localStorage.setItem('justlocation.places', JSON.stringify(next)); setPlaces(next); }
     catch { setError('历史记录保存失败，浏览器存储可能已满'); }
   }
-  async function stopSimulation(nextState: State) {
-    // 停止模拟时摇杆必须一起关掉，否则悬浮窗会留在屏幕上继续发方向。
-    if (!joystickOpen) return;
+  async function stopSimulation() {
+    // 停止模拟时摇杆必须一起关掉，否则悬浮窗会留在屏幕上；即使前端不知道它开着，
+    // 这里也无条件请求一次关闭（服务本来就没运行时这条命令是安全的）。
+    let closed = true;
     try { await joystick.close(); }
-    catch { /* 已关闭或未安装时忽略 */ }
+    catch { closed = joystickOpen; /* 确实开着的才需要报错，本来就没开就忽略 */ }
     setJoystickOpen(false);
-    setJoystickNote('位置模拟已停止，摇杆同时关闭。');
+    setJoystickNote(closed ? '位置模拟已停止，摇杆同时关闭。' : '位置模拟已停止，但摇杆没能关闭，请再点一次摇杆开关。');
+    if (!closed) setError('摇杆没有关闭成功，请重试。');
   }
   async function toggle() {
     if (!state || busy) return;
@@ -177,7 +194,7 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
     try {
       const next = await client(state.requested_active ? { op: 'stop' } : { op: 'start', config: { position: position!, scope } });
       setState(next);
-      if (state.requested_active) await stopSimulation(next);
+      if (state.requested_active) await stopSimulation();
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   }
@@ -289,7 +306,7 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
             cellsEnabled={!!state?.telephony?.cells_enabled}
             cellNote={!state?.telephony ? '读取当前状态中' : !state.telephony.cells_enabled ? '使用目标位置附近的基站数据' : !state.requested_active ? '已启用，开始位置模拟后生效' : state.cell_hook_ready ? '已连接基站服务' : '等待基站服务连接'}
             busy={busy} toggleCells={(next: boolean) => void toggleCells(next)} openCells={openCells}
-            joystickOpen={joystickOpen} joystickKnown={joystickOpen} joystickSpeed={joystickSpeed} setSpeed={setJoystickSpeed}
+            joystickOpen={joystickOpen} joystickKnown={joystickKnown || joystickOpen} joystickSpeed={joystickSpeed} setSpeed={setJoystickSpeed}
             canOpenJoystick={!busy && !!state && !state.route && (state.requested_active || canStart)}
             joystickNote={state?.route ? '请先停止路线播放，再使用摇杆。' : joystickNote}
             controlJoystick={open => void controlJoystick(open)} />
@@ -331,7 +348,7 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
       savePlaces([{ id: crypto.randomUUID(), name: label, position: p, pinned: false }, ...places]);
       setEditing(false);
     }} />}
-    {editingPlace && <PositionEditor initial={editingPlace.position} name={editingPlace.name} onClose={() => setEditingPlace(null)} onSave={async (p, label) => {
+    {editingPlace && <PositionEditor title="编辑位置" initial={editingPlace.position} name={editingPlace.name} onClose={() => setEditingPlace(null)} onSave={async (p, label) => {
       savePlaces(places.map(item => item.id === editingPlace.id ? { ...item, name: label, position: p } : item));
       if (position && name === editingPlace.name) setName(label);
       setEditingPlace(null);

@@ -4,7 +4,7 @@ import { parsePosition, type Position } from './control';
 import { convertCoordinates, type CoordinateSystem } from './coordinates';
 import { MapPicker } from './MapPicker';
 
-export function PositionEditor({ initial, name, onClose, onSave }: { initial: Position | null; name: string; onClose: () => void; onSave: (p: Position, name: string) => Promise<void> }) {
+export function PositionEditor({ initial, name, title = '添加位置', onClose, onSave }: { initial: Position | null; name: string; title?: string; onClose: () => void; onSave: (p: Position, name: string) => Promise<void> }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [error, setError] = useState(''), [saving, setSaving] = useState(false);
   const [label, setLabel] = useState(name);
@@ -28,7 +28,7 @@ export function PositionEditor({ initial, name, onClose, onSave }: { initial: Po
       try { const p = read(); setSaving(true); await onSave(p, label.trim() || '自定义位置'); }
       catch (error) { setError(error instanceof Error ? error.message : String(error)); }
       finally { setSaving(false); }
-    }}><div className="dialog-heading"><h2 id="editor-title">添加位置</h2><button type="button" className="icon-button" aria-label="关闭位置编辑" disabled={saving} onClick={onClose}><X /></button></div>
+    }}><div className="dialog-heading"><h2 id="editor-title">{title}</h2><button type="button" className="icon-button" aria-label="关闭位置编辑" disabled={saving} onClick={onClose}><X /></button></div>
       <button type="button" className="map-entry text-button" disabled={saving} onClick={openMap}><MapPin size={20} />地图选点</button>
       <label className="field">位置名称<input name="name" value={label} onChange={e => setLabel(e.target.value)} placeholder="给这个地方起个名字" autoFocus /></label>
       <label className="field">坐标系<select value={system} onChange={e => setSystem(e.target.value as CoordinateSystem)}>

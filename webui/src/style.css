@@ -323,7 +323,7 @@ input::placeholder, textarea::placeholder { color: var(--onSurfaceGrey); opacity
   text-align: left;
 }
 .row + .row { border-top: var(--separator); }
-.row-text { flex: 1; min-width: 0; }
+.row-text { flex: 1; min-width: 0; cursor: pointer; }
 .row-title { display: block; font-size: var(--fontRow); font-weight: var(--weightRow); overflow-wrap: anywhere; }
 .row-summary { display: block; font-size: var(--fontSmall); color: var(--onSurfaceVariantSummary); margin-top: 4px; line-height: 1.5; overflow-wrap: anywhere; }
 .row-end { display: flex; align-items: center; gap: 8px; flex-shrink: 0; color: var(--onSurfaceVariantSummary); }
@@ -343,6 +343,7 @@ input::placeholder, textarea::placeholder { color: var(--onSurfaceGrey); opacity
 .switch {
   position: relative;
   flex-shrink: 0;
+  cursor: pointer;
   width: 46px;
   height: 28px;
   border-radius: var(--radiusPill);
@@ -631,8 +632,11 @@ dt { color: var(--onSurfaceVariant); } dd { margin: 0; }
 .map-results small { display: block; color: var(--onSurfaceVariantSummary); font-size: var(--fontTiny); margin-top: 2px; }
 .map-tools { position: absolute; right: 10px; bottom: 12px; z-index: 600; display: grid; gap: 8px; }
 .map-tools .icon-button { width: 46px; height: 46px; background: var(--surfaceContainerHigh); box-shadow: 0 2px 8px rgba(0,0,0,.2); }
-.map-provider { position: absolute; top: 10px; left: 10px; z-index: 600; }
-.map-provider select { padding: 10px 12px; border-radius: var(--radiusPill); border: 1px solid var(--outlineVariant); background: var(--surfaceContainerHigh); color: var(--onSurface); font-size: var(--fontSmall); box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+.map-provider { position: absolute; top: 66px; left: 10px; right: 10px; z-index: 600; display: grid; gap: 6px; justify-items: start; }
+.map-provider-field { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--radiusPill); background: var(--surfaceContainerHigh); box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+.map-provider select { border: 0; background: transparent; color: var(--onSurface); font-size: var(--fontBody); }
+.map-provider-url input { width: min(320px, 70vw); padding: 10px 12px; border-radius: var(--radiusField); border: 1px solid var(--outlineVariant); background: var(--surfaceContainerHigh); color: var(--onSurface); font-size: var(--fontSmall); box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+.map-note { position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 600; padding: 10px 14px; border-radius: var(--radiusCard); background: var(--surfaceContainerHigh); color: var(--onSurfaceVariant); font-size: var(--fontSmall); box-shadow: 0 2px 10px rgba(0,0,0,.18); }
 .map-selection { padding: 14px 16px max(14px, env(safe-area-inset-bottom)); display: grid; gap: 6px; }
 .map-selection p, .map-selection span { font-size: var(--fontSmall); color: var(--onSurfaceVariantSummary); }
 .map-selection output { font-size: 18px; font-variant-numeric: tabular-nums; }

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ArrowDown, ArrowLeft, ArrowUp, MapPin, Pause, Play, Plus, Route, Square, Trash2, Upload } from 'lucide-react';
 import { parsePosition, type Command, type Position, type RoutePlan, type Scope, type State } from './control';
 import { parseGpx, type ImportedRoute } from './routeImport';
-import { blankPoint, inputPoint, parseDraft, planDraft, readDraft, type RouteDraft } from './routeDraft';
+import { blankPoint, inputPoint, parseDraft, planDraft, readDraft, readSavedDraft, type RouteDraft } from './routeDraft';
 import { RouteLibrary } from './RouteLibrary';
 import { MapPicker } from './MapPicker';
 
@@ -23,6 +23,8 @@ export function RoutePanel({ state, busy, scope, onCommand, onScope }: {
   const [mapRoute, setMapRoute] = useState<Position[] | null>(null);
   // 默认进"路线管理"；只有新建或编辑某条路线时才切到点编辑页。
   const [view, setView] = useState<View>({ kind: 'manage' });
+  // 面板刷新或重开后草稿还在，但管理页原本没有入口回到它，这里主动提供。
+  const [savedDraft, setSavedDraft] = useState(() => readSavedDraft());
   const locked = busy || !!state?.requested_active;
   const route = state?.route;
   useEffect(() => {
@@ -30,6 +32,7 @@ export function RoutePanel({ state, busy, scope, onCommand, onScope }: {
   }, [!!route]);
   function save(next: RouteDraft) {
     setDraft(next);
+    setSavedDraft(next);
     try { localStorage.setItem(draftKey, JSON.stringify(next)); setError(''); }
     catch { setError('路线草稿保存失败'); }
   }
@@ -37,8 +40,17 @@ export function RoutePanel({ state, busy, scope, onCommand, onScope }: {
   function createNew() {
     try { localStorage.removeItem(draftKey); } catch { /* 忽略存储不可用 */ }
     setDraft({ points: [blankPoint(), blankPoint()], speed: '5.4', repeatCount: '1', repeatDelay: '0' });
+    setSavedDraft(null);
     setImports([]); setError('');
     setView({ kind: 'edit', from: '新建路线' });
+  }
+  /** 继续编辑草稿：不清空，直接把已保存的草稿装回编辑页。 */
+  function resumeDraft() {
+    const saved = readSavedDraft();
+    if (!saved) { setError('草稿已经不存在了'); setSavedDraft(null); return; }
+    setDraft(saved);
+    setImports([]); setError('');
+    setView({ kind: 'edit', from: '上次的草稿' });
   }
   function editSaved(plan: RoutePlan, name: string) {
     const next = planDraft(plan);
@@ -90,7 +102,10 @@ export function RoutePanel({ state, busy, scope, onCommand, onScope }: {
         {!route.completed && <button className="primary" disabled={busy} onClick={() => void onCommand({ op: route.paused ? 'resume_route' : 'pause_route' })}>
           {route.paused ? <Play size={18} /> : <Pause size={18} />}{route.paused ? '继续路线' : '暂停路线'}</button>}
         <button className="primary stop" disabled={busy} onClick={() => void onCommand({ op: 'stop' })}><Square size={18} />停止路线</button>
-      </> : <button className="primary" disabled={locked || !state} onClick={createNew}><Plus size={18} />新建路线</button>}</div>
+      </> : <div className="route-actions">
+        <button className="primary" disabled={locked || !state} onClick={createNew}><Plus size={18} />新建路线</button>
+        {savedDraft && <button className="tonal-button" disabled={locked || !state} onClick={resumeDraft}>继续编辑草稿</button>}
+      </div>}</div>
       {state?.requested_active && !route && <p>先停止位置模拟，再开始路线。</p>}
       {error && <p role="alert" className="form-error">{error}</p>}
     </section>

@@ -1,4 +1,15 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
+
+/**
+ * 功能开关的语义层 checkbox 只有 1px 且 `pointer-events: none`（视觉在旁边的 .switch 上），
+ * 鼠标点不到它，所以用键盘激活：聚焦后按空格，跟键盘/读屏用户的操作一致。
+ */
+async function toggleSwitch(page: Page, box: Locator, checked: boolean) {
+  await box.focus();
+  await expect(box).toBeFocused();
+  await page.keyboard.press('Space');
+  await expect(box).toBeChecked({ checked });
+}
 
 test('mobile cell panel configures detected cards, applies target data and preserves settings when toggled', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
@@ -25,8 +36,11 @@ test('mobile cell panel configures detected cards, applies target data and prese
     } };
   });
   await page.goto('/');
-  await page.getByRole('button', { name: '基站菜单' }).click();
-  await page.getByRole('button', { name: '启用基站模拟' }).click();
+  // 入口变了：过去是“基站菜单 → 启用基站模拟”，现在是“模拟功能”卡片里的同名开关。
+  // 开关会走 set_telephony；配置里还没有可用运营商时提示并直接打开基站页，所以不必再点“基站列表与运营商”。
+  const cellsSwitch = page.getByRole('checkbox', { name: '基站模拟', exact: true });
+  await expect(page.getByText('使用目标位置附近的基站数据')).toBeVisible();
+  await toggleSwitch(page, cellsSwitch, true);
   const dialog = page.getByRole('dialog', { name: '附近基站' });
   await expect(dialog).toBeVisible();
   await page.getByLabel('模拟基站', { exact: true }).check();
@@ -35,19 +49,22 @@ test('mobile cell panel configures detected cards, applies target data and prese
   await page.getByLabel('运营商名称').fill('自己的运营商📱');
   await page.getByRole('button', { name: '保存模拟设置' }).click();
   await expect(page.getByText('设置已保存，开始位置模拟后生效。')).toBeVisible();
-  expect(await page.evaluate(() => (window as any).frames.find((f: any) => f.op === 'set_telephony').config.subscriptions[0].mnc)).toBe('001');
+  // “基站模拟”开关自己也会发一帧还不带 SIM 卡的 set_telephony，这里只看带卡数据的那一帧。
+  expect(await page.evaluate(() => (window as any).frames.filter((f: any) => f.op === 'set_telephony' && f.config.subscriptions.length).at(-1).config.subscriptions[0].mnc)).toBe('001');
   await page.getByText('修改运营商', { exact: true }).click();
   await page.screenshot({ path: '../build/webui-cells-settings.png', fullPage: true });
   await page.getByRole('button', { name: '查询附近基站', exact: true }).click();
   await expect(page.getByText('LTE · 460-001')).toBeVisible();
+  // 查到数据只是显示出来，还没生效：后台要等“应用这份基站数据”才收到区域。
+  expect(await page.evaluate(() => (window as any).frames.some((f: any) => f.op === 'set_cell_region'))).toBe(false);
   await page.getByRole('button', { name: '应用这份基站数据' }).click();
   await expect(page.getByText('基站数据已应用')).toBeVisible();
   expect(await dialog.evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true);
   await page.screenshot({ path: '../build/webui-cells-data.png', fullPage: true });
   await page.getByRole('button', { name: '返回位置模拟' }).click();
   await expect(dialog).toHaveCount(0);
-  await page.getByRole('button', { name: '基站菜单' }).click();
-  await page.getByRole('button', { name: '停用基站模拟' }).click();
+  // 停用基站模拟：还是同一个开关（旧路径是“基站菜单 → 停用基站模拟”）。
+  await toggleSwitch(page, cellsSwitch, false);
   const last = await page.evaluate(() => (window as any).frames.filter((f: any) => f.op === 'set_telephony').at(-1));
   expect(last.config.cells_enabled).toBe(false);
   expect(last.config.sim_enabled).toBe(true);

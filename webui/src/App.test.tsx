@@ -12,7 +12,7 @@ it('starts location and opens the joystick from one switch, and closing it keeps
   const config = { position, scope: { mode: 'all' as const } };
   const client = vi.fn().mockResolvedValueOnce({ requested_active: false, config })
     .mockResolvedValue({ requested_active: true, config });
-  const joystick = { check: vi.fn().mockResolvedValue(undefined), open: vi.fn().mockResolvedValue(undefined), close: vi.fn().mockResolvedValue(undefined) };
+  const joystick = { check: vi.fn().mockResolvedValue(undefined), open: vi.fn().mockResolvedValue(undefined), close: vi.fn().mockResolvedValue(undefined), read: vi.fn().mockResolvedValue(false) };
   render(<App client={client} joystick={joystick} />);
   await screen.findByText('后台已连接');
   const user = userEvent.setup();
@@ -31,7 +31,7 @@ it('starts location and opens the joystick from one switch, and closing it keeps
 it('closes the joystick together with the simulation', async () => {
   const config = { position, scope: { mode: 'all' as const } };
   const client = vi.fn().mockResolvedValue({ requested_active: true, config });
-  const joystick = { check: vi.fn().mockResolvedValue(undefined), open: vi.fn().mockResolvedValue(undefined), close: vi.fn().mockResolvedValue(undefined) };
+  const joystick = { check: vi.fn().mockResolvedValue(undefined), open: vi.fn().mockResolvedValue(undefined), close: vi.fn().mockResolvedValue(undefined), read: vi.fn().mockResolvedValue(false) };
   render(<App client={client} joystick={joystick} />);
   await screen.findByText('后台已连接');
   const user = userEvent.setup();
@@ -184,8 +184,11 @@ it('waits for a successful start and leaves an unsuccessful start stopped', asyn
 });
 
 it('keeps the editor and old target when an active position update fails', async () => {
-  const client = vi.fn().mockResolvedValueOnce({ requested_active: true,
-    config: { position, scope: { mode: 'all' } } }).mockRejectedValueOnce(new Error('更新失败'));
+  const client = vi.fn()
+    .mockResolvedValueOnce({ requested_active: true, config: { position, scope: { mode: 'all' } } })
+    .mockRejectedValueOnce(new Error('更新失败'))
+    // 面板会定期刷新状态，后续查询仍要成功，否则会误判成后台断开。
+    .mockResolvedValue({ requested_active: true, config: { position, scope: { mode: 'all' } } });
   render(<App client={client} />);
   await screen.findByText('后台已连接');
   const user = userEvent.setup();

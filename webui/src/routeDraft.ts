@@ -6,8 +6,8 @@ export const blankPoint = (): PointInput => ({ latitude: '', longitude: '', alti
 export const inputPoint = (p: Position): PointInput => ({ latitude: String(p.latitude), longitude: String(p.longitude), altitude: String(p.altitude) });
 export const planDraft = (plan: RoutePlan): RouteDraft => ({ points: plan.points.map(inputPoint), speed: String(plan.speed * 3.6), repeatCount: String(plan.repeat_count ?? 1), repeatDelay: String(plan.repeat_delay ?? 0) });
 
-export function readDraft(plan?: RoutePlan): RouteDraft {
-  if (plan) return planDraft(plan);
+/** 已保存的路线草稿；没有或格式不对时返回 null（用于判断"有没有可继续编辑的草稿"）。 */
+export function readSavedDraft(): RouteDraft | null {
   try {
     const draft = JSON.parse(localStorage.getItem('justlocation.route') || 'null');
     if (typeof draft?.speed === 'string' && Array.isArray(draft.points) && draft.points.length >= 2 && draft.points.length <= 128 &&
@@ -15,7 +15,12 @@ export function readDraft(plan?: RoutePlan): RouteDraft {
         ...draft, repeatCount: typeof draft.repeatCount === 'string' ? draft.repeatCount : '1', repeatDelay: typeof draft.repeatDelay === 'string' ? draft.repeatDelay : '0',
       };
   } catch { /* Browser storage may be unavailable. */ }
-  return { points: [blankPoint(), blankPoint()], speed: '5.4', repeatCount: '1', repeatDelay: '0' };
+  return null;
+}
+
+export function readDraft(plan?: RoutePlan): RouteDraft {
+  if (plan) return planDraft(plan);
+  return readSavedDraft() ?? { points: [blankPoint(), blankPoint()], speed: '5.4', repeatCount: '1', repeatDelay: '0' };
 }
 
 export function parseDraft(draft: RouteDraft): RoutePlan {

@@ -21,7 +21,6 @@ type Props = {
  * 需要更多设置的（应用列表、基站数据、最高速度）在下方就地展开。
  */
 export function FeatureMenus(props: Props) {
-  const joystickActive = props.joystickOpen;
   return <div className="card feature-panel">
     <h2>模拟功能</h2>
     <div className="feature-list">
@@ -52,17 +51,18 @@ export function FeatureMenus(props: Props) {
       <SwitchRow
         icon={<Joystick size={20} />}
         title="摇杆"
-        checked={joystickActive}
-        disabled={!joystickActive && !props.canOpenJoystick}
+        checked={props.joystickOpen}
+        disabled={!props.joystickOpen && !props.canOpenJoystick}
         summary={props.joystickNote}
         onChange={next => props.controlJoystick(next)}
       />
-      {(joystickActive || props.joystickKnown) && <div className="feature-detail">
+      {/* 速度随时可改：关着摇杆时也能先把速度设好，不必先打开再关掉。 */}
+      <div className="feature-detail">
         <label className="field">最高速度（km/h）
           <input inputMode="decimal" value={props.joystickSpeed} disabled={props.busy}
             onChange={event => props.setSpeed(event.target.value)} />
         </label>
-      </div>}
+      </div>
     </div>
   </div>;
 }
