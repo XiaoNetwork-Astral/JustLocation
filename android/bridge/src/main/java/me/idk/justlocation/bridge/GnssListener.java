@@ -4,19 +4,31 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.ArrayDeque;
 import java.util.function.Function;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 
-/** Wraps a service-side callback while retaining the client's binder and platform registration. */
+/**
+ * Wraps a service-side callback while retaining the client's binder and platform registration.
+ *
+ * <p>两个卫星通道各自受后台的开关控制：`GNSS 状态` 决定是否投递合成卫星状态，
+ * `NMEA 报文` 决定是否拦截 NMEA。它们都只在"定位模拟进行中且本应用在作用范围内"时生效；
+ * 任一条件不满足就原样转发系统回调——也就是"未启用等于系统原样"。
+ */
 final class GnssListener implements InvocationHandler {
-    record Output(SessionSnapshot scope, GnssFrame frame) {}
+    /** enabledGnss / enabledNmea 来自后台配置，默认关闭。 */
+    record Output(SessionSnapshot scope, GnssFrame frame, boolean enabledGnss, boolean enabledNmea) {}
+    /** 模拟期间到达的真实报文，停止后按原样补发，避免应用看到报文凭空消失。 */
+    private static final int REPLAY_LIMIT = 32;
     private final Object delegate, proxy;
     private final String packageName;
     private final Supplier<Output> output;
     private final LongSupplier clock;
     private final Function<GnssFrame, Object> status;
     private final Method started, stopped, firstFix, svStatus, nmea;
+    private final boolean nmeaChannel;
+    private final ArrayDeque<Object[]> heldNmea = new ArrayDeque<>();
     private boolean simulated, navigating;
     private Integer realFirstFix;
 
@@ -26,10 +38,16 @@ final class GnssListener implements InvocationHandler {
         this.clock = clock; this.status = status;
         started = find(type, "onGnssStarted"); stopped = find(type, "onGnssStopped");
         firstFix = find(type, "onFirstFix"); svStatus = find(type, "onSvStatusChanged"); nmea = find(type, "onNmeaReceived");
+        nmeaChannel = nmea != null && svStatus == null;
         proxy = Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[]{type}, this);
     }
     Object proxy() { return proxy; }
-    synchronized boolean needsTick() { return simulated || current() != null; }
+
+    /** 该通道当前是否由模拟接管。 */
+    synchronized boolean needsTick() {
+        Output value = current();
+        return value != null && (nmeaChannel ? value.enabledNmea() : value.enabledGnss());
+    }
 
     private Output current() {
         Output value = output.get();
@@ -47,13 +65,20 @@ final class GnssListener implements InvocationHandler {
                 || name.equals("onSvStatusChanged") || name.equals("onNmeaReceived");
         // asBinder is always the original, so unregister and binder death use the real identity.
         if (!event) return call(method, args);
-        if (current() == null) {
+        Output value = current();
+        boolean takeOver = value != null && (nmeaChannel ? value.enabledNmea() : value.enabledGnss());
+        if (!takeOver) {
             restore();
             trackReal(name, args);
             return call(method, args);
         }
         trackReal(name, args);
-        // Periodic delivery owns the simulated stream. Do not mix in HAL events.
+        // 模拟期间到达的真实报文先留着，停止时补发；真实状态事件直接丢弃，
+        // 否则会与合成状态交替出现，应用侧看起来像信号在乱跳。
+        if (nmeaChannel && name.equals("onNmeaReceived")) {
+            heldNmea.addLast(args);
+            while (heldNmea.size() > REPLAY_LIMIT) heldNmea.removeFirst();
+        }
         return null;
     }
 
@@ -66,29 +91,36 @@ final class GnssListener implements InvocationHandler {
     /** Invoked only by the platform's active-registration delivery operation. */
     synchronized void tick() throws Throwable {
         Output value = current();
-        if (value == null) { restore(); return; }
-        if (nmea != null) {
+        if (value == null || (nmeaChannel ? !value.enabledNmea() : !value.enabledGnss())) {
+            restore();
+            return;
+        }
+        if (nmeaChannel) {
             for (String sentence : value.frame.nmea()) {
                 // Recheck before each call, including a stop received while queued for delivery.
-                if (current() != value) return;
+                if (current() != value || !value.enabledNmea()) return;
                 call(nmea, new Object[]{value.frame.timestampMs, sentence});
             }
         } else {
             if (!simulated) {
                 call(started, null); call(firstFix, new Object[]{0}); simulated = true;
             }
-            if (current() == value) call(svStatus, new Object[]{status.apply(value.frame)});
+            if (current() == value && value.enabledGnss()) call(svStatus, new Object[]{status.apply(value.frame)});
         }
     }
 
     private void restore() throws Throwable {
-        if (!simulated) return;
-        simulated = false;
-        call(stopped, null);
-        if (navigating) {
-            call(started, null);
-            if (realFirstFix != null) call(firstFix, new Object[]{realFirstFix});
+        if (!simulated && heldNmea.isEmpty()) return;
+        if (simulated) {
+            simulated = false;
+            call(stopped, null);
+            if (navigating) {
+                call(started, null);
+                if (realFirstFix != null) call(firstFix, new Object[]{realFirstFix});
+            }
         }
+        // 补发模拟期间被挡下的真实报文，让应用的报文流连续不断。
+        while (!heldNmea.isEmpty()) call(nmea, heldNmea.removeFirst());
     }
     private Object call(Method method, Object[] args) throws Throwable {
         try { return method.invoke(delegate, args); }

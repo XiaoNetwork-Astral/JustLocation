@@ -47,7 +47,8 @@ public final class BridgeEntry {
                 } catch (Exception error) { fix = null; telephony = null; }
                 Fix current = fix;
                 gnssOutput = current == null ? null : new GnssListener.Output(current.scope,
-                        new GnssFrame(current.latitude, current.longitude, current.altitude, current.speed, current.bearing, System.currentTimeMillis()));
+                        new GnssFrame(current.latitude, current.longitude, current.altitude, current.speed, current.bearing, System.currentTimeMillis()),
+                        current.gnssEnabled, current.nmeaEnabled);
                 if (current != null) {
                     try {
                         dispatcher.dispatch(current.scope, SystemClock::elapsedRealtime, name -> {
@@ -263,8 +264,12 @@ public final class BridgeEntry {
         final SessionSnapshot scope;
         final double latitude, longitude, altitude;
         final float accuracy, speed, bearing;
-        Fix(SessionSnapshot scope, JSONObject position) throws Exception {
+        /** 卫星两个通道的开关。旧后台不返回这一段时按关闭处理，这样默认就是系统原样。 */
+        final boolean gnssEnabled, nmeaEnabled;
+        Fix(SessionSnapshot scope, JSONObject position) throws Exception { this(scope, position, false, false); }
+        Fix(SessionSnapshot scope, JSONObject position, boolean gnssEnabled, boolean nmeaEnabled) throws Exception {
             this.scope = scope;
+            this.gnssEnabled = gnssEnabled; this.nmeaEnabled = nmeaEnabled;
             latitude = position.getDouble("latitude"); longitude = position.getDouble("longitude");
             altitude = position.getDouble("altitude"); accuracy = (float) position.getDouble("accuracy");
             speed = (float) position.getDouble("speed"); bearing = (float) position.getDouble("bearing");
@@ -287,7 +292,16 @@ public final class BridgeEntry {
                 var list = selection.getJSONArray("packages");
                 for (int i = 0; i < list.length(); i++) packages.add(list.getString(i));
             } else if (!mode.equals("all")) return null;
-            return new Fix(new SessionSnapshot(true, mode.equals("all"), packages, SystemClock.elapsedRealtime()), config.getJSONObject("position"));
+            // 卫星开关缺失或类型不对时按关闭处理：宁可让应用看到系统原样，
+            // 也不要因为一段坏配置而持续投递合成卫星数据。
+            boolean gnssEnabled = false, nmeaEnabled = false;
+            JSONObject gnss = state.optJSONObject("gnss");
+            if (gnss != null) {
+                gnssEnabled = gnss.optBoolean("gnss_enabled", false);
+                nmeaEnabled = gnss.optBoolean("nmea_enabled", false);
+            }
+            return new Fix(new SessionSnapshot(true, mode.equals("all"), packages, SystemClock.elapsedRealtime()),
+                    config.getJSONObject("position"), gnssEnabled, nmeaEnabled);
         }
         Location location(String provider) {
             Location result = new Location(provider);

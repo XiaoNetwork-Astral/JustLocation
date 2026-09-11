@@ -35,7 +35,7 @@ public class GnssDispatcherTest {
     }
     @Test public void periodicOutputUsesActiveRegistrationsAppOpsAndCurrentScope() throws Exception {
         GnssListener.Output output = new GnssListener.Output(new SessionSnapshot(true, false, Set.of("selected"), 1000),
-                new GnssFrame(31, 121, 0, 0, 0, 10000));
+                new GnssFrame(31, 121, 0, 0, 0, 10000), true, true);
         var dispatcher = new GnssDispatcher(Provider.class, GnssListenerTest.Status.class, Registration.class,
                 Identity.class, Operation.class, () -> output, () -> 1500, frame -> "synthetic");
         Provider provider = new Provider();
