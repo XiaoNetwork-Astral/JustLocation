@@ -10,6 +10,9 @@ import { BackupPanel } from './BackupPanel';
 import { CellPanel } from './CellPanel';
 import { ImportPlaceSheet } from './ImportPlaceSheet';
 import { TargetCard } from './TargetCard';
+import { SectionHeader } from './SectionHeader';
+import { RowCard } from './RowCard';
+import { EmptyBox } from './EmptyBox';
 import { WifiPanel } from './WifiPanel';
 import { Segmented, SwitchRow } from './Controls';
 import { colorModes, readColorMode, readStyle, saveTheme, styleFamilies, type ColorMode, type StyleFamily } from './theme';
@@ -31,6 +34,8 @@ const pages = [
   { id: 'settings', label: '设置', icon: Settings },
 ] as const;
 const coordinates = (p: Position) => `${p.latitude.toFixed(6)}, ${p.longitude.toFixed(6)}`;
+/** 免责声明：与下方 docs 里那句一致，原版放在主界面底部居中。 */
+const DISCLAIMER = '声明：本程序仅供开发人员调试使用，严禁用于一切侵权、侵害他人利益、违法违禁等不当行为和目的。';
 /** 把"系统定位"那一项的状态说清楚：区分后台未连接、接口未接、等待接入与已就绪。 */
 const readyText = (ready?: boolean, connected?: boolean) => ready ? '已就绪' : connected ? '等待接口接入' : '等待系统连接';
 /** 卫星开关的说明文字：把"开关开着但接口没接上"和"已生效"区分开，避免误以为已经在投递。 */
@@ -72,6 +77,13 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
   const [style, setStyle] = useState<StyleFamily>(readStyle);
   const [mode, setMode] = useState<ColorMode>(readColorMode);
   const initialized = useRef(false);
+  /** 区块头的"查看全部"箭头要滚到列表并聚焦搜索框，所以需要这两个节点。 */
+  const historyRef = useRef<HTMLElement | null>(null);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  function focusHistory() {
+    historyRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    searchRef.current?.focus();
+  }
   // 轮询回调要读最新值，但不希望这些值变化就重建定时器，所以用 ref 传递。
   const stateRef = useRef<State | null>(null);
   const cellsOpenRef = useRef(false);
@@ -317,13 +329,9 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
       <header className="topbar"><button className="icon-button nav-toggle" aria-label="打开导航" onClick={() => setDrawer(true)}><Menu /></button>
         <span>JustLocation</span><button className="icon-button" aria-label="刷新后台状态" disabled={busy} onClick={() => void refresh()}><RefreshCw size={20} /></button>
       </header>
+      <div className="page-body">
       <div className="page-content">
-        <div className="page-heading"><h1>{selectedPage.label}</h1>
-          {page === 'location' && <div className="page-actions">
-            <button className="text-button" aria-label="导入位置" disabled={busy} onClick={() => setImporting(true)}><Download size={18} /><span>导入</span></button>
-            <button className="add-button" aria-label="添加位置" disabled={busy || !!state?.route} onClick={() => setEditing(true)}><Plus /><span>添加位置</span></button>
-          </div>}
-        </div>
+        <div className="page-heading"><h1>{selectedPage.label}</h1></div>
         {error && <div role="alert" className="notice error">{error}<button className="icon-button" aria-label="关闭提示" onClick={() => setError('')}><X size={18} /></button></div>}
         {page === 'location' && <>
           {/* 目标卡按原版 ci.xml：小标题、主值、副值、坐标行，操作区在同一行内联。 */}
@@ -351,15 +359,19 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
                 onChange={next => void toggleGnss({ nmea_enabled: next })} />
             </div>
           </section>
-          <section className="history"><div className="section-heading"><h2>历史位置 <span>{places.length}</span></h2></div>
-            <label className="search-field"><Search size={20} /><input aria-label="搜索历史位置" placeholder="搜索名称或坐标" value={query} onChange={e => setQuery(e.target.value)} /></label>
-            {visiblePlaces.length ? <div className="place-list">{visiblePlaces.map(p => <div className="place-row" key={p.id}>
-              <button className="place-select" disabled={busy || !!state?.route} onClick={() => void select(p.position, p.name)}><span className="place-symbol"><MapPin size={22} /></span>
-                <span><strong>{p.name}</strong><small>{coordinates(p.position)}</small></span></button>
-              <button className={`icon-button ${p.pinned ? 'pinned' : ''}`} aria-label={`${p.pinned ? '取消置顶' : '置顶'} ${p.name}`} onClick={() => savePlaces(places.map(item => item.id === p.id ? { ...item, pinned: !item.pinned } : item))}><Pin size={18} /></button>
-              <button className="icon-button" aria-label={`编辑 ${p.name}`} onClick={() => setEditingPlace(p)}><Pencil size={18} /></button>
-              <button className="icon-button" aria-label={`删除 ${p.name}`} onClick={() => savePlaces(places.filter(item => item.id !== p.id))}><Trash2 size={18} /></button>
-            </div>)}</div> : <div className="empty-state"><MapPin size={32} /><h3>{query ? '没有找到位置' : '把常去的地方留在这里'}</h3><p>{query ? '试试其他名称或坐标' : '添加的位置会出现在这里，方便下次直接使用'}</p></div>}
+          <section className="history" ref={historyRef}>
+            <SectionHeader title="历史位置" count={places.length} actionLabel="查看全部" onAction={focusHistory} />
+            <label className="search-field"><Search size={20} /><input ref={searchRef} aria-label="搜索历史位置" placeholder="搜索名称或坐标" value={query} onChange={e => setQuery(e.target.value)} /></label>
+            {visiblePlaces.length ? <div className="place-list">{visiblePlaces.map(p => <RowCard key={p.id}
+              icon={<MapPin size={20} />} title={p.name} detail={coordinates(p.position)} label={`${p.name} ${coordinates(p.position)}`}
+              onClick={busy || state?.route ? undefined : () => void select(p.position, p.name)}
+              actions={<>
+                <button className={`icon-button ${p.pinned ? 'pinned' : ''}`} aria-label={`${p.pinned ? '取消置顶' : '置顶'} ${p.name}`} onClick={() => savePlaces(places.map(item => item.id === p.id ? { ...item, pinned: !item.pinned } : item))}><Pin size={18} /></button>
+                <button className="icon-button" aria-label={`编辑 ${p.name}`} onClick={() => setEditingPlace(p)}><Pencil size={18} /></button>
+                <button className="icon-button" aria-label={`删除 ${p.name}`} onClick={() => savePlaces(places.filter(item => item.id !== p.id))}><Trash2 size={18} /></button>
+              </>} />)}</div>
+              : <EmptyBox text={query ? '没有找到匹配的位置' : undefined}
+                hint={query ? '换个名称或坐标再试一次。' : '导入地图链接或直接输入经纬度也可以。'} />}
           </section>
         </>}
         {page === 'settings' && <>
@@ -388,6 +400,12 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
         </>}
         {page === 'routes' && <RoutePanel state={state} busy={busy} scope={scope} onCommand={routeCommand} onScope={() => navigate('scope')} />}
         {page === 'wifi' && <WifiPanel state={state} onConfigure={async config => { await environmentCommand({ op: 'set_wifi', config }); }} />}
+        <p className="page-footer">{DISCLAIMER}</p>
+      </div>
+      {page === 'location' && <div className="fab-stack">
+        <button className="fab small" aria-label="导入位置" title="导入位置" disabled={busy} onClick={() => setImporting(true)}><Download size={20} /></button>
+        <button className="fab" aria-label="添加位置" title="添加位置" disabled={busy || !!state?.route} onClick={() => setEditing(true)}><Plus size={22} /></button>
+      </div>}
       </div>
     </main>
     {cellsOpen && <CellPanel target={position} state={state} controlBusy={busy}

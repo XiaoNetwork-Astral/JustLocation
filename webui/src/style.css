@@ -545,8 +545,27 @@ main { min-width: 0; display: flex; flex-direction: column; min-height: 100dvh; 
 .page-content {
   flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
   width: 100%; max-width: 860px; margin: 0 auto;
-  padding: 4px var(--pagePadding) 32px;
+  /* 底部留出 FAB 的高度，免得最后一行被压住 */
+  padding: 4px var(--pagePadding) 96px;
 }
+/* 页面主体：FAB 的定位参照。原版把 FAB 锚在内容容器上（ai.xml 的 app:vt=@id/iz，
+   并带自定义滚动行为），所以这里也让 FAB 悬浮在内容区右上角，而不是固定在窗口上。 */
+.page-body { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* FAB 组：原版地图页是竖排 FAB，主界面只有一个"添加"。
+   位置取 end + 底部（原版只有 `a3x` = end 有资源依据，纵向位置无依据）。
+   贴在右下角而不是内容区右上角：右上角会压住页面顶部的提示条和它的关闭按钮。 */
+.fab-stack { position: absolute; bottom: max(16px, env(safe-area-inset-bottom)); right: max(12px, calc((100% - 860px) / 2 - 56px)); display: grid; gap: 10px; justify-items: center; z-index: 5; }
+.fab {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 48px; height: 48px; border-radius: 50%;
+  background: var(--primary); color: var(--onPrimary);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .22);
+}
+.fab.small { width: 40px; height: 40px; background: var(--surfaceContainer); color: var(--primary); box-shadow: 0 2px 8px rgba(0, 0, 0, .18); }
+.fab:disabled { opacity: .5; box-shadow: none; }
+.fab:focus-visible { outline: var(--focusRing); outline-offset: 2px; }
+/* 免责声明：原版在主界面底部居中（ai.xml 的 TextView），这里放在内容末尾。 */
+.page-footer { margin: 28px 2px 84px; font-size: var(--fontTiny); line-height: 1.7; text-align: center; color: var(--onSurfaceGrey); }
 .page-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .page-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .page-actions .text-button { font-size: var(--fontBody); }
@@ -559,6 +578,43 @@ h1 { font-weight: var(--weightStrong); font-size: 30px; line-height: 1.3; letter
   color: var(--onPrimaryContainer); background: var(--primaryContainer);
   font-size: var(--fontRow);
 }
+/* 区块头（原版 ci.xml 的 [B] 段）：灰色 14dp 标题 + 弹簧 + 32dp 箭头。
+   箭头 tint 用原版的 @color/l7 (#a1a1a1)，尺寸也是原版的 @dimen/fk (32dp)。 */
+.section-header { display: flex; align-items: center; gap: 8px; padding: 6px 8px 8px; }
+.section-header h2 { font-size: 14px; font-weight: 400; color: var(--onSurfaceGrey); }
+.section-header .spacer { flex: 1; }
+.section-count { margin-left: 8px; color: var(--onSurfaceGrey); }
+.section-arrow {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 50%; color: var(--onSurfaceGrey);
+}
+.section-arrow:hover { background: var(--surfaceContainerHigh); }
+.section-arrow svg { display: block; }
+
+/* 列表行（原版 cv.xml）：40×40 绿色圆底 + 主文字 + 次行 + 行尾操作。 */
+.row-card { display: flex; align-items: center; gap: 4px; border-bottom: var(--separator); }
+.row-card:last-child { border-bottom: 0; }
+.row-card-main {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 14px;
+  padding: 12px 4px; text-align: left;
+}
+.row-symbol {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+  background: var(--primary); color: var(--onPrimary);
+}
+.row-text-block { min-width: 0; display: grid; gap: 4px; }
+.row-text-block strong { font-size: 16px; font-weight: var(--weightStrong); overflow-wrap: anywhere; }
+.row-text-block small { font-size: var(--fontSmall); color: var(--onSurfaceVariantSummary); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.row-card-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.row-card .icon-button { width: 38px; height: 38px; }
+
+/* 空态（原版 h0.xml）：80dp 单色插画 + 一行提示。 */
+.empty-box { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 36px 18px 44px; text-align: center; }
+.empty-art { color: var(--onSurfaceGrey); opacity: .8; }
+.empty-text { font-size: var(--fontBody); color: var(--onSurfaceVariantSummary); }
+.empty-hint { font-size: var(--fontSmall); color: var(--onSurfaceGrey); }
+
 .section-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .section-heading h2 { font-size: 17px; font-weight: var(--weightStrong); }
 .section-heading h2 span {
