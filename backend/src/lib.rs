@@ -8,6 +8,7 @@ pub mod cells;
 pub mod gnss;
 pub mod motion;
 pub mod protocol;
+pub mod record;
 pub mod route;
 pub mod telephony;
 pub mod transport;

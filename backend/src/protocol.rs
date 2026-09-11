@@ -3,6 +3,7 @@ use crate::{
     cells::{CellRegion, Coordinate, NearbyCell},
     gnss::GnssConfig,
     motion::Motion,
+    record::Recording,
     route::{Playback, Route, RouteState},
     telephony::{TelephonyConfig, TelephonyFrame, DetectedSubscription, validate_detected},
     wifi::WifiConfig,
@@ -30,6 +31,105 @@ mod tests {
     fn route_start(points: &[(f64, f64)], speed: f64) -> String {
         json!({"version":1,"op":"start_route","scope":{"mode":"apps","packages":["example.selected"]},
             "route":{"points":points.iter().map(|(lat, lon)| Position::new(*lat, *lon)).collect::<Vec<_>>(), "speed":speed}}).to_string()
+    }
+
+    fn static_start() -> String {
+        json!({"version":1,"op":"start","config":{"position":Position::new(31.0, 121.0),
+            "scope":{"mode":"apps","packages":["example.selected"]}}}).to_string()
+    }
+
+    fn record_point(latitude: f64, longitude: f64, seconds: f64) -> String {
+        json!({"version":1,"op":"record_point","position":Position::new(latitude, longitude),"seconds":seconds}).to_string()
+    }
+
+    /// 便捷包装：`Control::handle` 收 `&str`，测试里直接传引用更好读。
+    fn send(control: &mut Control, line: String) -> Response {
+        control.handle(&line)
+    }
+
+    #[test]
+    fn recording_collects_points_and_hands_them_over_for_replay() {
+        let mut control = Control::default();
+        assert!(control.handle(r#"{"version":1,"op":"record_start"}"#).ok);
+        // 静止不动的重复采样被丢弃，但仍然计入 skipped。
+        assert!(send(&mut control, record_point(31.0, 121.0, 0.0)).ok);
+        assert!(send(&mut control, record_point(31.0, 121.0, 0.5)).ok);
+        assert!(send(&mut control, record_point(31.0, 121.0, 1.0)).ok);
+        assert!(send(&mut control, record_point(31.0005, 121.0, 1.5)).ok);
+
+        let progress = control.handle(r#"{"version":1,"op":"status"}"#).state.recording.unwrap();
+        assert_eq!(progress.points, 2);
+        assert_eq!(progress.skipped, 2);
+        assert!(!progress.full);
+        assert!((progress.seconds - 1.5).abs() < 1e-9);
+        // 录制不产生输出：会话仍然是停止的。
+        assert!(!control.handle(r#"{"version":1,"op":"status"}"#).state.requested_active);
+
+        let response = control.handle(r#"{"version":1,"op":"record_stop"}"#);
+        assert!(response.ok);
+        let track = response.state.recorded.expect("录制结果要交回给面板");
+        assert_eq!(track.points.len(), 2);
+        assert!(response.state.recording.is_none());
+        // 录下来的点可以直接当路线回放。
+        let route = Route { points: track.points, speed: 5.0, repeat_count: 1, repeat_delay: 0.0 };
+        assert!(Playback::new(route, Instant::now()).is_ok());
+    }
+
+    #[test]
+    fn recording_and_simulation_refuse_to_run_together() {
+        let mut control = Control::default();
+        // 正在模拟时不能开始录制：否则会把合成位置录成轨迹。
+        assert!(send(&mut control, static_start()).ok);
+        let refused = control.handle(r#"{"version":1,"op":"record_start"}"#);
+        assert!(!refused.ok);
+        assert!(refused.error.unwrap().contains("stop the simulation"));
+        assert!(refused.state.recording.is_none());
+
+        // 反过来也一样：录制中不能开始模拟。
+        assert!(control.handle(r#"{"version":1,"op":"stop"}"#).ok);
+        assert!(control.handle(r#"{"version":1,"op":"record_start"}"#).ok);
+        let blocked = send(&mut control, static_start());
+        assert!(!blocked.ok);
+        assert!(blocked.error.unwrap().contains("stop recording"));
+        assert!(!blocked.state.requested_active);
+    }
+
+    #[test]
+    fn stopping_without_points_reports_an_error_and_leaves_nothing_behind() {
+        let mut control = Control::default();
+        assert!(control.handle(r#"{"version":1,"op":"record_start"}"#).ok);
+        let response = control.handle(r#"{"version":1,"op":"record_stop"}"#);
+        assert!(!response.ok);
+        assert!(response.error.unwrap().contains("nothing was recorded"));
+        // 没有半成品：既不在录，也没有成品交给面板。
+        assert!(response.state.recording.is_none());
+        assert!(response.state.recorded.is_none());
+        // 再来一次仍然是"没在录"，不会因为上一次失败而卡住。
+        assert!(!send(&mut control, record_point(31.0, 121.0, 0.0)).ok);
+    }
+
+    #[test]
+    fn discarding_a_recording_clears_both_progress_and_result() {
+        let mut control = Control::default();
+        assert!(control.handle(r#"{"version":1,"op":"record_start"}"#).ok);
+        assert!(send(&mut control, record_point(31.0, 121.0, 0.0)).ok);
+        let discarded = control.handle(r#"{"version":1,"op":"record_discard"}"#);
+        assert!(discarded.ok);
+        assert!(discarded.state.recording.is_none());
+        assert!(discarded.state.recorded.is_none());
+
+        // 丢弃后可以重新开一段。
+        assert!(control.handle(r#"{"version":1,"op":"record_start"}"#).ok);
+        assert!(send(&mut control, record_point(32.0, 121.0, 0.0)).ok);
+        assert!(control.handle(r#"{"version":1,"op":"record_stop"}"#).ok);
+    }
+
+    #[test]
+    fn points_sent_without_recording_are_rejected() {
+        let mut control = Control::default();
+        let response = send(&mut control, record_point(31.0, 121.0, 0.0));
+        assert!(!response.ok);
+        assert!(response.error.unwrap().contains("no route recording"));
     }
 
     #[test]
@@ -404,6 +504,17 @@ enum Command {
     SetWifi {
         config: WifiConfig,
     },
+    /// 路线录制：不产生输出，只把真实位置累积成一条轨迹。
+    RecordStart,
+    RecordPoint {
+        position: Position,
+        /// 本次录制的单调时间戳（秒），由录制端给出。
+        seconds: f64,
+    },
+    /// 结束录制并交回轨迹；没有录到点时返回错误。
+    RecordStop,
+    /// 直接丢弃当前录制。
+    RecordDiscard,
     TelephonyHookStatus {
         cells: bool,
         sim: bool,
@@ -424,6 +535,23 @@ pub struct CellQuery {
     pub source: String,
     pub fetched_at_ms: u64,
     pub items: Vec<NearbyCell>,
+}
+
+/// 录制过程中的进度：面板据此显示"已录 N 个点 / M 秒"以及是否到达上限。
+#[derive(Serialize)]
+pub struct RecordProgress {
+    pub points: usize,
+    pub seconds: f64,
+    pub full: bool,
+    /// 因与上一点重复或过近而丢弃的采样数。
+    pub skipped: u64,
+}
+
+/// 录制结束后的成品。点数不足以回放时仍然返回，由界面提示用户再录一段。
+#[derive(Serialize)]
+pub struct RecordedTrack {
+    pub points: Vec<Position>,
+    pub seconds: f64,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -456,6 +584,10 @@ pub struct State {
     pub telephony_output: Option<TelephonyFrame>,
     pub gnss: GnssConfig,
     pub wifi: WifiConfig,
+    /// 正在录制时的实时状态；停止或丢弃后回到 null。
+    pub recording: Option<RecordProgress>,
+    /// 最近一次录制的结果，供面板在结束录制后取走；取走后回到 null。
+    pub recorded: Option<RecordedTrack>,
     pub cell_hook_ready: bool,
     pub cell_query_hook_ready: bool,
     pub cell_callback_hook_ready: bool,
@@ -489,6 +621,11 @@ pub struct Control {
     telephony: TelephonyConfig,
     gnss: GnssConfig,
     wifi: WifiConfig,
+    recording: Option<Recording>,
+    /// 录制期间被抽稀掉的采样数，只用于向用户解释点数。
+    recording_skipped: u64,
+    /// 最近一次录制的成品；面板取走后清空。
+    recorded: Option<RecordedTrack>,
     phone_seen_at: Option<Instant>,
     cells_installed: bool,
     cell_callbacks_installed: bool,
@@ -564,6 +701,10 @@ impl Control {
             telephony,
             gnss,
             wifi,
+            // 录制状态不持久化：重启后既没有在录，也没有上一次的成品。
+            recording: None,
+            recording_skipped: 0,
+            recorded: None,
             phone_seen_at: None,
             cells_installed: false,
             cell_callbacks_installed: false,
@@ -630,6 +771,46 @@ impl Control {
                 self.cell_region = region;
                 Ok(())
             }
+            Command::RecordStart => {
+                // 录制期间系统回调给出的是我们自己的合成位置，录下来就是绕回自身的轨迹，
+                // 所以先要求停止模拟；这与会话本身不冲突（录制不产生输出）。
+                if self.engine.is_running() {
+                    return Err("stop the simulation before recording a route".into());
+                }
+                self.recording = Some(Recording::new());
+                self.recording_skipped = 0;
+                self.recorded = None;
+                Ok(())
+            }
+            Command::RecordPoint { position, seconds } => {
+                let recording = self
+                    .recording
+                    .as_mut()
+                    .ok_or("no route recording is in progress")?;
+                if !recording.add(position, seconds).map_err(str::to_owned)? {
+                    self.recording_skipped += 1;
+                }
+                Ok(())
+            }
+            Command::RecordStop => {
+                let recording = self.recording.take().ok_or("no route recording is in progress")?;
+                if recording.points().is_empty() {
+                    // 一个点都没录到就把状态留在"没在录"，并明确报错，避免界面显示一条空轨迹。
+                    self.recorded = None;
+                    return Err("nothing was recorded".into());
+                }
+                self.recorded = Some(RecordedTrack {
+                    points: recording.points().to_vec(),
+                    seconds: recording.seconds(),
+                });
+                Ok(())
+            }
+            Command::RecordDiscard => {
+                self.recording = None;
+                self.recording_skipped = 0;
+                self.recorded = None;
+                Ok(())
+            }
             Command::QueryCells {
                 target,
                 radius_m,
@@ -664,7 +845,13 @@ impl Control {
                 self.cell_callbacks_installed = cell_callbacks;
                 Ok(())
             }
-            Command::Start { config } => self.engine.start(config).map_err(str::to_owned),
+            Command::Start { config } => {
+                // 录制与模拟互斥：录制中开始模拟会立刻让录制采到合成位置。
+                if self.recording.is_some() {
+                    return Err("stop recording before starting the simulation".into());
+                }
+                self.engine.start(config).map_err(str::to_owned)
+            }
             Command::StartRoute { route, scope } => {
                 let route = Playback::new(route, now).map_err(str::to_owned)?;
                 self.engine
@@ -720,6 +907,7 @@ impl Control {
                 self.engine.stop();
                 self.route = None;
                 self.motion = None;
+                self.recording = None;
                 Ok(())
             }
             Command::Stop => {
@@ -810,6 +998,16 @@ impl Control {
                 telephony_output,
                 gnss: self.gnss,
                 wifi: self.wifi.clone(),
+                recording: self.recording.as_ref().map(|recording| RecordProgress {
+                    points: recording.points().len(),
+                    seconds: recording.seconds(),
+                    full: recording.is_full(),
+                    skipped: self.recording_skipped,
+                }),
+                recorded: self.recorded.as_ref().map(|track| RecordedTrack {
+                    points: track.points.clone(),
+                    seconds: track.seconds,
+                }),
                 cell_hook_ready: phone_connected && self.cells_installed && hook_connected && self.cell_callbacks_installed,
                 cell_query_hook_ready: phone_connected && self.cells_installed,
                 cell_callback_hook_ready: hook_connected && self.cell_callbacks_installed,

@@ -41,7 +41,11 @@
 | `set_telephony` | `config: TelephonyConfig` | 写基站/SIM 配置 |
 | `set_cell_region` | `region: CellRegion \| null` | 写"已应用到模拟"的基站数据 |
 | `set_gnss` | `config: GnssConfig` | 写卫星两个开关 |
-| `set_wifi` | `config: WifiConfig` | 写 Wi-Fi 目标列表（**输出通道尚未实现**） |
+| `set_wifi` | `config: WifiConfig` | 写 Wi-Fi 目标列表 |
+| `record_start` | — | 开始录制路线：只收集真实位置，不产生输出 |
+| `record_point` | `position: Position, seconds: f64` | 把一条真实定位交给录制；`seconds` 是本次录制的单调时间戳（从 0 开始，秒） |
+| `record_stop` | — | 结束录制并把轨迹交回 `state.recorded`；一个点都没录到时报错 |
+| `record_discard` | — | 丢弃当前录制 |
 | `query_cells` | `target, radius_m, limit` | 对已应用区域做邻近查询（**前端尚未接入**） |
 | `shutdown` | — | 停止一切并让 `serve` 进程退出（**前端尚未接入**） |
 | `hook_status` / `telephony_hook_status` | — | **由系统侧 Java 上报**，面板不发 |
@@ -64,6 +68,11 @@ interface GnssConfig { gnss_enabled: boolean; nmea_enabled: boolean }
 interface WifiTarget { id: string; ssid: string; bssid: string; rssi: number; link_speed: number; frequency: number }
 interface WifiConfig { enabled: boolean; targets: WifiTarget[] }
 
+/** 录制进度：面板据此显示"已录 N 个点 / M 秒"。 */
+interface RecordProgress { points: number; seconds: number; full: boolean; skipped: number }
+/** 录制成品；点数不足以回放时也会返回，由界面提示用户再录一段。 */
+interface RecordedTrack { points: Position[]; seconds: number }
+
 interface State {
   requested_active: boolean
   config: Config | null
@@ -77,9 +86,32 @@ interface State {
   telephony?: TelephonyConfig
   gnss?: GnssConfig
   wifi?: WifiConfig
+  /** 正在录制时的实时进度；停止或丢弃后回到 null。 */
+  recording?: RecordProgress | null
+  /** 最近一次录制的结果，面板取走后清空。 */
+  recorded?: RecordedTrack | null
   telephony_output?: { availability: 'disabled' | 'ready' | 'missing_region' | 'outside_region'; groups: { cells: unknown[] }[] } | null
 }
 ```
+
+## 路线录制怎么用
+
+录制与定位模拟**互斥**，两个方向都会被拒绝：
+
+- 模拟运行时发 `record_start` → `stop the simulation before recording a route`。
+- 录制中发 `start` / `start_route` → `stop recording before starting the simulation`。
+
+原因是系统回调在模拟运行时给出的是我们自己的合成位置，照单全收会录出一条绕回自身的轨迹。
+所以流程是：停止模拟 → `record_start` → 持续发 `record_point` → `record_stop` 取回
+`state.recorded` → 把它的 `points` 当作一条路线（`RoutePlan`）交给 `start_route`。
+
+后台侧的抽稀与上限（实现在 `backend/src/record.rs`）：与上一点距离小于 **0.5 米**的采样按重复丢弃
+（计入 `skipped`），最多 **128 个点**（与路线模型一致），录满后 `full=true` 并自动停止接收新点，
+已录到的部分仍可保存。**点数小于 2 时不能回放**，界面应提示再录一段，而不是发一条会被拒绝的路线。
+
+**还没实现的一半**：谁来提供真实位置。录制端（`record_start` 之后持续发 `record_point` 的那一方）
+尚未接入——需要在设备上取真实定位（模拟停止时系统回调就是真实位置，或者用定位之外的通道），
+再经 root 侧送回后台。后台不关心位置从哪来，只要点符合上面的约定。
 
 ## 心跳与新鲜度
 
