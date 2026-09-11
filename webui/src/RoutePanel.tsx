@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react';
-import { AppWindow, ArrowDown, ArrowUp, MapPin, Pause, Play, Plus, Square, Trash2, Upload } from 'lucide-react';
-import { parsePosition, type Command, type Position, type Scope, type State } from './control';
+import { ArrowDown, ArrowLeft, ArrowUp, MapPin, Pause, Play, Plus, Route, Square, Trash2, Upload } from 'lucide-react';
+import { parsePosition, type Command, type Position, type RoutePlan, type Scope, type State } from './control';
 import { parseGpx, type ImportedRoute } from './routeImport';
 import { blankPoint, inputPoint, parseDraft, planDraft, readDraft, type RouteDraft } from './routeDraft';
 import { RouteLibrary } from './RouteLibrary';
 import { MapPicker } from './MapPicker';
+
+/** 路线草稿的存放键：新建路线要真正丢弃旧草稿，所以这里直接操作它。 */
+const draftKey = 'justlocation.route';
+
+type View = { kind: 'manage' } | { kind: 'edit'; from: string };
 
 export function RoutePanel({ state, busy, scope, onCommand, onScope }: {
   state: State | null; busy: boolean; scope: Scope; onCommand: (command: Command) => Promise<void>; onScope: () => void;
@@ -16,6 +21,8 @@ export function RoutePanel({ state, busy, scope, onCommand, onScope }: {
   const [reading, setReading] = useState(false);
   const [mapPoint, setMapPoint] = useState<{ index: number; initial: Position | null } | null>(null);
   const [mapRoute, setMapRoute] = useState<Position[] | null>(null);
+  // 默认进"路线管理"；只有新建或编辑某条路线时才切到点编辑页。
+  const [view, setView] = useState<View>({ kind: 'manage' });
   const locked = busy || !!state?.requested_active;
   const route = state?.route;
   useEffect(() => {
@@ -23,8 +30,22 @@ export function RoutePanel({ state, busy, scope, onCommand, onScope }: {
   }, [!!route]);
   function save(next: RouteDraft) {
     setDraft(next);
-    try { localStorage.setItem('justlocation.route', JSON.stringify(next)); setError(''); }
+    try { localStorage.setItem(draftKey, JSON.stringify(next)); setError(''); }
     catch { setError('路线草稿保存失败'); }
+  }
+  /** 新建路线：清掉草稿，从两个空点重新开始。 */
+  function createNew() {
+    try { localStorage.removeItem(draftKey); } catch { /* 忽略存储不可用 */ }
+    setDraft({ points: [blankPoint(), blankPoint()], speed: '5.4', repeatCount: '1', repeatDelay: '0' });
+    setImports([]); setError('');
+    setView({ kind: 'edit', from: '新建路线' });
+  }
+  function editSaved(plan: RoutePlan, name: string) {
+    const next = planDraft(plan);
+    setDraft(next);
+    try { localStorage.setItem(draftKey, JSON.stringify(next)); } catch { /* 忽略存储不可用 */ }
+    setImports([]); setError('');
+    setView({ kind: 'edit', from: name });
   }
   function move(index: number, offset: number) {
     const points = [...draft.points];
@@ -55,11 +76,13 @@ export function RoutePanel({ state, busy, scope, onCommand, onScope }: {
       await onCommand({ op: 'start_route', route: plan, scope });
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
   }
-  return <>
+
+  // ---- 路线管理：默认视图。路线库负责列表，这里只给出状态与新建入口 ----
+  if (view.kind === 'manage') return <>
     <section className="settings-card route-status">
-      <div className="section-heading"><h2>{route ? route.completed ? '已到达终点' : route.paused ? '路线已暂停' : (route.waiting_seconds ?? 0) > 0 ? '等待下一轮' : '正在沿路线移动' : '按顺序走过每个点'}</h2>
-        <button className="icon-button" aria-label="作用范围" title="作用范围" onClick={onScope}><AppWindow size={20} /></button></div>
-      <p>关闭面板后继续运行。全部播放结束后停在终点，停止模拟后恢复真实位置。</p>
+      <div className="section-heading"><h2>{route ? route.completed ? '已到达终点' : route.paused ? '路线已暂停' : (route.waiting_seconds ?? 0) > 0 ? '等待下一轮' : '正在沿路线移动' : '路线管理'}</h2>
+        <button className="icon-button" aria-label="作用范围" title="作用范围" onClick={onScope}><Route size={20} /></button></div>
+      <p>新建一条路线，或者选一条已保存的直接开始。关闭面板后仍会继续运行。</p>
       {route && <><progress aria-label="路线进度" value={route.distance} max={route.total_distance} />
         <p>{(route.plan.repeat_count ?? 1) > 1 && <>第 {route.lap ?? 1} / {route.plan.repeat_count} 次 · </>}{Math.round(route.distance)} / {Math.round(route.total_distance)} m</p>
         {(route.waiting_seconds ?? 0) > 0 && <p>{route.paused ? `剩余间隔 ${Math.ceil(route.waiting_seconds!)} 秒` : `${Math.ceil(route.waiting_seconds!)} 秒后回到起点`}</p>}</>}
@@ -67,15 +90,32 @@ export function RoutePanel({ state, busy, scope, onCommand, onScope }: {
         {!route.completed && <button className="primary" disabled={busy} onClick={() => void onCommand({ op: route.paused ? 'resume_route' : 'pause_route' })}>
           {route.paused ? <Play size={18} /> : <Pause size={18} />}{route.paused ? '继续路线' : '暂停路线'}</button>}
         <button className="primary stop" disabled={busy} onClick={() => void onCommand({ op: 'stop' })}><Square size={18} />停止路线</button>
-      </> : <button className="primary" disabled={locked || !state || (scope.mode === 'apps' && !scope.packages.length)} onClick={() => void start()}><Play size={18} />开始路线</button>}</div>
+      </> : <button className="primary" disabled={locked || !state} onClick={createNew}><Plus size={18} />新建路线</button>}</div>
       {state?.requested_active && !route && <p>先停止位置模拟，再开始路线。</p>}
-      <RouteLibrary disabled={locked} getPlan={() => parseDraft(draft)} onUse={plan => { save(planDraft(plan)); setImports([]); }} />
+      {error && <p role="alert" className="form-error">{error}</p>}
     </section>
-    <section className="settings-card"><div className="section-heading"><h2>路线点</h2>
-      <label className={`text-button import-button${locked || reading ? ' disabled' : ''}`}><Upload size={18} />{reading ? '正在读取' : '导入 GPX'}
-        <input type="file" aria-label="导入 GPX" accept=".gpx,application/gpx+xml,application/xml,text/xml" disabled={locked || reading} onChange={e => {
-          const file = e.target.files?.[0]; e.target.value = ''; if (file) void readFile(file);
-        }} /></label></div><p>使用 WGS84 坐标，按列表顺序移动。草稿保存在当前面板中。</p>
+    <section className="settings-card">
+      <div className="section-heading"><h2>已保存的路线</h2></div>
+      <RouteLibrary disabled={locked} getPlan={() => parseDraft(draft)}
+        onUse={plan => { save(planDraft(plan)); setImports([]); }}
+        onEdit={editSaved} />
+    </section>
+  </>;
+
+  // ---- 点编辑：新建或编辑某条路线时的独立页面 ----
+  return <>
+    <section className="settings-card">
+      <div className="screen-topbar">
+        <button className="icon-button" aria-label="返回路线管理" onClick={() => setView({ kind: 'manage' })}><ArrowLeft size={20} /></button>
+        <h1 style={{ fontSize: 20 }}>编辑路线点</h1>
+        <span className="row-value">{view.from}</span>
+      </div>
+      <div className="section-heading"><h2>路线点</h2>
+        <label className={`text-button import-button${locked || reading ? ' disabled' : ''}`}><Upload size={18} />{reading ? '正在读取' : '导入 GPX'}
+          <input type="file" aria-label="导入 GPX" accept=".gpx,application/gpx+xml,application/xml,text/xml" disabled={locked || reading} onChange={e => {
+            const file = e.target.files?.[0]; e.target.value = ''; if (file) void readFile(file);
+          }} /></label></div>
+      <p>使用 WGS84 坐标，按列表顺序移动。草稿保存在当前面板中。</p>
       {error && <p role="alert" className="form-error">{error}</p>}
       {!!imports.length && <div className="import-preview">
         <label className="field">选择路线<select value={selectedImport} disabled={locked} onChange={e => setSelectedImport(Number(e.target.value))}>
@@ -114,6 +154,12 @@ export function RoutePanel({ state, busy, scope, onCommand, onScope }: {
           <input aria-label={`点 ${index + 1} ${['纬度', '经度', '海拔'][i]}`} inputMode="decimal" disabled={locked} value={point[key]} onChange={e => save({ ...draft, points: draft.points.map((p, n) => n === index ? { ...p, [key]: e.target.value } : p) })} /></label>)}</div>
       </div>)}</div>
       <button className="text-button" disabled={locked || draft.points.length >= 128} onClick={() => save({ ...draft, points: [...draft.points, blankPoint()] })}><Plus size={18} />添加路线点</button>
+    </section>
+    <section className="settings-card">
+      <div className="route-actions">
+        <button className="primary" disabled={locked || !state || (scope.mode === 'apps' && !scope.packages.length)} onClick={() => void start()}><Play size={18} />开始路线</button>
+      </div>
+      <RouteLibrary disabled={locked} getPlan={() => parseDraft(draft)} onUse={plan => { save(planDraft(plan)); setImports([]); }} onEdit={editSaved} />
     </section>
     {mapPoint && <MapPicker initial={mapPoint.initial} onClose={() => setMapPoint(null)} onChoose={p => {
       if (!locked) save({ ...draft, points: draft.points.map((point, i) => i === mapPoint.index ? { ...inputPoint(p), altitude: point.altitude } : point) });

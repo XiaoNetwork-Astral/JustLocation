@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Download, Save, Trash2 } from 'lucide-react';
+import { Download, Pencil, Save, Trash2 } from 'lucide-react';
 import type { RoutePlan } from './control';
 import { parseDraft, planDraft } from './routeDraft';
 import { exportGpx } from './routeImport';
@@ -19,8 +19,8 @@ function readRoutes(): SavedRoute[] {
   } catch { return []; }
 }
 
-export function RouteLibrary({ disabled, getPlan, onUse }: {
-  disabled: boolean; getPlan: () => RoutePlan; onUse: (plan: RoutePlan) => void;
+export function RouteLibrary({ disabled, getPlan, onUse, onEdit }: {
+  disabled: boolean; getPlan: () => RoutePlan; onUse: (plan: RoutePlan) => void; onEdit?: (plan: RoutePlan, name: string) => void;
 }) {
   const [routes, setRoutes] = useState(readRoutes);
   const [naming, setNaming] = useState(false);
@@ -65,6 +65,8 @@ export function RouteLibrary({ disabled, getPlan, onUse }: {
           catch (e) { setError(e instanceof Error ? e.message : String(e)); }
           finally { setExporting(false); }
         }}><Download size={18} /></button>
+        {onEdit && <button className="icon-button" aria-label={`编辑${route.name}`} title="编辑路线点" disabled={disabled}
+          onClick={() => onEdit(route.plan, route.name)}><Pencil size={18} /></button>}
         <button className="icon-button" aria-label={`删除${route.name}`} disabled={disabled} onClick={() => {
           try { write(routes.filter(item => item.id !== route.id)); setDeleted({ route, index }); }
           catch (e) { setError(e instanceof Error ? e.message : String(e)); }

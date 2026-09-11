@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Crosshair, MapPin, Route, Wifi, SlidersHorizontal, Settings, Menu, X, Plus, Search, Play, Square, ArrowLeft, ChevronRight, Trash2, Pin, Compass, RefreshCw, Check, Monitor, Moon, Sun } from 'lucide-react';
+import { ArrowLeft, Check, ChevronRight, Compass, Crosshair, MapPin, Menu, Monitor, Moon, Pencil, Pin, Play, Plus, RefreshCw, Route, Search, Settings, Square, Sun, Trash2, Wifi, X } from 'lucide-react';
 import type { Client, Command, Position, Scope, State } from './control';
 import { PositionEditor } from './PositionEditor';
 import { AppPicker, loadInstalledApps, type LoadApps } from './AppPicker';
@@ -8,10 +8,13 @@ import { joystickControl, type Joystick } from './joystick';
 import { FeatureMenus } from './FeatureMenus';
 import { BackupPanel } from './BackupPanel';
 import { CellPanel } from './CellPanel';
+import { Segmented } from './Controls';
+import { colorModes, readColorMode, readStyle, saveTheme, styleFamilies, type ColorMode, type StyleFamily } from './theme';
 import type { Place } from './backup';
 
 type Page = 'location' | 'routes' | 'wifi' | 'scope' | 'settings';
 type ScopeDraft = { mode: 'all' | 'apps'; packages: string[] };
+
 function readScopeDraft(): ScopeDraft | null {
   try {
     const value = JSON.parse(localStorage.getItem('justlocation.scope') || 'null');
@@ -49,10 +52,14 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
   const [places, setPlaces] = useState(readPlaces);
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState(false);
+  const [editingPlace, setEditingPlace] = useState<Place | null>(null);
   const [cellsOpen, setCellsOpen] = useState(false);
   const [joystickSpeed, setJoystickSpeed] = useState(() => localStorage.getItem('justlocation.joystick.speed') || '5.4');
+  // 摇杆是否真的开着，之前前端完全不记录，所以"关闭摇杆"永远可点、图标也没有状态。
+  const [joystickOpen, setJoystickOpen] = useState(false);
   const [joystickNote, setJoystickNote] = useState('拖到屏幕边缘可收起，点边缘把手展开。');
-  const [theme, setTheme] = useState(() => localStorage.getItem('justlocation.theme') || 'system');
+  const [style, setStyle] = useState<StyleFamily>(readStyle);
+  const [mode, setMode] = useState<ColorMode>(readColorMode);
   const initialized = useRef(false);
   const locked = busy || !!state?.requested_active;
 
@@ -92,9 +99,10 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [client, state?.requested_active, busy, cellsOpen]);
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    localStorage.setItem('justlocation.theme', theme);
-  }, [theme]);
+    document.documentElement.dataset.style = style;
+    document.documentElement.dataset.theme = mode;
+    saveTheme(style, mode);
+  }, [style, mode]);
 
   function navigate(next: Page) {
     if (next === 'scope' && page !== 'scope') {
@@ -114,6 +122,13 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
     try { localStorage.setItem('justlocation.scope', JSON.stringify(next)); }
     catch { setError('应用选择保存失败，关闭面板后可能丢失'); }
   }
+  /** 作用范围只能由首页的开关切换，这里只切换模式并保留已选应用。 */
+  function toggleScopeMode() {
+    if (locked) return;
+    const next = scopeDraft.mode === 'apps' ? 'all' : 'apps';
+    if (next === 'apps' && !scopeDraft.packages.length) { setError('请先选择要模拟的应用，再打开作用范围'); return; }
+    editScope({ ...scopeDraft, mode: next });
+  }
   async function routeCommand(command: Command) {
     if (busy || !state) return;
     setBusy(true); setError('');
@@ -131,15 +146,30 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
     try { setState(await client(command)); }
     finally { setBusy(false); }
   }
-  async function toggleCells() {
+  /** 基站开关：打开时同时进入基站页，因为有效基站数据必须先从那里取得。 */
+  async function toggleCells(next: boolean) {
     const config = state?.telephony;
-    if (!config || !config.subscriptions.some(sub => sub.enabled)) { openCells(); return; }
-    try { await environmentCommand({ op: 'set_telephony', config: { ...config, cells_enabled: !config.cells_enabled } }); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    if (!config) { openCells(); return; }
+    try {
+      await environmentCommand({ op: 'set_telephony', config: { ...config, cells_enabled: next } });
+      if (!next) return;
+      if (!config.subscriptions.some(sub => sub.enabled)) {
+        setError('还没有可用的基站数据，请先查询并应用。');
+        openCells();
+      }
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
   }
   function savePlaces(next: Place[]) {
     try { localStorage.setItem('justlocation.places', JSON.stringify(next)); setPlaces(next); }
     catch { setError('历史记录保存失败，浏览器存储可能已满'); }
+  }
+  async function stopSimulation(nextState: State) {
+    // 停止模拟时摇杆必须一起关掉，否则悬浮窗会留在屏幕上继续发方向。
+    if (!joystickOpen) return;
+    try { await joystick.close(); }
+    catch { /* 已关闭或未安装时忽略 */ }
+    setJoystickOpen(false);
+    setJoystickNote('位置模拟已停止，摇杆同时关闭。');
   }
   async function toggle() {
     if (!state || busy) return;
@@ -147,6 +177,7 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
     try {
       const next = await client(state.requested_active ? { op: 'stop' } : { op: 'start', config: { position: position!, scope } });
       setState(next);
+      if (state.requested_active) await stopSimulation(next);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   }
@@ -165,9 +196,11 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
         }
         await joystick.open(kmh);
         localStorage.setItem('justlocation.joystick.speed', joystickSpeed);
-        setJoystickNote('已请求打开摇杆；首次使用请在 App 中完成授权。');
+        setJoystickOpen(true);
+        setJoystickNote('摇杆已打开，拖动即可移动位置。');
       } else {
         await joystick.close();
+        setJoystickOpen(false);
         setJoystickNote('摇杆已关闭，位置模拟会保持当前状态。');
       }
     } catch (e) {
@@ -176,6 +209,8 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
         try { setState(await client({ op: 'stop' })); }
         catch { message += '；停止模拟失败，请手动停止'; }
       }
+      // 摇杆已经关掉、只是服务停止返回异常时，不要把它继续显示成打开。
+      if (!open) { setJoystickOpen(false); }
       setError(message);
     } finally { setBusy(false); }
   }
@@ -195,20 +230,24 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
   const canStart = !!position && (scope.mode === 'all' || (scope.packages.length > 0 && scope.packages.every(p => p.trim())));
   const visiblePlaces = places.filter(p => `${p.name} ${coordinates(p.position)}`.toLowerCase().includes(query.toLowerCase()))
     .sort((a, b) => Number(b.pinned) - Number(a.pinned));
+  const scopeLimited = scopeDraft.mode === 'apps';
+  const scopeSummary = scopeLimited
+    ? (scopeDraft.packages.length ? `仅在这些应用中生效 · 已选 ${scopeDraft.packages.length} 个` : '还没有选择应用')
+    : '所有应用都使用模拟位置';
 
-  if (page === 'scope') return <main className="scope-screen">
-    <header className="scope-topbar">
-      <button className="icon-button" aria-label="返回" onClick={closeScope}><ArrowLeft /></button>
+  if (page === 'scope') return <main className="scope-screen full-screen">
+    <header className="scope-topbar screen-topbar">
+      <button className="icon-button" aria-label="返回" onClick={closeScope}><ArrowLeft size={20} /></button>
       <h1>作用范围</h1><button className="text-button" onClick={closeScope}>完成</button>
     </header>
     <div className="scope-content">
-      <div className="scope-modes">
-        <label className="choice"><input type="radio" name="scope" checked={scope.mode === 'apps'} disabled={locked} onChange={() => editScope({ ...scopeDraft, mode: 'apps' })} /><strong>指定应用</strong></label>
-        <label className="choice"><input type="radio" name="scope" checked={scope.mode === 'all'} disabled={locked} onChange={() => editScope({ ...scopeDraft, mode: 'all' })} /><strong>全部应用</strong></label>
-      </div>
+      {/* 模式由首页开关决定，这里不再提供切换，只负责选应用。 */}
+      <p className="scope-note">{scopeLimited
+        ? '只有勾选的应用会使用模拟位置，其他应用保持真实定位。'
+        : '当前是所有应用都使用模拟位置，回到位置模拟页打开“作用范围”开关即可改为只对指定应用生效。'}</p>
       <p className="scope-hint">{state?.requested_active ? '模拟中，停止后可修改' : '选择自动保存，下次开始模拟时生效'}</p>
       {error && <p className="form-error" role="alert">{error}</p>}
-      {scope.mode === 'apps' ? <AppPicker selected={scope.packages} disabled={locked} loadApps={loadApps}
+      {scopeLimited ? <AppPicker selected={scopeDraft.packages} disabled={locked} loadApps={loadApps}
         onChange={packages => editScope({ mode: 'apps', packages })} /> : <p className="scope-all-note">所有应用都会使用模拟位置。之前勾选的应用已保留。</p>}
     </div>
   </main>;
@@ -216,7 +255,7 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
   return <div className="app-shell">
     {drawer && <button className="scrim" aria-label="关闭导航" onClick={() => setDrawer(false)} />}
     <aside className={`sidebar ${drawer ? 'open' : ''}`} aria-label="主导航">
-      <div className="brand"><Compass size={36} /><strong>JustLocation</strong><span>位置与路线模拟</span></div>
+      <div className="brand"><Compass size={32} /><strong>JustLocation</strong><span>位置与路线模拟</span></div>
       <nav>{pages.map(({ id, label, icon: Icon }) => <button key={id} aria-current={page === id ? 'page' : undefined}
         onClick={() => navigate(id)}><Icon size={22} /><span>{label}</span>{page === id && <span className="nav-dot" />}</button>)}</nav>
       <div className="sidebar-footer"><span className={`dot ${state ? 'connected' : ''}`} />{state ? '后台已连接' : '后台未连接'}<small>Android 15 · KernelSU</small></div>
@@ -231,7 +270,7 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
         </div>
         {error && <div role="alert" className="notice error">{error}<button className="icon-button" aria-label="关闭提示" onClick={() => setError('')}><X size={18} /></button></div>}
         {page === 'location' && <>
-          <section className="target-card" aria-label="目标位置">
+          <section className="target-card card" aria-label="目标位置">
             <div className="target-top"><span className="target-symbol"><Crosshair size={25} /></span><span className="eyebrow">目标位置</span>
               <span className={`status-chip ${state?.requested_active ? 'active' : ''}`}>{state?.requested_active ? '会话已启动' : '未启动'}</span></div>
             <button className="target-detail" disabled={busy || !!state?.route} onClick={() => setEditing(true)}>
@@ -242,29 +281,44 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
               <ChevronRight className="target-chevron" />
             </button>
             <div className="target-actions"><button className={`primary ${state?.requested_active ? 'stop' : ''}`} disabled={busy || !state || (!state.requested_active && !canStart)} onClick={() => void toggle()}>
-              {state?.requested_active ? <Square size={18} /> : <Play size={18} />} {busy ? '处理中…' : state?.requested_active ? '停止模拟' : '开始模拟'}</button>
-              <FeatureMenus openCells={openCells} cellsEnabled={!!state?.telephony?.cells_enabled} toggleCells={() => void toggleCells()}
-                cellNote={!state?.telephony?.cells_enabled ? '使用目标位置附近的基站数据。' : !state.requested_active ? '已启用，开始位置模拟后生效。' : state.cell_hook_ready ? '已连接基站服务' : '等待基站服务连接'} independent={scope.mode === 'apps'} scopeLocked={locked}
-                toggleScope={() => editScope({ ...scopeDraft, mode: scope.mode === 'apps' ? 'all' : 'apps' })} openScope={() => navigate('scope')}
-                speed={joystickSpeed} setSpeed={setJoystickSpeed} busy={busy}
-                canOpen={!busy && !!state && !state.route && (state.requested_active || canStart)} canClose={!busy && !!state}
-                controlJoystick={open => void controlJoystick(open)} note={state?.route ? '请先停止路线播放，再使用摇杆。' : joystickNote} /></div>
+              {state?.requested_active ? <Square size={18} /> : <Play size={18} />} {busy ? '处理中…' : state?.requested_active ? '停止模拟' : '开始模拟'}</button></div>
           </section>
-          <p className="session-note">{state?.requested_active ? (state.location_hook_ready ? '模拟已开启，关闭面板后仍会继续。' : '模拟已开启，正在连接系统定位服务。') : !position ? '先选择位置，再选择要使用模拟位置的应用。' : !canStart ? '还没有选择应用，请打开独立模拟菜单，选择作用范围。' : '准备好了，点击“开始模拟”即可。'}</p>
+          <p className="session-note">{state?.requested_active ? (state.location_hook_ready ? '模拟已开启，关闭面板后仍会继续。' : '模拟已开启，正在连接系统定位服务。') : !position ? '先选择位置，再决定要模拟哪些应用。' : !canStart ? '还没有选择应用，请打开“作用范围”开关并选择应用。' : '准备好了，点击“开始模拟”即可。'}</p>
+          <FeatureMenus scopeLimited={scopeLimited} scopeSummary={scopeSummary} scopeLocked={locked}
+            toggleScope={toggleScopeMode} openScope={() => navigate('scope')}
+            cellsEnabled={!!state?.telephony?.cells_enabled}
+            cellNote={!state?.telephony ? '读取当前状态中' : !state.telephony.cells_enabled ? '使用目标位置附近的基站数据' : !state.requested_active ? '已启用，开始位置模拟后生效' : state.cell_hook_ready ? '已连接基站服务' : '等待基站服务连接'}
+            busy={busy} toggleCells={(next: boolean) => void toggleCells(next)} openCells={openCells}
+            joystickOpen={joystickOpen} joystickKnown={joystickOpen} joystickSpeed={joystickSpeed} setSpeed={setJoystickSpeed}
+            canOpenJoystick={!busy && !!state && !state.route && (state.requested_active || canStart)}
+            joystickNote={state?.route ? '请先停止路线播放，再使用摇杆。' : joystickNote}
+            controlJoystick={open => void controlJoystick(open)} />
           <section className="history"><div className="section-heading"><h2>历史位置 <span>{places.length}</span></h2></div>
             <label className="search-field"><Search size={20} /><input aria-label="搜索历史位置" placeholder="搜索名称或坐标" value={query} onChange={e => setQuery(e.target.value)} /></label>
             {visiblePlaces.length ? <div className="place-list">{visiblePlaces.map(p => <div className="place-row" key={p.id}>
               <button className="place-select" disabled={busy || !!state?.route} onClick={() => void select(p.position, p.name)}><span className="place-symbol"><MapPin size={22} /></span>
                 <span><strong>{p.name}</strong><small>{coordinates(p.position)}</small></span></button>
               <button className={`icon-button ${p.pinned ? 'pinned' : ''}`} aria-label={`${p.pinned ? '取消置顶' : '置顶'} ${p.name}`} onClick={() => savePlaces(places.map(item => item.id === p.id ? { ...item, pinned: !item.pinned } : item))}><Pin size={18} /></button>
+              <button className="icon-button" aria-label={`编辑 ${p.name}`} onClick={() => setEditingPlace(p)}><Pencil size={18} /></button>
               <button className="icon-button" aria-label={`删除 ${p.name}`} onClick={() => savePlaces(places.filter(item => item.id !== p.id))}><Trash2 size={18} /></button>
             </div>)}</div> : <div className="empty-state"><MapPin size={32} /><h3>{query ? '没有找到位置' : '把常去的地方留在这里'}</h3><p>{query ? '试试其他名称或坐标' : '添加的位置会出现在这里，方便下次直接使用'}</p></div>}
           </section>
         </>}
-        {page === 'settings' && <><BackupPanel onImported={() => setPlaces(readPlaces())} /><section className="settings-card"><h2>外观</h2><p>跟随你的使用习惯</p><div className="theme-options">{[
-          { id: 'system', label: '跟随系统', icon: Monitor }, { id: 'light', label: '浅色', icon: Sun }, { id: 'dark', label: '深色', icon: Moon },
-        ].map(({ id, label, icon: Icon }) => <button key={id} aria-pressed={theme === id} onClick={() => setTheme(id)}><Icon size={20} />{label}{theme === id && <Check size={16} />}</button>)}</div></section>
-          <section className="settings-card"><h2>运行环境</h2><dl><div><dt>模块</dt><dd>JustLocation 0.1.0</dd></div><div><dt>控制入口</dt><dd>KernelSU WebUI</dd></div><div><dt>后台</dt><dd>{state ? '已连接' : '未连接'}</dd></div><div><dt>系统定位 Hook</dt><dd>{state?.location_hook_ready ? '已就绪' : state?.hook_connected ? '等待接口接入' : '等待系统连接'}</dd></div></dl></section></>}
+        {page === 'settings' && <>
+          <section className="settings-card appearance-card"><h2>外观</h2><p>界面风格和明暗可以分开选，随时切换。</p>
+            <span className="appearance-label">界面风格</span>
+            <Segmented label="界面风格" value={style}
+              options={styleFamilies.map(family => ({ id: family.id, label: family.label }))}
+              onChange={next => setStyle(next)} />
+            <span className="appearance-label">明暗</span>
+            <div className="theme-options">{colorModes.map(({ id, label }) => {
+              const Icon = id === 'system' ? Monitor : id === 'light' ? Sun : Moon;
+              return <button key={id} aria-pressed={mode === id} onClick={() => setMode(id)}><Icon size={20} />{label}{mode === id && <Check size={16} />}</button>;
+            })}</div>
+          </section>
+          <BackupPanel onImported={() => setPlaces(readPlaces())} />
+          <section className="settings-card"><h2>运行环境</h2><dl><div><dt>模块</dt><dd>JustLocation 0.1.0</dd></div><div><dt>控制入口</dt><dd>KernelSU WebUI</dd></div><div><dt>后台</dt><dd>{state ? '已连接' : '未连接'}</dd></div><div><dt>系统定位 Hook</dt><dd>{state?.location_hook_ready ? '已就绪' : state?.hook_connected ? '等待接口接入' : '等待系统连接'}</dd></div></dl></section>
+        </>}
         {page === 'routes' && <RoutePanel state={state} busy={busy} scope={scope} onCommand={routeCommand} onScope={() => navigate('scope')} />}
         {page === 'wifi' && <section className="empty-state feature-placeholder"><Wifi size={36} /><h2>Wi-Fi 功能正在接入</h2><p>已保存网络和模拟设置会在这里管理。</p></section>}
       </div>
@@ -276,6 +330,11 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
       if (!await select(p, label)) throw new Error('位置更新失败，请重试');
       savePlaces([{ id: crypto.randomUUID(), name: label, position: p, pinned: false }, ...places]);
       setEditing(false);
+    }} />}
+    {editingPlace && <PositionEditor initial={editingPlace.position} name={editingPlace.name} onClose={() => setEditingPlace(null)} onSave={async (p, label) => {
+      savePlaces(places.map(item => item.id === editingPlace.id ? { ...item, name: label, position: p } : item));
+      if (position && name === editingPlace.name) setName(label);
+      setEditingPlace(null);
     }} />}
   </div>;
 }

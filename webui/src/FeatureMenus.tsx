@@ -1,48 +1,68 @@
-import { useEffect, useRef, useState } from 'react';
-import { AppWindow, RadioTower, Joystick, Power, SlidersHorizontal, List } from 'lucide-react';
+import { AppWindow, Joystick, RadioTower } from 'lucide-react';
+import { SwitchRow } from './Controls';
 
 type Props = {
-  independent: boolean; scopeLocked: boolean; toggleScope(): void; openScope(): void;
-  speed: string; setSpeed(value: string): void; busy: boolean;
-  canOpen: boolean; canClose: boolean; controlJoystick(open: boolean): void; note: string;
-  openCells(): void;
-  cellsEnabled: boolean; cellNote: string; toggleCells(): void;
+  /** 作用范围：开关代表"限定应用"，说明文字给出具体范围 */
+  scopeLimited: boolean; scopeSummary: string; scopeLocked: boolean;
+  toggleScope(): void; openScope(): void;
+  /** 基站模拟 */
+  cellsEnabled: boolean; cellNote: string; busy: boolean; toggleCells(next: boolean): void; openCells(): void;
+  /** 摇杆 */
+  joystickOpen: boolean; joystickKnown: boolean; joystickSpeed: string; setSpeed(value: string): void;
+  canOpenJoystick: boolean; joystickNote: string; controlJoystick(open: boolean): void;
 };
 
+/**
+ * 三个功能开关的列表。
+ *
+ * 之前这里是三个图标按钮加弹层：既看不出开关状态，又要点两次才能改，
+ * 而且"高亮"表达的是别的东西（限定应用而非已启用）。现在改成整行开关：
+ * 开关本身表达启用状态，开启时呈主题色；行的说明文字负责讲清当前取值，
+ * 需要更多设置的（应用列表、基站数据、最高速度）在下方就地展开。
+ */
 export function FeatureMenus(props: Props) {
-  const [menu, setMenu] = useState<'scope' | 'cell' | 'joystick' | null>(null);
-  const root = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!menu) return;
-    const outside = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) setMenu(null); };
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { setMenu(null); root.current?.querySelector<HTMLButtonElement>('[aria-expanded="true"]')?.focus(); }
-    };
-    document.addEventListener('pointerdown', outside);
-    document.addEventListener('keydown', escape);
-    return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
-  }, [menu]);
-  function show(next: typeof menu) { setMenu(menu === next ? null : next); }
-  return <div className="feature-menus" ref={root}>
-    <button className={`icon-button ${props.independent ? 'selected' : ''}`} aria-label="独立模拟菜单" title="独立模拟" aria-expanded={menu === 'scope'} aria-controls="feature-popover" onClick={() => show('scope')}><AppWindow size={21} /></button>
-    <button className={`icon-button ${props.cellsEnabled ? 'selected' : ''}`} aria-label="基站菜单" title="基站" aria-expanded={menu === 'cell'} aria-controls="feature-popover" onClick={() => show('cell')}><RadioTower size={21} /></button>
-    <button className="icon-button" aria-label="摇杆菜单" title="摇杆" aria-expanded={menu === 'joystick'} aria-controls="feature-popover" onClick={() => show('joystick')}><Joystick size={21} /></button>
-    {menu && <div className="feature-popover" id="feature-popover" role="dialog" aria-label={menu === 'scope' ? '独立模拟' : menu === 'cell' ? '基站' : '摇杆'}>
-      {menu === 'scope' && <>
-        <button disabled={props.scopeLocked} onClick={props.toggleScope}><Power size={18} />{props.independent ? '禁用独立模拟' : '启用独立模拟'}</button>
-        <button onClick={() => { setMenu(null); props.openScope(); }}><SlidersHorizontal size={18} />作用范围</button>
-      </>}
-      {menu === 'cell' && <>
-        <button disabled={props.busy} onClick={() => { setMenu(null); props.toggleCells(); }}><Power size={18} />{props.cellsEnabled ? '停用基站模拟' : '启用基站模拟'}</button>
-        <button onClick={() => { setMenu(null); props.openCells(); }}><List size={18} />基站与运营商</button>
-        <p role="status">{props.cellNote}</p>
-      </>}
-      {menu === 'joystick' && <>
-        <button disabled={!props.canOpen} onClick={() => props.controlJoystick(true)}><Joystick size={18} />打开摇杆</button>
-        <button disabled={!props.canClose} onClick={() => props.controlJoystick(false)}><Power size={18} />关闭摇杆</button>
-        <label className="field">最高速度（km/h）<input inputMode="decimal" value={props.speed} disabled={props.busy} onChange={event => props.setSpeed(event.target.value)} /></label>
-        <p role="status">{props.note}</p>
-      </>}
-    </div>}
+  const joystickActive = props.joystickOpen;
+  return <div className="card feature-panel">
+    <h2>模拟功能</h2>
+    <div className="feature-list">
+      <SwitchRow
+        icon={<AppWindow size={20} />}
+        title="作用范围"
+        checked={props.scopeLimited}
+        disabled={props.scopeLocked}
+        summary={props.scopeSummary}
+        onChange={() => props.toggleScope()}
+      />
+      {props.scopeLimited && <div className="feature-detail">
+        <button type="button" className="text-button" disabled={props.scopeLocked} onClick={props.openScope}>选择应用</button>
+      </div>}
+
+      <SwitchRow
+        icon={<RadioTower size={20} />}
+        title="基站模拟"
+        checked={props.cellsEnabled}
+        disabled={props.busy}
+        summary={props.cellNote}
+        onChange={next => props.toggleCells(next)}
+      />
+      <div className="feature-detail">
+        <button type="button" className="text-button" disabled={props.busy} onClick={props.openCells}>基站列表与运营商</button>
+      </div>
+
+      <SwitchRow
+        icon={<Joystick size={20} />}
+        title="摇杆"
+        checked={joystickActive}
+        disabled={!joystickActive && !props.canOpenJoystick}
+        summary={props.joystickNote}
+        onChange={next => props.controlJoystick(next)}
+      />
+      {(joystickActive || props.joystickKnown) && <div className="feature-detail">
+        <label className="field">最高速度（km/h）
+          <input inputMode="decimal" value={props.joystickSpeed} disabled={props.busy}
+            onChange={event => props.setSpeed(event.target.value)} />
+        </label>
+      </div>}
+    </div>
   </div>;
 }
