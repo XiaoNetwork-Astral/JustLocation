@@ -35,13 +35,14 @@ test('mobile cell panel configures detected cards, applies target data and prese
     } };
   });
   await page.goto('/');
-  // 入口变了：过去是“基站菜单 → 启用基站模拟”，现在是“模拟功能”卡片里的同名开关。
-  // 开关会走 set_telephony；配置里还没有可用运营商时提示并直接打开基站页，所以不必再点“基站列表与运营商”。
-  const cellsSwitch = page.getByRole('checkbox', { name: '基站模拟', exact: true });
-  await expect(page.getByText('使用目标位置附近的基站数据')).toBeVisible();
-  await toggleSwitch(page, cellsSwitch, true);
+  // 入口变了：过去是“基站菜单 → 启用基站模拟”，后来是首页的整行开关，
+  // 现在按原版放回目标卡操作行里的「基站」+ 圆形图标按钮，点它进入基站页。
+  await page.getByRole('button', { name: '基站模拟设置' }).click();
   const dialog = page.getByRole('dialog', { name: '基站模拟' });
   await expect(dialog).toBeVisible();
+  // 总开关在面板里；配置里还没有可用运营商时会提示并保留在面板上。
+  await expect(page.getByText('使用目标位置附近的基站数据')).toBeVisible();
+  await toggleSwitch(page, page.getByRole('checkbox', { name: '启用基站模拟', exact: true }), true);
   await toggleSwitch(page, page.getByRole('checkbox', { name: '模拟基站', exact: true }), true);
   await toggleSwitch(page, page.getByRole('checkbox', { name: '模拟 SIM 运营商', exact: true }), true);
   await page.getByText('修改运营商', { exact: true }).click();
@@ -62,8 +63,9 @@ test('mobile cell panel configures detected cards, applies target data and prese
   await page.screenshot({ path: '../build/webui-cells-data.png', fullPage: true });
   await page.getByRole('button', { name: '返回位置模拟' }).click();
   await expect(dialog).toHaveCount(0);
-  // 停用基站模拟：还是同一个开关（旧路径是“基站菜单 → 停用基站模拟”）。
-  await toggleSwitch(page, cellsSwitch, false);
+  // 停用基站模拟：回到面板再关总开关（旧路径是“基站菜单 → 停用基站模拟”）。
+  await page.getByRole('button', { name: '基站模拟设置' }).click();
+  await toggleSwitch(page, page.getByRole('checkbox', { name: '启用基站模拟', exact: true }), false);
   const last = await page.evaluate(() => (window as any).frames.filter((f: any) => f.op === 'set_telephony').at(-1));
   expect(last.config.cells_enabled).toBe(false);
   expect(last.config.sim_enabled).toBe(true);

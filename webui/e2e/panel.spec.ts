@@ -40,12 +40,12 @@ test('feature switches fit small screens and stop color follows confirmed state'
   await page.evaluate(() => (window as any).confirmStart());
   await expect(primary).toHaveText('停止模拟');
   expect(await primary.evaluate(element => getComputedStyle(element).backgroundColor)).not.toBe(initialColor);
-  // 作用范围与基站是"模拟功能"卡片里的整行开关；摇杆已按原版移进目标卡的操作行
-  // （见 TargetCard），所以单独断言它那一行不溢出。
+  // 首页只剩 目标卡 / 区块头 / 点位列表；摇杆在目标卡操作行里，
+  // 作用范围与卫星改成入口按钮，开关本身在各自的独立页面里。
   for (const theme of ['light', 'dark']) {
     await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
-    for (const name of ['作用范围', '基站模拟', '摇杆']) {
-      const row = page.locator(`.switch-row:has(input[aria-label="${name}"])`);
+    for (const selector of ['.switch-row:has(input[aria-label="摇杆"])', '.anchor-entry', '.fab']) {
+      const row = page.locator(selector).first();
       await expect(row).toBeVisible();
       const bounds = (await row.boundingBox())!;
       expect(bounds.x).toBeGreaterThanOrEqual(0);
@@ -191,9 +191,9 @@ test('mobile app picker uses KernelSU metadata and submits selected packages', a
     };
   });
   await page.goto('/');
-  // 作用范围不再是弹层：开关打开时行内出现“选择应用”。
-  await expect(page.getByRole('checkbox', { name: '作用范围' })).toBeChecked();
-  await page.getByRole('button', { name: '选择应用' }).click();
+  // 首页只剩 目标卡 / 区块头 / 点位列表：作用范围是目标卡操作行里的一个入口。
+  await expect(page.getByRole('button', { name: '作用范围' })).toBeVisible();
+  await page.getByRole('button', { name: '作用范围' }).click();
   await expect(page.getByRole('navigation')).toHaveCount(0);
   const topbar = page.locator('.scope-topbar');
   const top = (await topbar.boundingBox())!.y;
@@ -207,41 +207,36 @@ test('mobile app picker uses KernelSU metadata and submits selected packages', a
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole('button', { name: '返回', exact: true }).click();
   await expect(page.getByRole('heading', { name: '位置模拟', exact: true })).toBeVisible();
-  // 模式只能由首页开关切换：关掉再打开必须保留已选应用（原来那两个单选就是干这个的）。
-  const scopeSwitch = page.getByRole('checkbox', { name: '作用范围' });
-  await toggleSwitch(page, scopeSwitch);
-  await expect(scopeSwitch).not.toBeChecked();
-  await expect(page.getByText('所有应用都使用模拟位置')).toBeVisible();
-  await expect(page.getByRole('button', { name: '选择应用' })).toHaveCount(0);
-  await toggleSwitch(page, scopeSwitch);
-  await expect(scopeSwitch).toBeChecked();
-  await expect(page.getByText('仅在这些应用中生效 · 已选 1 个')).toBeVisible();
-  await page.getByRole('button', { name: '选择应用' }).click();
-  await expect(page.getByRole('checkbox', { name: /JustLocation/ })).toBeChecked();
+  // 选中的应用要写进本地草稿；「改为全部应用」在作用范围页里，只清限定、不动勾选。
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('justlocation.scope')!))).toEqual({ mode: 'apps', packages: ['me.idk.justlocation.companion'] });
+  await page.getByRole('button', { name: '作用范围（已选 1 个）' }).click();
+  await page.getByRole('button', { name: '改为全部应用' }).click();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('justlocation.scope')!))).toEqual({ mode: 'all', packages: ['me.idk.justlocation.companion'] });
   await page.getByRole('button', { name: '完成', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '位置模拟', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '作用范围' })).toBeVisible();
   await page.reload();
-  // 刷新后仍是限定应用模式（原来是断言“独立模拟菜单”处于 selected 状态）。
-  await expect(page.getByRole('checkbox', { name: '作用范围' })).toBeChecked();
+  // 刷新后仍是"全部应用"，勾选也还在：选定状态不靠内存。
+  await expect(page.getByRole('button', { name: '作用范围' })).toBeVisible();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('justlocation.scope')!))).toEqual({ mode: 'all', packages: ['me.idk.justlocation.companion'] });
   await page.getByRole('button', { name: '打开导航' }).click();
   // 侧栏里仍然没有“作用范围”入口：导航只有这四个页面。
   await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['位置模拟', '路线模拟', 'Wi-Fi 模拟', '设置']);
   await page.getByRole('button', { name: '路线模拟', exact: true }).click();
-  await page.getByRole('button', { name: '作用范围', exact: true }).click();
-  await page.goBack();
-  await expect(page.getByRole('heading', { name: '路线模拟', exact: true })).toBeVisible();
+  // 路线页的入口也进得去，返回后回到路线页。
   await page.getByRole('button', { name: '作用范围', exact: true }).click();
   await page.getByRole('button', { name: '完成', exact: true }).click();
   await expect(page.getByRole('heading', { name: '路线模拟', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '打开导航' }).click();
   await page.getByRole('button', { name: '位置模拟', exact: true }).click();
+  // 回到限定模式再启动，提交的范围里应有选中的应用。
+  await page.getByRole('button', { name: '作用范围' }).click();
+  await expect(page.getByRole('checkbox', { name: /JustLocation/ })).toBeChecked();
+  await page.getByRole('button', { name: '完成', exact: true }).click();
   await page.getByRole('button', { name: '开始模拟' }).click();
   await expect(page.getByRole('button', { name: '停止模拟' })).toBeVisible();
   expect(await page.evaluate(() => (window as any).startedScope)).toEqual({ mode: 'apps', packages: ['me.idk.justlocation.companion'] });
-  // 模拟进行中不能再改应用选择，作用范围页从路线页进入。
-  await page.getByRole('button', { name: '打开导航' }).click();
-  await page.getByRole('button', { name: '路线模拟', exact: true }).click();
-  await page.getByRole('button', { name: '作用范围', exact: true }).click();
+  // 模拟进行中不能再改应用选择。
+  await page.getByRole('button', { name: '作用范围（已选 1 个）' }).click();
   await expect(page.getByRole('checkbox', { name: /JustLocation/ })).toBeDisabled();
 });
 
@@ -266,10 +261,10 @@ test('scope page drops the all/apps choice and follows the feature switch', asyn
     };
   });
   await page.goto('/');
-  // 模式就是首页那个开关，首页上也没有“全部应用 / 指定应用”这类单选。
-  await expect(page.getByRole('checkbox', { name: '作用范围' })).toBeChecked();
+  // 入口是一个按钮，首页上没有“全部应用 / 指定应用”这类单选。
+  await expect(page.getByRole('button', { name: '作用范围（已选 1 个）' })).toBeVisible();
   await expect(page.getByRole('radio')).toHaveCount(0);
-  await page.getByRole('button', { name: '选择应用' }).click();
+  await page.getByRole('button', { name: '作用范围（已选 1 个）' }).click();
   await expect(page.getByRole('heading', { name: '作用范围', exact: true })).toBeVisible();
   // 限定应用时只讲清范围并给出列表，不再要求先选模式。
   await expect(page.getByRole('radio')).toHaveCount(0);
@@ -280,16 +275,18 @@ test('scope page drops the all/apps choice and follows the feature switch', asyn
   await page.screenshot({ path: '../build/webui-scope-apps.png', fullPage: true });
   await page.getByRole('button', { name: '完成', exact: true }).click();
   await expect(page.getByRole('heading', { name: '位置模拟', exact: true })).toBeVisible();
-  // 关掉开关就是全部应用：行内不再有应用入口，页面只说明勾选被保留。
-  await toggleSwitch(page, page.getByRole('checkbox', { name: '作用范围' }));
-  await expect(page.getByRole('checkbox', { name: '作用范围' })).not.toBeChecked();
-  await expect(page.getByRole('button', { name: '选择应用' })).toHaveCount(0);
-  await page.getByRole('button', { name: '打开导航' }).click();
-  await page.getByRole('button', { name: '路线模拟', exact: true }).click();
-  await page.getByRole('button', { name: '作用范围', exact: true }).click();
+  // 重新进入，用页里的「改为全部应用」清掉限定：勾选仍然保留。
+  await page.getByRole('button', { name: '作用范围（已选 1 个）' }).click();
+  await page.getByRole('button', { name: '改为全部应用' }).click();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('justlocation.scope')!))).toEqual({ mode: 'all', packages: ['me.idk.justlocation.companion'] });
   await expect(page.getByText('所有应用都会使用模拟位置。之前勾选的应用已保留。')).toBeVisible();
+  await page.getByRole('button', { name: '完成', exact: true }).click();
+  await expect(page.getByRole('button', { name: '作用范围' })).toBeVisible();
+  // 再点「作用范围」就是重新限定，已选应用仍在列表里。
+  await page.getByRole('button', { name: '作用范围' }).click();
+  await expect(page.getByRole('checkbox', { name: /JustLocation/ })).toBeChecked();
+  await expect(page.getByRole('searchbox')).toHaveCount(1);
   await expect(page.getByRole('radio')).toHaveCount(0);
-  await expect(page.getByRole('searchbox')).toHaveCount(0);
   await page.screenshot({ path: '../build/webui-scope-all-apps.png', fullPage: true });
 });
 
