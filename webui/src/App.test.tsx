@@ -167,6 +167,39 @@ it('reports which system channels are ready instead of hiding them', async () =>
   expect(screen.getByText('电话服务').nextElementSibling?.textContent).toBe('已连接');
 });
 
+it('imports a pasted position into the history without touching the backend', async () => {
+  const client = vi.fn().mockResolvedValue({ requested_active: false, config: null });
+  render(<App client={client} />);
+  await screen.findByText('后台已连接');
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: '导入位置' }));
+  await user.type(screen.getByLabelText('粘贴地图链接或经纬度'), '31.2, 121.5');
+  expect(await screen.findByText(/按纬度在前、经度在后读入/)).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: '导入到历史位置' }));
+  await screen.findByText('31.200000, 121.500000');
+  expect(JSON.parse(localStorage.getItem('justlocation.places')!)).toHaveLength(1);
+  // 导入只进历史列表，不应该顺手改动模拟状态。
+  expect(client.mock.calls.every(call => call[0]?.op === 'status')).toBe(true);
+});
+
+it('reads a shared map link and lets the coordinate system be corrected', async () => {
+  const client = vi.fn().mockResolvedValue({ requested_active: false, config: null });
+  render(<App client={client} />);
+  await screen.findByText('后台已连接');
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: '导入位置' }));
+  await user.type(screen.getByLabelText('粘贴地图链接或经纬度'), 'https://uri.amap.com/marker?position=116.404,39.915');
+  // 高德给的是 GCJ-02，导入时必须换算成 WGS84 再存。
+  expect(await screen.findByText(/来自高德地图/)).toBeTruthy();
+  expect(screen.getByLabelText('坐标类型')).toHaveProperty('value', 'gcj02');
+  await user.click(screen.getByRole('button', { name: '导入到历史位置' }));
+  await screen.findByText(/39\.9\d+/);
+  const saved = JSON.parse(localStorage.getItem('justlocation.places')!)[0];
+  expect(saved.name).toBe('来自高德地图');
+  expect(saved.position.latitude).toBeLessThan(39.915);
+  expect(saved.position.latitude).toBeGreaterThan(39.90);
+});
+
 it('shows a connection failure and never presents an active session', async () => {
   render(<App client={async () => { throw new Error('后台未启动'); }} />);
   expect(await screen.findByRole('alert')).toHaveProperty('textContent', expect.stringContaining('后台未启动'));

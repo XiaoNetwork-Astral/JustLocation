@@ -292,6 +292,28 @@ test('scope page drops the all/apps choice and follows the feature switch', asyn
   await page.screenshot({ path: '../build/webui-scope-all-apps.png', fullPage: true });
 });
 
+test('imports a map link and plain coordinates on a narrow screen', async ({ page }) => {
+  await page.setViewportSize({ width: 393, height: 852 });
+  await page.goto('/');
+  await page.getByRole('button', { name: '关闭提示' }).click();
+  // 直接粘贴经纬度。
+  await page.getByRole('button', { name: '导入位置' }).click();
+  await page.getByLabel('粘贴地图链接或经纬度').fill('31.2304, 121.4737');
+  await expect(page.getByText(/按纬度在前、经度在后读入/)).toBeVisible();
+  await expect(page.getByText(/将保存为 WGS84：31\.230400, 121\.473700/)).toBeVisible();
+  await page.getByRole('button', { name: '导入到历史位置' }).click();
+  await expect(page.getByText('31.230400, 121.473700')).toBeVisible();
+  // 再粘贴一个地图分享链接，坐标系要自动按来源设定。
+  await page.getByRole('button', { name: '导入位置' }).click();
+  await page.getByLabel('粘贴地图链接或经纬度').fill('https://uri.amap.com/marker?position=116.404,39.915');
+  await expect(page.getByLabel('坐标类型')).toHaveValue('gcj02');
+  await expect(page.getByText(/将保存为 WGS84：39\.91/)).toBeVisible();
+  await page.screenshot({ path: '../build/webui-import.png', fullPage: true });
+  await page.getByRole('button', { name: '导入到历史位置' }).click();
+  await expect(page.getByText('来自高德地图')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
 test('mobile coordinate entry, navigation and dark theme', async ({ page }) => {
   await page.setViewportSize({ width: 393, height: 852 });
   await page.goto('/');

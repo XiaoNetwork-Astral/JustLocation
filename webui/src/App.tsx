@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Check, ChevronRight, Compass, Crosshair, MapPin, Menu, Monitor, Moon, Pencil, Pin, Play, Plus, RefreshCw, Route, Search, Settings, Square, Sun, Trash2, Wifi, X } from 'lucide-react';
+import { ArrowLeft, Check, ChevronRight, Compass, Crosshair, Download, MapPin, Menu, Monitor, Moon, Pencil, Pin, Play, Plus, RefreshCw, Route, Search, Settings, Square, Sun, Trash2, Wifi, X } from 'lucide-react';
 import type { Client, Command, Position, Scope, State } from './control';
 import { PositionEditor } from './PositionEditor';
 import { AppPicker, loadInstalledApps, type LoadApps } from './AppPicker';
@@ -8,6 +8,7 @@ import { joystickControl, type Joystick } from './joystick';
 import { FeatureMenus } from './FeatureMenus';
 import { BackupPanel } from './BackupPanel';
 import { CellPanel } from './CellPanel';
+import { ImportPlaceSheet } from './ImportPlaceSheet';
 import { Segmented } from './Controls';
 import { colorModes, readColorMode, readStyle, saveTheme, styleFamilies, type ColorMode, type StyleFamily } from './theme';
 import type { Place } from './backup';
@@ -54,6 +55,7 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
   const [places, setPlaces] = useState(readPlaces);
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [editingPlace, setEditingPlace] = useState<Place | null>(null);
   const [cellsOpen, setCellsOpen] = useState(false);
   const [joystickSpeed, setJoystickSpeed] = useState(() => localStorage.getItem('justlocation.joystick.speed') || '5.4');
@@ -285,7 +287,10 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
       </header>
       <div className="page-content">
         <div className="page-heading"><h1>{selectedPage.label}</h1>
-          {page === 'location' && <button className="add-button" aria-label="添加位置" disabled={busy || !!state?.route} onClick={() => setEditing(true)}><Plus /><span>添加位置</span></button>}
+          {page === 'location' && <div className="page-actions">
+            <button className="text-button" aria-label="导入位置" disabled={busy} onClick={() => setImporting(true)}><Download size={18} /><span>导入</span></button>
+            <button className="add-button" aria-label="添加位置" disabled={busy || !!state?.route} onClick={() => setEditing(true)}><Plus /><span>添加位置</span></button>
+          </div>}
         </div>
         {error && <div role="alert" className="notice error">{error}<button className="icon-button" aria-label="关闭提示" onClick={() => setError('')}><X size={18} /></button></div>}
         {page === 'location' && <>
@@ -358,6 +363,10 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
       if (!await select(p, label)) throw new Error('位置更新失败，请重试');
       savePlaces([{ id: crypto.randomUUID(), name: label, position: p, pinned: false }, ...places]);
       setEditing(false);
+    }} />}
+    {importing && <ImportPlaceSheet onClose={() => setImporting(false)} onSave={async (p, label) => {
+      // 导入只进历史列表；要立即用于模拟，用户再点这一条即可。
+      savePlaces([{ id: crypto.randomUUID(), name: label, position: p, pinned: false }, ...places]);
     }} />}
     {editingPlace && <PositionEditor title="编辑位置" initial={editingPlace.position} name={editingPlace.name} onClose={() => setEditingPlace(null)} onSave={async (p, label) => {
       savePlaces(places.map(item => item.id === editingPlace.id ? { ...item, name: label, position: p } : item));
