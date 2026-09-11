@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Check, ChevronRight, Compass, Crosshair, Download, MapPin, Menu, Monitor, Moon, Pencil, Pin, Play, Plus, RefreshCw, Route, Search, Settings, Square, Sun, Trash2, Wifi, X } from 'lucide-react';
-import type { Client, Command, Position, Scope, State } from './control';
+import type { Client, Command, GnssConfig, Position, Scope, State } from './control';
 import { PositionEditor } from './PositionEditor';
 import { AppPicker, loadInstalledApps, type LoadApps } from './AppPicker';
 import { RoutePanel } from './RoutePanel';
@@ -9,7 +9,7 @@ import { FeatureMenus } from './FeatureMenus';
 import { BackupPanel } from './BackupPanel';
 import { CellPanel } from './CellPanel';
 import { ImportPlaceSheet } from './ImportPlaceSheet';
-import { Segmented } from './Controls';
+import { Segmented, SwitchRow } from './Controls';
 import { colorModes, readColorMode, readStyle, saveTheme, styleFamilies, type ColorMode, type StyleFamily } from './theme';
 import type { Place } from './backup';
 
@@ -31,6 +31,9 @@ const pages = [
 const coordinates = (p: Position) => `${p.latitude.toFixed(6)}, ${p.longitude.toFixed(6)}`;
 /** 把"系统定位"那一项的状态说清楚：区分后台未连接、接口未接、等待接入与已就绪。 */
 const readyText = (ready?: boolean, connected?: boolean) => ready ? '已就绪' : connected ? '等待接口接入' : '等待系统连接';
+/** 卫星开关的说明文字：把"开关开着但接口没接上"和"已生效"区分开，避免误以为已经在投递。 */
+const gnssNote = (enabled: boolean | undefined, ready: boolean | undefined, active: boolean, purpose: string) =>
+  !enabled ? purpose : !active ? '已启用，开始位置模拟后生效' : ready ? '已连接系统接口' : '等待系统接口接入';
 
 function readPlaces(): Place[] {
   try {
@@ -178,6 +181,12 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
       }
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
   }
+  /** 卫星通道开关：直接写后台配置，与基站开关保持同样的交互。 */
+  async function toggleGnss(patch: Partial<GnssConfig>) {
+    const config: GnssConfig = state?.gnss ?? { gnss_enabled: false, nmea_enabled: false };
+    try { await environmentCommand({ op: 'set_gnss', config: { ...config, ...patch } }); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+  }
   function savePlaces(next: Place[]) {
     try { localStorage.setItem('justlocation.places', JSON.stringify(next)); setPlaces(next); }
     catch { setError('历史记录保存失败，浏览器存储可能已满'); }
@@ -317,6 +326,17 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
             canOpenJoystick={!busy && !!state && !state.route && (state.requested_active || canStart)}
             joystickNote={state?.route ? '请先停止路线播放，再使用摇杆。' : joystickNote}
             controlJoystick={open => void controlJoystick(open)} />
+          <section className="card" aria-label="卫星">
+            <h2>卫星</h2>
+            <div className="feature-list">
+              <SwitchRow title="GNSS 状态" checked={!!state?.gnss?.gnss_enabled} disabled={busy || !state}
+                summary={gnssNote(state?.gnss?.gnss_enabled, state?.gnss_hook_ready, !!state?.requested_active, '投递预置的卫星状态与首次定位回调')}
+                onChange={next => void toggleGnss({ gnss_enabled: next })} />
+              <SwitchRow title="NMEA 报文" checked={!!state?.gnss?.nmea_enabled} disabled={busy || !state}
+                summary={gnssNote(state?.gnss?.nmea_enabled, state?.nmea_hook_ready, !!state?.requested_active, '命中范围时丢弃系统的 NMEA 回调，不合成报文')}
+                onChange={next => void toggleGnss({ nmea_enabled: next })} />
+            </div>
+          </section>
           <section className="history"><div className="section-heading"><h2>历史位置 <span>{places.length}</span></h2></div>
             <label className="search-field"><Search size={20} /><input aria-label="搜索历史位置" placeholder="搜索名称或坐标" value={query} onChange={e => setQuery(e.target.value)} /></label>
             {visiblePlaces.length ? <div className="place-list">{visiblePlaces.map(p => <div className="place-row" key={p.id}>

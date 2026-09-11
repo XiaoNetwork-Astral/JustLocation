@@ -200,6 +200,22 @@ it('reads a shared map link and lets the coordinate system be corrected', async 
   expect(saved.position.latitude).toBeGreaterThan(39.90);
 });
 
+it('writes the satellite switches straight to the backend', async () => {
+  const client = vi.fn().mockResolvedValue({ requested_active: false, config: null,
+    gnss: { gnss_enabled: false, nmea_enabled: true }, gnss_hook_ready: true, nmea_hook_ready: false });
+  render(<App client={client} />);
+  await screen.findByText('后台已连接');
+  const user = userEvent.setup();
+  const gnss = screen.getByRole('checkbox', { name: 'GNSS 状态' });
+  // 状态以后端返回为准，不是本地默认值。
+  expect(gnss).toHaveProperty('checked', false);
+  expect(screen.getByRole('checkbox', { name: 'NMEA 报文' })).toHaveProperty('checked', true);
+  await user.click(gnss);
+  expect(client).toHaveBeenLastCalledWith({ op: 'set_gnss', config: { gnss_enabled: true, nmea_enabled: true } });
+  // 未开始模拟时要说清"已启用但要等模拟开始"，不能显示成已生效。
+  expect(screen.getByText('已启用，开始位置模拟后生效')).toBeTruthy();
+});
+
 it('shows a connection failure and never presents an active session', async () => {
   render(<App client={async () => { throw new Error('后台未启动'); }} />);
   expect(await screen.findByRole('alert')).toHaveProperty('textContent', expect.stringContaining('后台未启动'));

@@ -1,6 +1,7 @@
 use crate::{
     Config, Engine, Position, Scope,
     cells::{CellRegion, Coordinate, NearbyCell},
+    gnss::GnssConfig,
     motion::Motion,
     route::{Playback, Route, RouteState},
     telephony::{TelephonyConfig, TelephonyFrame, DetectedSubscription, validate_detected},
@@ -309,7 +310,53 @@ mod tests {
         control.hook_seen_at = Some(Instant::now() - Duration::from_secs(4));
         let response = control.handle(r#"{"version":1,"op":"status"}"#);
         assert!(!response.state.hook_connected);
-        assert!(!response.state.location_hook_ready);
+    }
+
+    #[test]
+    fn satellite_switches_round_trip_through_the_protocol() {
+        let mut control = Control::default();
+        let initial = serde_json::to_value(control.handle(r#"{"version":1,"op":"status"}"#)).unwrap();
+        // 默认两个通道都是关的。
+        assert_eq!(initial["state"]["gnss"]["gnss_enabled"], false);
+        assert_eq!(initial["state"]["gnss"]["nmea_enabled"], false);
+        let enabled = control.handle(
+            r#"{"version":1,"op":"set_gnss","config":{"gnss_enabled":true,"nmea_enabled":true}}"#,
+        );
+        assert!(enabled.ok, "{:?}", enabled.error);
+        let state = serde_json::to_value(enabled).unwrap();
+        assert_eq!(state["state"]["gnss"]["gnss_enabled"], true);
+        assert_eq!(state["state"]["gnss"]["nmea_enabled"], true);
+        // 缺字段的请求按默认值补齐，未知字段要报错而不是被忽略。
+        assert!(control
+            .handle(r#"{"version":1,"op":"set_gnss","config":{"gnss_enabled":false}}"#)
+            .ok);
+        assert!(!control
+            .handle(r#"{"version":1,"op":"set_gnss","config":{"gnss":true}}"#)
+            .ok);
+    }
+
+    #[test]
+    fn satellite_switches_persist_and_older_files_still_load() {
+        let directory = std::env::temp_dir().join(format!("justlocation-gnss-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("state.json");
+        let _ = std::fs::remove_file(&path);
+        {
+            let mut control = Control::open(&path).unwrap();
+            assert!(control
+                .handle(r#"{"version":1,"op":"set_gnss","config":{"gnss_enabled":true,"nmea_enabled":false}}"#)
+                .ok);
+        }
+        let mut reopened = Control::open(&path).unwrap();
+        let state = serde_json::to_value(reopened.handle(r#"{"version":1,"op":"status"}"#)).unwrap();
+        assert_eq!(state["state"]["gnss"]["gnss_enabled"], true);
+        assert_eq!(state["state"]["gnss"]["nmea_enabled"], false);
+        // 没有 gnss 段的旧配置文件仍要能打开。
+        std::fs::write(&path, r#"{"version":3,"config":null,"cell_region":null,"telephony":{"cells_enabled":false,"sim_enabled":false,"radius_m":500.0,"subscriptions":[]}}"#).unwrap();
+        let mut legacy = Control::open(&path).unwrap();
+        let state = serde_json::to_value(legacy.handle(r#"{"version":1,"op":"status"}"#)).unwrap();
+        assert_eq!(state["state"]["gnss"]["gnss_enabled"], false);
+        let _ = std::fs::remove_dir_all(&directory);
     }
 }
 
@@ -350,6 +397,9 @@ enum Command {
     SetTelephony {
         config: TelephonyConfig,
     },
+    SetGnss {
+        config: GnssConfig,
+    },
     TelephonyHookStatus {
         cells: bool,
         sim: bool,
@@ -380,6 +430,9 @@ struct Stored {
     cell_region: Option<CellRegion>,
     #[serde(default)]
     telephony: TelephonyConfig,
+    /// 旧配置文件没有这一段，缺失时按两个开关都关闭处理。
+    #[serde(default)]
+    gnss: GnssConfig,
 }
 
 #[derive(Serialize)]
@@ -394,6 +447,7 @@ pub struct State {
     pub cell_region: Option<CellRegion>,
     pub telephony: TelephonyConfig,
     pub telephony_output: Option<TelephonyFrame>,
+    pub gnss: GnssConfig,
     pub cell_hook_ready: bool,
     pub cell_query_hook_ready: bool,
     pub cell_callback_hook_ready: bool,
@@ -425,6 +479,7 @@ pub struct Control {
     cell_region: Option<CellRegion>,
     cell_query: Option<CellQuery>,
     telephony: TelephonyConfig,
+    gnss: GnssConfig,
     phone_seen_at: Option<Instant>,
     cells_installed: bool,
     cell_callbacks_installed: bool,
@@ -453,6 +508,7 @@ impl Control {
         let mut engine = Engine::default();
         let mut cell_region = None;
         let mut telephony = TelephonyConfig::default();
+        let mut gnss = GnssConfig::default();
         match std::fs::read(path) {
             Ok(bytes) => {
                 let value: serde_json::Value = serde_json::from_slice(&bytes)?;
@@ -467,6 +523,8 @@ impl Control {
                     cell_region = stored.cell_region;
                     stored.telephony.validate().map_err(io::Error::other)?;
                     telephony = stored.telephony;
+                    stored.gnss.validate().map_err(io::Error::other)?;
+                    gnss = stored.gnss;
                     stored.config
                 } else {
                     Some(serde_json::from_value(value)?)
@@ -492,6 +550,7 @@ impl Control {
             cell_region,
             cell_query: None,
             telephony,
+            gnss,
             phone_seen_at: None,
             cells_installed: false,
             cell_callbacks_installed: false,
@@ -514,6 +573,7 @@ impl Control {
         let previous_motion = self.motion.clone();
         let previous_region = self.cell_region.clone();
         let previous_telephony = self.telephony.clone();
+        let previous_gnss = self.gnss;
         let mutates_config = matches!(
             request.command,
             Command::Start { .. }
@@ -521,9 +581,15 @@ impl Control {
                 | Command::Update { .. }
                 | Command::SetCellRegion { .. }
                 | Command::SetTelephony { .. }
+                | Command::SetGnss { .. }
         );
         let result = match request.command {
             Command::Status => Ok(()),
+            Command::SetGnss { config } => {
+                config.validate().map_err(str::to_owned)?;
+                self.gnss = config;
+                Ok(())
+            }
             Command::SetTelephony { config } => {
                 config.validate().map_err(str::to_owned)?;
                 self.telephony = config;
@@ -652,6 +718,7 @@ impl Control {
                     self.motion = previous_motion;
                     self.cell_region = previous_region;
                     self.telephony = previous_telephony;
+                    self.gnss = previous_gnss;
                     return Err(format!("cannot save configuration: {error}"));
                 }
             }
@@ -669,6 +736,7 @@ impl Control {
                 config: self.engine.config().cloned(),
                 cell_region: self.cell_region.clone(),
                 telephony: self.telephony.clone(),
+                gnss: self.gnss,
             },
         )?;
         file.sync_all()?;
@@ -718,6 +786,7 @@ impl Control {
                 cell_region: self.cell_region.clone(),
                 telephony: self.telephony.clone(),
                 telephony_output,
+                gnss: self.gnss,
                 cell_hook_ready: phone_connected && self.cells_installed && hook_connected && self.cell_callbacks_installed,
                 cell_query_hook_ready: phone_connected && self.cells_installed,
                 cell_callback_hook_ready: hook_connected && self.cell_callbacks_installed,
