@@ -126,11 +126,10 @@ class RouteRecordService : Service() {
         worker.execute {
             manager.removeUpdates(listener)
             try {
-                RootControl.request("record_stop")
-                // 立刻取走成品，避免下一次录制把它覆盖掉。
-                val state = RootControl.request("record_take")
-                val stored = store(state.optJSONObject("recorded"))
-                lastMessage = stored
+                // record_stop 的响应里就带着成品，直接用；再调一次 record_take 只会把成品取空，
+                // 于是界面报"没有录到点"而轨迹其实已经录好了。
+                val state = RootControl.request("record_stop")
+                lastMessage = store(state.optJSONObject("recorded"))
                 lastError = ""
             } catch (error: Exception) {
                 lastError = error.message ?: "结束录制失败"
