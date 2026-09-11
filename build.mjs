@@ -142,12 +142,24 @@ function bridgeDex() {
   const bridgeDir = join(output, 'bridge');
   mkdirSync(bridgeDir, { recursive: true });
   const jar = process.env.JAVA_HOME ? join(process.env.JAVA_HOME, 'bin', `jar${exe}`) : `jar${exe}`;
-  // `jar xf` 不会覆盖已存在的文件：留着上一次的 classes.jar，d8 就会把旧类编译成 DEX，
-  // 于是源码改了而打进模块的 DEX 没变。每次都先删掉中间产物，保证 DEX 来自本次的 AAR。
-  for (const stale of ['classes.jar', 'classes.zip', 'classes.dex']) {
-    rmSync(join(bridgeDir, stale), { force: true });
+  // 每次从**本次的编译产物**重新生成输入 jar，再交给 d8。
+  //
+  // 原先的写法是把 AAR 解开取 classes.jar，但 `jar xf` 不覆盖已存在的文件：
+  // 中间 jar 一旦陈旧，d8 就会把旧类编成 DEX —— 源码改了、模块没变，而时间戳和哈希都自洽，
+  // 极难发现（本轮就在真机上踩了两次）。
+  const classes = join(root, 'android/bridge/build/tmp/kotlin-classes/release');
+  const javac = join(root, 'android/bridge/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes');
+  const inputs = [classes, javac].filter(existsSync);
+  if (!inputs.length) throw new Error('Bridge class output is missing; run the Gradle build first.');
+  const staging = join(bridgeDir, 'input');
+  rmSync(staging, { recursive: true, force: true });
+  rmSync(join(bridgeDir, 'classes.zip'), { force: true });
+  rmSync(join(bridgeDir, 'classes.dex'), { force: true });
+  mkdirSync(staging, { recursive: true });
+  for (const input of inputs) {
+    cpSync(input, staging, { recursive: true });
   }
-  run(jar, ['xf', join(root, 'android/bridge/build/outputs/aar/bridge-release.aar'), 'classes.jar'], bridgeDir);
+  run(jar, ['cf', join(bridgeDir, 'classes.jar'), '-C', staging, '.']);
   run(java(), ['-cp', join(sdk(), 'build-tools', config.buildToolsVer, 'lib/d8.jar'),
     'com.android.tools.r8.D8', '--min-api', '35', '--lib', join(sdk(), 'platforms/android-36/android.jar'),
     '--output', join(bridgeDir, 'classes.zip'), join(bridgeDir, 'classes.jar')]);
