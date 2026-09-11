@@ -6,6 +6,7 @@ pub mod cell_providers;
 pub mod cell_service;
 pub mod cells;
 pub mod gnss;
+pub mod jitter;
 pub mod motion;
 pub mod protocol;
 pub mod record;

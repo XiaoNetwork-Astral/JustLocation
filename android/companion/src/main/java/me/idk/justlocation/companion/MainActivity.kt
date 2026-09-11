@@ -88,6 +88,7 @@ class MainActivity : Activity() {
             status.text = "正在接收定位；离开此页面会停止接收"
         } }
         button("停止接收") { stopReceiving() }
+        button("读取 Wi-Fi") { readWifi() }
         button("清空结果") { results.clear(); output.text = "暂无结果" }
         button("悬浮摇杆") { startActivity(android.content.Intent(this, JoystickActivity::class.java)) }
         // 路线录制：取真实移动交给后台，成品落到本应用的外部目录。
@@ -108,6 +109,29 @@ class MainActivity : Activity() {
 
     private fun providers(): List<String> = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
         .filter { manager.allProviders.contains(it) }
+
+    /**
+     * 读取当前连接的网络与扫描结果，用来核对 Wi-Fi 通道是否真的在输出合成值。
+     *
+     * 走的是普通应用能走的公开接口（`WifiManager`），因此看到的就是别的应用会看到的东西；
+     * 需要定位权限，检查页这里一并申请。
+     */
+    private fun readWifi() {
+        permitted {
+            val wifi = getSystemService(android.net.wifi.WifiManager::class.java)
+            val info = try { wifi.connectionInfo } catch (error: Exception) { null }
+            if (info == null || info.ssid == null) log("Wi-Fi：无法读取连接信息")
+            else log(String.format(Locale.ROOT, "Wi-Fi 连接\nSSID %s\nBSSID %s\n信号 %d dBm · 频率 %d MHz · 链路 %d Mbps",
+                info.ssid, info.bssid, info.rssi, info.frequency, info.linkSpeed))
+            val results = try { wifi.scanResults } catch (error: Exception) {
+                log("Wi-Fi 扫描：${error.message}"); null
+            }
+            if (results != null) {
+                val nearby = results.take(5).joinToString("\n") { "${it.SSID}  ${it.BSSID}  ${it.level} dBm" }
+                log(if (results.isEmpty()) "Wi-Fi 扫描：没有结果" else "Wi-Fi 扫描（前 5 个）\n$nearby")
+            }
+        }
+    }
 
     /**
      * 录制前确认模拟已停止。
