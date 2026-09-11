@@ -77,10 +77,16 @@ AVD 为 Android 15 x86_64，没有 KSU/Zygisk，不能证明 ARM64 system_server
 - 前端 50 项、TypeScript 及浏览器 12 条通过（`build/telephony-ui-green.log`、`build/telephony-ui-e2e.log`）；ServiceState 查询 2 项、Registry 5 项及其余 Java 测试通过（`build/service-state-green.log`）。AVD 对象、权限裁剪、Parcel 往返和实际服务签名通过（`build/service-state-avd.log`）。
 - 完整 ARM64 构建已通过，当前 ZIP 包含上述改动：`dist/justlocation-0.1.0-dev-arm64.zip`；日志 `build/environment-arm64-build.log`。未安装到手机。AVD 无 KSU/Zygisk，实际进程 Hook、SELinux 和 ROM 适配仍待用户允许使用手机后验证。
 
+## 卫星通道（2026-09-11 续）
+
+GNSS 状态与 NMEA 的**配置层已完成**（提交 `baaaee8`）：`backend/src/gnss.rs` 定义两个开关，协议新增 `set_gnss`，配置随启动写入 `Stored`（旧配置文件缺少该段仍可加载），保存失败会连同其它配置一起回滚；WebUI 在位置页新增"卫星"卡片，开关直接写后台，并区分"未开始模拟"与"已连接系统接口"。后端 64 项、前端 79 项、e2e 15 项测试全部通过。
+
+**尚未实现的是真正投递**：Java 侧的分通道输出还没有接（规格第 7.4 节：位置模拟运行且开关开启时，约每秒把预置的卫星状态数组投递给匹配范围的监听，并对匹配范围丢弃 NMEA 回调；数组不按经纬度或星历计算）。这需要真机验证，等用户安排。
+
+原始草稿 `build/pending/satellite_protocol.rs` 与失败日志 `build/satellite-red.log` 保留作参考，但新的实现走的是正式测试文件，不再依赖那份草稿。之后继续 Wi-Fi、步数、原始测量与导航电文，以及剩余 SIM 接口。
+
 ## 暂停记录（2026-09-11）
 
 用户准备休息，要求暂停，明天继续。本轮未使用手机；“手机提供网络，暂时不要使用”的限制仍然有效，不能因恢复开发就自动恢复真机调试。
 
 当前完整安装包已构建，未部署。基站/SIM 面板和 ServiceState 查询、监听、脱敏及恢复已完成本地与 AVD 对象检查，实际 Zygisk Hook 验证尚未进行。
-
-下一步是 GNSS 状态与 NMEA 独立开关。只完成了 TDD 的失败用例，尚未改动实现：草稿保存在 `build/pending/satellite_protocol.rs`，失败日志为 `build/satellite-red.log`；草稿已移出正式测试目录，避免未完成的新功能使现有回归变红。继续时先恢复测试，再接入 Rust 配置保存、Java 分通道输出和 WebUI 设置。之后继续 Wi-Fi、步数、原始测量与导航电文，以及剩余 SIM 接口。没有后台构建或测试需要继续等待。
