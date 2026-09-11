@@ -142,6 +142,11 @@ function bridgeDex() {
   const bridgeDir = join(output, 'bridge');
   mkdirSync(bridgeDir, { recursive: true });
   const jar = process.env.JAVA_HOME ? join(process.env.JAVA_HOME, 'bin', `jar${exe}`) : `jar${exe}`;
+  // `jar xf` 不会覆盖已存在的文件：留着上一次的 classes.jar，d8 就会把旧类编译成 DEX，
+  // 于是源码改了而打进模块的 DEX 没变。每次都先删掉中间产物，保证 DEX 来自本次的 AAR。
+  for (const stale of ['classes.jar', 'classes.zip', 'classes.dex']) {
+    rmSync(join(bridgeDir, stale), { force: true });
+  }
   run(jar, ['xf', join(root, 'android/bridge/build/outputs/aar/bridge-release.aar'), 'classes.jar'], bridgeDir);
   run(java(), ['-cp', join(sdk(), 'build-tools', config.buildToolsVer, 'lib/d8.jar'),
     'com.android.tools.r8.D8', '--min-api', '35', '--lib', join(sdk(), 'platforms/android-36/android.jar'),

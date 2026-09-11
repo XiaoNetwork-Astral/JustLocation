@@ -39,43 +39,39 @@ final class WifiOutput {
     private static final Method FROM_UTF8;        // WifiSsid.fromUtf8Text(CharSequence)
     private static final Method SCAN_SSID;        // ScanResult.setWifiSsid(WifiSsid)
     private static final Method SCAN_STANDARD;    // ScanResult.setWifiStandard(int)
-    private static final Method SCAN_LINK_SPEED;  // ScanResult.setLinkSpeed(int)
     private static final Method SCAN_CHANNEL_WIDTH; // ScanResult.setChannelWidth(int)
 
     static {
         java.lang.reflect.Constructor<WifiInfo> newInfo = null;
         java.lang.reflect.Constructor<ScanResult> newScan = null;
         Method setSsid = null, setBssid = null, setRssi = null, setLinkSpeed = null, setFrequency = null;
-        Method fromUtf8 = null, scanSsid = null, scanStandard = null, scanLinkSpeed = null, scanWidth = null;
+        Method fromUtf8 = null, scanSsid = null, scanStandard = null, scanWidth = null;
         try {
-            // WifiInfo() 与 ScanResult(...) 同属 @hide：编译期不可见，运行时存在。
+            // 必需项：没有这些就构造不出可用的对象，整条通道直接关闭。
             newInfo = WifiInfo.class.getDeclaredConstructor();
             newInfo.setAccessible(true);
             newScan = ScanResult.class.getDeclaredConstructor(WifiSsid.class, String.class, String.class,
                     int.class, int.class, long.class, int.class, int.class);
             newScan.setAccessible(true);
             setSsid = WifiInfo.class.getMethod("setSSID", WifiSsid.class);
-            setBssid = WifiInfo.class.getMethod("setBSSID", String.class);
-            setRssi = WifiInfo.class.getMethod("setRssi", int.class);
-            setLinkSpeed = WifiInfo.class.getMethod("setLinkSpeed", int.class);
-            setFrequency = WifiInfo.class.getMethod("setFrequency", int.class);
             fromUtf8 = WifiSsid.class.getMethod("fromUtf8Text", CharSequence.class);
             scanSsid = ScanResult.class.getMethod("setWifiSsid", WifiSsid.class);
-            scanStandard = ScanResult.class.getMethod("setWifiStandard", int.class);
-            scanLinkSpeed = ScanResult.class.getMethod("setLinkSpeed", int.class);
-            scanWidth = ScanResult.class.getMethod("setChannelWidth", int.class);
         } catch (Throwable error) {
-            // 任何一项解析失败都让整条通道保持关闭，避免输出半成品对象。
-            // 这里必须捕 Throwable：framework 类在测试或裁剪过的环境里可能直接抛
-            // NoClassDefFoundError / ExceptionInInitializerError，只捕 Exception 会让
-            // 整个类的初始化失败，连累到调用方。
             android.util.Log.w("JustLocation", "Wi-Fi object APIs unavailable", error);
         }
+        // 可选：不同 ROM 暴露的字段并不一致（例如 HyperOS 的 ScanResult 就没有
+        // setLinkSpeed / setChannelWidth）。少一个只影响那个字段，不该让整条通道关闭。
+        try { setBssid = WifiInfo.class.getMethod("setBSSID", String.class); } catch (Throwable ignored) { }
+        try { setRssi = WifiInfo.class.getMethod("setRssi", int.class); } catch (Throwable ignored) { }
+        try { setLinkSpeed = WifiInfo.class.getMethod("setLinkSpeed", int.class); } catch (Throwable ignored) { }
+        try { setFrequency = WifiInfo.class.getMethod("setFrequency", int.class); } catch (Throwable ignored) { }
+        try { scanStandard = ScanResult.class.getMethod("setWifiStandard", int.class); } catch (Throwable ignored) { }
+        try { scanWidth = ScanResult.class.getMethod("setChannelWidth", int.class); } catch (Throwable ignored) { }
         NEW_INFO = newInfo; NEW_SCAN = newScan;
         SET_SSID = setSsid; SET_BSSID = setBssid; SET_RSSI = setRssi;
         SET_LINK_SPEED = setLinkSpeed; SET_FREQUENCY = setFrequency;
         FROM_UTF8 = fromUtf8; SCAN_SSID = scanSsid; SCAN_STANDARD = scanStandard;
-        SCAN_LINK_SPEED = scanLinkSpeed; SCAN_CHANNEL_WIDTH = scanWidth;
+        SCAN_CHANNEL_WIDTH = scanWidth;
     }
 
     private final SessionSnapshot scope;
@@ -90,9 +86,12 @@ final class WifiOutput {
 
     /** 所有必需的隐藏入口是否都在。缺任何一项就整条通道不接管。 */
     static boolean usable() {
-        return NEW_INFO != null && NEW_SCAN != null && SET_SSID != null && SET_BSSID != null && SET_RSSI != null
-                && SET_LINK_SPEED != null && SET_FREQUENCY != null && FROM_UTF8 != null && SCAN_SSID != null
-                && SCAN_STANDARD != null && SCAN_LINK_SPEED != null && SCAN_CHANNEL_WIDTH != null;
+        return NEW_INFO != null && NEW_SCAN != null && SET_SSID != null && FROM_UTF8 != null && SCAN_SSID != null;
+    }
+
+    /** 某个可选 setter 是否可用；不可用就跳过那个字段，而不是让整条通道关闭。 */
+    private static boolean has(Method method) {
+        return method != null;
     }
 
     /**
@@ -127,10 +126,10 @@ final class WifiOutput {
         WifiSettings.Target target = targets.get(0);
         WifiInfo info = NEW_INFO.newInstance();
         SET_SSID.invoke(info, ssid(target.ssid()));
-        if (!target.bssid().isEmpty()) SET_BSSID.invoke(info, target.bssid());
-        SET_RSSI.invoke(info, target.rssi());
-        SET_LINK_SPEED.invoke(info, target.linkSpeed());
-        SET_FREQUENCY.invoke(info, target.frequency());
+        if (!target.bssid().isEmpty() && has(SET_BSSID)) SET_BSSID.invoke(info, target.bssid());
+        if (has(SET_RSSI)) SET_RSSI.invoke(info, target.rssi());
+        if (has(SET_LINK_SPEED)) SET_LINK_SPEED.invoke(info, target.linkSpeed());
+        if (has(SET_FREQUENCY)) SET_FREQUENCY.invoke(info, target.frequency());
         return info.makeCopy(info.getApplicableRedactions());
     }
 
@@ -140,9 +139,9 @@ final class WifiOutput {
         for (WifiSettings.Target target : targets) {
             ScanResult result = NEW_SCAN.newInstance(ssid(target.ssid()), target.bssid(), CAPABILITIES,
                     target.rssi(), target.frequency(), elapsedMs, 0, 0);
-            SCAN_STANDARD.invoke(result, ScanResult.WIFI_STANDARD_11AX);
-            SCAN_LINK_SPEED.invoke(result, target.linkSpeed());
-            SCAN_CHANNEL_WIDTH.invoke(result, CHANNEL_WIDTH_MHZ);
+            // 这两个 setter 在部分 ROM 上不存在，缺了就保持构造时的取值。
+            if (has(SCAN_STANDARD)) SCAN_STANDARD.invoke(result, ScanResult.WIFI_STANDARD_11AX);
+            if (has(SCAN_CHANNEL_WIDTH)) SCAN_CHANNEL_WIDTH.invoke(result, CHANNEL_WIDTH_MHZ);
             results.add(result);
         }
         return results;
