@@ -70,6 +70,13 @@ mod tests {
         let track = response.state.recorded.expect("录制结果要交回给面板");
         assert_eq!(track.points.len(), 2);
         assert!(response.state.recording.is_none());
+        // 交付一次就取走：重复取要被拒绝，避免界面反复弹同一条成品。
+        let taken = control.handle(r#"{"version":1,"op":"record_take"}"#);
+        assert!(taken.ok);
+        assert!(taken.state.recorded.is_none(), "取走后同一份成品不应再出现");
+        let again = control.handle(r#"{"version":1,"op":"record_take"}"#);
+        assert!(!again.ok);
+        assert!(again.error.unwrap().contains("no recorded route"));
         // 录下来的点可以直接当路线回放。
         let route = Route { points: track.points, speed: 5.0, repeat_count: 1, repeat_delay: 0.0 };
         assert!(Playback::new(route, Instant::now()).is_ok());
@@ -513,6 +520,8 @@ enum Command {
     },
     /// 结束录制并交回轨迹；没有录到点时返回错误。
     RecordStop,
+    /// 取走上一次录制的结果。取走后 `recorded` 回到 null，保证同一份成品只交付一次。
+    RecordTake,
     /// 直接丢弃当前录制。
     RecordDiscard,
     TelephonyHookStatus {
@@ -803,6 +812,13 @@ impl Control {
                     points: recording.points().to_vec(),
                     seconds: recording.seconds(),
                 });
+                Ok(())
+            }
+            Command::RecordTake => {
+                // 交付一次就清空：否则面板每刷新一次就"收到"一次成品，无法判断该不该提示。
+                if self.recorded.take().is_none() {
+                    return Err("no recorded route is waiting".into());
+                }
                 Ok(())
             }
             Command::RecordDiscard => {

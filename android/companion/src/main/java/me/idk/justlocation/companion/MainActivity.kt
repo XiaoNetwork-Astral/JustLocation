@@ -19,9 +19,22 @@ class MainActivity : Activity() {
     private lateinit var manager: LocationManager
     private lateinit var output: TextView
     private lateinit var status: TextView
+    private lateinit var recordingStatus: TextView
     private val results = ArrayDeque<String>()
     private val pending = mutableListOf<CancellationSignal>()
     private var permissionAction: (() -> Unit)? = null
+    /** 录制服务把进度与结果广播回来，页面只负责显示。 */
+    private val recorder = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            val message = intent?.getStringExtra("message").orEmpty()
+            val error = intent?.getStringExtra("error").orEmpty()
+            recordingStatus.text = when {
+                error.isNotEmpty() -> "路线录制：$error"
+                message.isNotEmpty() -> "路线录制：$message"
+                else -> "路线录制：进行中"
+            }
+        }
+    }
     private val listener = object : LocationListener {
         override fun onLocationChanged(location: Location) = showLocation("持续回调", location)
         override fun onProviderEnabled(provider: String) = log("$provider 已启用")
@@ -77,12 +90,54 @@ class MainActivity : Activity() {
         button("停止接收") { stopReceiving() }
         button("清空结果") { results.clear(); output.text = "暂无结果" }
         button("悬浮摇杆") { startActivity(android.content.Intent(this, JoystickActivity::class.java)) }
+        // 路线录制：取真实移动交给后台，成品落到本应用的外部目录。
+        recordingStatus = text("路线录制：未开始")
+        button("开始录制路线") { permitted {
+            // 录制期间系统回调必须是真实位置，所以先确认模拟已停止。
+            if (!simulationStopped()) return@permitted
+            startForegroundService(android.content.Intent(this, RouteRecordService::class.java))
+            recordingStatus.text = "路线录制：正在录制，走完后再点停止"
+        } }
+        button("停止录制并保存") {
+            startService(android.content.Intent(this, RouteRecordService::class.java).setAction(RouteRecordService.ACTION_STOP))
+            recordingStatus.text = "路线录制：正在结束…"
+        }
         output = text("暂无结果", 13f).apply { setTextIsSelectable(true) }
         setContentView(ScrollView(this).apply { addView(content) })
     }
 
     private fun providers(): List<String> = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
         .filter { manager.allProviders.contains(it) }
+
+    /**
+     * 录制前确认模拟已停止。
+     *
+     * 模拟运行时系统回调给出的是模块的合成位置，录下来就是一条绕回自身的轨迹；后台也会拒绝，
+     * 但在这里先问一次能把原因当场说清楚，而不是等录制服务报错。
+     */
+    private fun simulationStopped(): Boolean {
+        return try {
+            val state = RootControl.request("status")
+            if (state.optBoolean("requested_active")) {
+                recordingStatus.text = "路线录制：请先在面板停止位置模拟"
+                false
+            } else true
+        } catch (error: Exception) {
+            recordingStatus.text = "路线录制：${error.message ?: "无法读取模块状态"}"
+            false
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        registerReceiver(recorder, android.content.IntentFilter(RouteRecordService.ACTION_STATE), RECEIVER_NOT_EXPORTED)
+    }
+
+    override fun onStop() {
+        try { unregisterReceiver(recorder) } catch (_: IllegalArgumentException) { }
+        stopReceiving()
+        super.onStop()
+    }
 
     private fun updateSingleStatus() {
         status.text = if (pending.isEmpty()) "单次定位已结束" else "正在等待单次定位结果"
@@ -121,10 +176,5 @@ class MainActivity : Activity() {
         manager.removeUpdates(listener)
         pending.forEach { it.cancel() }; pending.clear()
         status.text = "已停止接收"
-    }
-
-    override fun onStop() {
-        stopReceiving()
-        super.onStop()
     }
 }
