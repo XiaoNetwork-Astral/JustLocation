@@ -7,8 +7,8 @@
 只读分析资料位于 `D:/temp/2026.9.1-FakeLocation`：
 
 - `分析报告/FakeLocation_1.5.2_全功能技术分析与重实现规格.md`：功能全景、位置与路线算法、摇杆与计步、Wi-Fi/基站/SIM/GNSS、交换与外部 API。
-- 反编译资源（本轮由 `.codex/project/fl-ui-inventory.md` 整理）：抽屉菜单四项加三个子组（位置模拟 / 路线模拟 / WIFI模拟 / 独立模拟；View：GPS位置、附近基站、附近WIFI；Settings：运行模式、设置；More 十二项），主界面是「目标卡 + 区块头 + 列表卡」的三段式，配色主色 `#008577`、状态栏 `#007266`、底色 `#fafafa`、卡片 `#ffffff`、正文 `#4e6161`、次要文字 `#a1a1a1`。
-- Miuix 外观取自本机参考仓库 KernelSU 管理器的实际用法（`.codex/project/miuix-reference.md`）：页面 12dp、卡片间距 12dp、卡片内 16dp，圆角 6/12/16/25dp，无重阴影，整行开关，分组标题在卡外。
+- 反编译资源（本轮由 `.deepseek/project/fl-ui-inventory.md` 整理）：抽屉菜单四项加三个子组（位置模拟 / 路线模拟 / WIFI模拟 / 独立模拟；View：GPS位置、附近基站、附近WIFI；Settings：运行模式、设置；More 十二项），主界面是「目标卡 + 区块头 + 列表卡」的三段式，配色主色 `#008577`、状态栏 `#007266`、底色 `#fafafa`、卡片 `#ffffff`、正文 `#4e6161`、次要文字 `#a1a1a1`。
+- Miuix 外观取自本机参考仓库 KernelSU 管理器的实际用法（`.deepseek/project/miuix-reference.md`）：页面 12dp、卡片间距 12dp、卡片内 16dp，圆角 6/12/16/25dp，无重阴影，整行开关，分组标题在卡外。
 
 原版的位置页把"独立模拟、基站、摇杆"放在目标卡的图标按钮里，点开是弹层。本项目的做法不同：这三项与卫星通道都改成整行开关，见下。
 

@@ -19,7 +19,7 @@ JustLocation/
 │   ├── bridge/          # Java/Kotlin：系统服务适配，编译成模块内的 DEX
 │   └── companion/       # Kotlin：可选 App，提供悬浮摇杆等原生操作
 ├── module/              # 模块元数据、安装和启动脚本等打包输入
-├── .codex/              # 本地协作资料，忽略提交
+├── .deepseek/           # 本地协作资料，忽略提交
 │   ├── project/         # 备忘录与必要的工作记录
 │   └── references/      # 下载的参考仓库
 ├── build/               # 构建时生成：集中组装与临时产物，忽略提交
@@ -57,7 +57,7 @@ node build.mjs test:transport-io <adb-serial> # ARM64 或 x86_64：通信及延�
 
 Windows 的 `setup` 将 CMake 4.0.3 下载到 `build/tools`，不修改 SDK。Ninja 使用 SDK CMake 3.31.6 附带版本。其他宿主或自定义安装可通过 `JUSTLOCATION_CMAKE` 指定 CMake 4.0.2+ 可执行文件。
 
-正式构建依赖由工程配置固定版本获取，不能读取 `.codex/references` 中的参考副本。这样将来只克隆本仓库也能恢复构建环境。
+正式构建依赖由工程配置固定版本获取，不能读取 `.deepseek/references` 中的参考副本。这样将来只克隆本仓库也能恢复构建环境。
 
 当前已有可构建的四部分工程、Rust 坐标与应用范围模型、配置保存、常驻 Unix socket 服务，以及 React 控制面板。面板采用侧边导航（宽屏固定、窄屏抽屉）、目标位置卡片与历史记录列表，外观分 **Material 3** 与 **米 UI（Miuix 风格）** 两套，各自支持跟随系统/浅色/深色，两套可随时切换。
 
