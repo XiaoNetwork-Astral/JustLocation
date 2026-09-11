@@ -5,6 +5,7 @@ use crate::{
     motion::Motion,
     route::{Playback, Route, RouteState},
     telephony::{TelephonyConfig, TelephonyFrame, DetectedSubscription, validate_detected},
+    wifi::WifiConfig,
 };
 use serde::{Deserialize, Serialize};
 use std::io::{self, BufRead, Write};
@@ -400,6 +401,9 @@ enum Command {
     SetGnss {
         config: GnssConfig,
     },
+    SetWifi {
+        config: WifiConfig,
+    },
     TelephonyHookStatus {
         cells: bool,
         sim: bool,
@@ -433,6 +437,9 @@ struct Stored {
     /// 旧配置文件没有这一段，缺失时按两个开关都关闭处理。
     #[serde(default)]
     gnss: GnssConfig,
+    /// 同上，Wi-Fi 目标列表缺失时按未启用处理。
+    #[serde(default)]
+    wifi: WifiConfig,
 }
 
 #[derive(Serialize)]
@@ -448,6 +455,7 @@ pub struct State {
     pub telephony: TelephonyConfig,
     pub telephony_output: Option<TelephonyFrame>,
     pub gnss: GnssConfig,
+    pub wifi: WifiConfig,
     pub cell_hook_ready: bool,
     pub cell_query_hook_ready: bool,
     pub cell_callback_hook_ready: bool,
@@ -480,6 +488,7 @@ pub struct Control {
     cell_query: Option<CellQuery>,
     telephony: TelephonyConfig,
     gnss: GnssConfig,
+    wifi: WifiConfig,
     phone_seen_at: Option<Instant>,
     cells_installed: bool,
     cell_callbacks_installed: bool,
@@ -509,6 +518,7 @@ impl Control {
         let mut cell_region = None;
         let mut telephony = TelephonyConfig::default();
         let mut gnss = GnssConfig::default();
+        let mut wifi = WifiConfig::default();
         match std::fs::read(path) {
             Ok(bytes) => {
                 let value: serde_json::Value = serde_json::from_slice(&bytes)?;
@@ -525,6 +535,8 @@ impl Control {
                     telephony = stored.telephony;
                     stored.gnss.validate().map_err(io::Error::other)?;
                     gnss = stored.gnss;
+                    stored.wifi.validate().map_err(io::Error::other)?;
+                    wifi = stored.wifi;
                     stored.config
                 } else {
                     Some(serde_json::from_value(value)?)
@@ -551,6 +563,7 @@ impl Control {
             cell_query: None,
             telephony,
             gnss,
+            wifi,
             phone_seen_at: None,
             cells_installed: false,
             cell_callbacks_installed: false,
@@ -574,6 +587,7 @@ impl Control {
         let previous_region = self.cell_region.clone();
         let previous_telephony = self.telephony.clone();
         let previous_gnss = self.gnss;
+        let previous_wifi = self.wifi.clone();
         let mutates_config = matches!(
             request.command,
             Command::Start { .. }
@@ -582,9 +596,15 @@ impl Control {
                 | Command::SetCellRegion { .. }
                 | Command::SetTelephony { .. }
                 | Command::SetGnss { .. }
+                | Command::SetWifi { .. }
         );
         let result = match request.command {
             Command::Status => Ok(()),
+            Command::SetWifi { config } => {
+                config.validate().map_err(str::to_owned)?;
+                self.wifi = config;
+                Ok(())
+            }
             Command::SetGnss { config } => {
                 config.validate().map_err(str::to_owned)?;
                 self.gnss = config;
@@ -719,6 +739,7 @@ impl Control {
                     self.cell_region = previous_region;
                     self.telephony = previous_telephony;
                     self.gnss = previous_gnss;
+                    self.wifi = previous_wifi;
                     return Err(format!("cannot save configuration: {error}"));
                 }
             }
@@ -737,6 +758,7 @@ impl Control {
                 cell_region: self.cell_region.clone(),
                 telephony: self.telephony.clone(),
                 gnss: self.gnss,
+                wifi: self.wifi.clone(),
             },
         )?;
         file.sync_all()?;
@@ -787,6 +809,7 @@ impl Control {
                 telephony: self.telephony.clone(),
                 telephony_output,
                 gnss: self.gnss,
+                wifi: self.wifi.clone(),
                 cell_hook_ready: phone_connected && self.cells_installed && hook_connected && self.cell_callbacks_installed,
                 cell_query_hook_ready: phone_connected && self.cells_installed,
                 cell_callback_hook_ready: hook_connected && self.cell_callbacks_installed,

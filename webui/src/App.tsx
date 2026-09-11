@@ -395,7 +395,7 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
           <section className="settings-card"><h2>运行环境</h2><dl><div><dt>模块</dt><dd>JustLocation 0.1.0</dd></div><div><dt>控制入口</dt><dd>KernelSU WebUI</dd></div><div><dt>后台</dt><dd>{state ? '已连接' : '未连接'}</dd></div></dl></section>
         </>}
         {page === 'routes' && <RoutePanel state={state} busy={busy} scope={scope} onCommand={routeCommand} onScope={() => navigate('scope')} />}
-        {page === 'wifi' && <WifiPanel />}
+        {page === 'wifi' && <WifiPanel state={state} onConfigure={async config => { await environmentCommand({ op: 'set_wifi', config }); }} />}
       </div>
     </main>
     {cellsOpen && <CellPanel target={position} state={state} controlBusy={busy}

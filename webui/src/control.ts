@@ -8,11 +8,15 @@ export interface Subscription extends DetectedSubscription { enabled: boolean; c
 export interface TelephonyConfig { cells_enabled: boolean; sim_enabled: boolean; radius_m: number; subscriptions: Subscription[] }
 /** 卫星通道开关。规格第 7.4 节确认原版投递的是预置卫星状态数组，NMEA 只丢弃不合成。 */
 export interface GnssConfig { gnss_enabled: boolean; nmea_enabled: boolean }
+/** Wi-Fi 模拟目标。信号字段沿用原版模型缺省值，不代表真实测量。 */
+export interface WifiTarget { id: string; ssid: string; bssid: string; rssi: number; link_speed: number; frequency: number }
+export interface WifiConfig { enabled: boolean; targets: WifiTarget[] }
 export interface State {
   requested_active: boolean; config: Config | null; hook_connected?: boolean; location_hook_ready?: boolean; route?: RouteState | null;
   phone_connected?: boolean; detected_subscriptions?: DetectedSubscription[] | null;
   telephony?: TelephonyConfig; cell_hook_ready?: boolean; sim_hook_ready?: boolean;
   gnss?: GnssConfig;
+  wifi?: WifiConfig;
   /** 后端已经上报、前端此前没有声明的通道就绪位，用于在设置页展示。 */
   gnss_hook_ready?: boolean; nmea_hook_ready?: boolean;
   cell_query_hook_ready?: boolean; cell_callback_hook_ready?: boolean;
@@ -20,7 +24,7 @@ export interface State {
 }
 export type Command = { op: 'status' | 'stop' | 'pause_route' | 'resume_route' } | { op: 'start'; config: Config } | { op: 'update'; position: Position }
   | { op: 'start_route'; route: RoutePlan; scope: Scope } | { op: 'set_telephony'; config: TelephonyConfig }
-  | { op: 'set_gnss'; config: GnssConfig }
+  | { op: 'set_gnss'; config: GnssConfig } | { op: 'set_wifi'; config: WifiConfig }
   | { op: 'set_cell_region'; region: import('./cells').CellRegion | null };
 export type Client = (command: Command) => Promise<State>;
 type Exec = (command: string) => Promise<{ errno: number; stdout: string; stderr: string }>;

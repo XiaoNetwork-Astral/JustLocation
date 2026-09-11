@@ -216,24 +216,29 @@ it('writes the satellite switches straight to the backend', async () => {
   expect(screen.getByText('已启用，开始位置模拟后生效')).toBeTruthy();
 });
 
-it('manages saved Wi-Fi networks and says the output is not wired up yet', async () => {
+it('manages saved Wi-Fi networks, writes them to the backend, and says the output is not wired up yet', async () => {
   const client = vi.fn().mockResolvedValue({ requested_active: false, config: null });
   render(<App client={client} />);
   await screen.findByText('后台已连接');
   const user = userEvent.setup();
   await user.click(screen.getByRole('button', { name: 'Wi-Fi 模拟' }));
-  // 页面必须说清"只是保存，还没输出"，避免误以为已经在改变应用读到的网络。
+  // 页面必须说清"已经存进配置，但还没输出"，避免误以为已经在改变应用读到的网络。
   expect(screen.getByText(/真正的输出尚未实现/)).toBeTruthy();
   await user.click(screen.getByRole('button', { name: '添加网络' }));
   await user.type(screen.getByLabelText('网络名称（SSID）'), '家里');
   await user.type(screen.getByLabelText('接入点地址（BSSID，可留空）'), 'aa:bb:cc:dd:ee:ff');
   await user.click(screen.getByRole('button', { name: '保存网络' }));
   expect(await screen.findByText('家里')).toBeTruthy();
+  // 保存的网络要写进后台配置，否则系统侧没有数据可读、开关只是摆设。
+  const saved = client.mock.calls.map(call => call[0]).filter(op => op?.op === 'set_wifi').at(-1);
+  expect(saved.config.targets).toHaveLength(1);
+  expect(saved.config.targets[0]).toMatchObject({ ssid: '家里', bssid: 'aa:bb:cc:dd:ee:ff', rssi: 200 });
   await user.click(screen.getByRole('button', { name: '删除 家里' }));
   expect(screen.queryByText('家里')).toBeNull();
   await user.click(screen.getByRole('button', { name: '撤销' }));
   expect(await screen.findByText('家里')).toBeTruthy();
-  expect(client.mock.calls.every(call => call[0]?.op === 'status')).toBe(true);
+  // 只碰 Wi-Fi 配置，不要顺手改动定位相关的命令。
+  expect(client.mock.calls.every(call => ['status', 'set_wifi'].includes(call[0]?.op))).toBe(true);
 });
 
 it('keeps the backend status fresh while idle instead of freezing at mount', async () => {

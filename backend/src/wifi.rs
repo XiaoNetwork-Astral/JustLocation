@@ -14,6 +14,36 @@ use serde::{Deserialize, Serialize};
 pub const DEFAULT_RSSI: i32 = 200;
 pub const DEFAULT_LINK_SPEED: i32 = 866;
 pub const DEFAULT_FREQUENCY: i32 = 5745;
+/// 原版把一组 Wi-Fi 交给系统侧，这里沿用"最多保存一组"的量级上限。
+pub const MAX_TARGETS: usize = 32;
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct WifiConfig {
+    /// 是否启用 Wi-Fi 模拟。默认关闭，也就是系统原样。
+    pub enabled: bool,
+    /// 要模拟的目标；原版由界面选择或采集得到，这里由面板保存。
+    pub targets: Vec<WifiTarget>,
+}
+
+impl WifiConfig {
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if self.targets.len() > MAX_TARGETS {
+            return Err("too many wifi targets");
+        }
+        for target in &self.targets {
+            target.validate()?;
+        }
+        // 同一个接入点地址重复出现时，切换目标会变得没有意义。
+        let mut ids = std::collections::HashSet::new();
+        for target in &self.targets {
+            if !ids.insert(&target.id) {
+                return Err("duplicate wifi id");
+            }
+        }
+        Ok(())
+    }
+}
 
 fn default_rssi() -> i32 {
     DEFAULT_RSSI
@@ -148,5 +178,59 @@ mod tests {
             r#"{"id":"w1","ssid":"Home","bssid":"aa:bb:cc:dd:ee:ff","channel":6}"#
         )
         .is_err());
+    }
+
+    #[test]
+    fn a_config_defaults_to_off_with_no_targets() {
+        let config = WifiConfig::default();
+        assert!(!config.enabled);
+        assert!(config.targets.is_empty());
+        config.validate().unwrap();
+        // 面板只发一个开关也要能解析。
+        let partial: WifiConfig = serde_json::from_str(r#"{"enabled":true}"#).unwrap();
+        assert!(partial.enabled);
+        assert!(partial.targets.is_empty());
+        assert!(serde_json::from_str::<WifiConfig>(r#"{"wifi_enabled":true}"#).is_err());
+    }
+
+    #[test]
+    fn a_config_round_trips_with_its_targets() {
+        let text = r#"{"enabled":true,"targets":[{"id":"w1","ssid":"Home","bssid":"aa:bb:cc:dd:ee:ff"}]}"#;
+        let config: WifiConfig = serde_json::from_str(text).unwrap();
+        config.validate().unwrap();
+        assert!(config.enabled);
+        assert_eq!(config.targets.len(), 1);
+        assert_eq!(config.targets[0].rssi, DEFAULT_RSSI);
+        let again: WifiConfig = serde_json::from_str(&serde_json::to_string(&config).unwrap()).unwrap();
+        assert_eq!(again, config);
+    }
+
+    #[test]
+    fn validation_covers_the_list_not_just_one_entry() {
+        let mut config = WifiConfig { enabled: true, targets: Vec::new() };
+        let mut broken = WifiTarget {
+            id: "w2".into(), ssid: "  ".into(), bssid: String::new(),
+            rssi: DEFAULT_RSSI, link_speed: DEFAULT_LINK_SPEED, frequency: DEFAULT_FREQUENCY,
+        };
+        config.targets.push(WifiTarget { id: "w1".into(), ssid: "Home".into(), bssid: "aa:bb:cc:dd:ee:ff".into(), ..broken.clone() });
+        // 只要列表里有一条不合格，整份配置就该被拒绝。
+        config.targets.push(broken.clone());
+        assert!(config.validate().is_err());
+        // 重复 id 同样要拒绝，否则"切换目标"无法定位到唯一一条。
+        config.targets.pop();
+        config.targets.push(WifiTarget { ssid: "Other".into(), ..broken.clone() });
+        assert!(config.validate().is_ok());
+        broken.id = "w1".into(); broken.ssid = "Other".into();
+        config.targets.push(broken);
+        assert!(config.validate().is_err());
+        // 超出上限也要拒绝。
+        let too_many = WifiConfig {
+            enabled: true,
+            targets: (0..MAX_TARGETS + 1)
+                .map(|index| WifiTarget { id: format!("w{index}"), ssid: format!("net{index}"), bssid: String::new(),
+                    rssi: DEFAULT_RSSI, link_speed: DEFAULT_LINK_SPEED, frequency: DEFAULT_FREQUENCY })
+                .collect(),
+        };
+        assert!(too_many.validate().is_err());
     }
 }
