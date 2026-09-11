@@ -111,7 +111,7 @@ public final class BridgeEntry {
      */
     private static void installWifi(ClassLoader loader) {
         try {
-            Class<?> service = Class.forName("com.android.server.wifi.WifiServiceImpl", false, loader);
+            Class<?> service = wifiServiceClass(loader);
             Class<?> info = Class.forName("android.net.wifi.WifiInfo", false, loader);
             Class<?> scan = Class.forName("android.net.wifi.ScanResult", false, loader);
             Class<?> slice = Class.forName(
@@ -141,6 +141,56 @@ public final class BridgeEntry {
         } catch (Exception error) {
             Log.w(TAG, "Cannot install Wi-Fi hooks; Wi-Fi channel remains system output", error);
         }
+    }
+
+    /**
+     * 找到 Wi-Fi 服务的实现类。
+     *
+     * <p>AOSP 的类名是 `com.android.server.wifi.WifiServiceImpl`，但 ROM 的 classpath 组合
+     * 各不相同：本机 HyperOS 上 jar 里确实有这个名字，用 Zygisk 拿到的那个 classloader
+     * 却加载不到。所以逐个候选试过去，并把每次失败的原因记下来，便于以后定位。
+     */
+    private static Class<?> wifiServiceClass(ClassLoader loader) throws ClassNotFoundException {
+        String name = "com.android.server.wifi.WifiServiceImpl";
+        ClassLoader[] candidates = {
+                loader,
+                Thread.currentThread().getContextClassLoader(),
+                ClassLoader.getSystemClassLoader(),
+                BridgeEntry.class.getClassLoader(),
+        };
+        for (ClassLoader candidate : candidates) {
+            if (candidate == null) continue;
+            try {
+                Class<?> found = Class.forName(name, false, candidate);
+                Log.i(TAG, "Wi-Fi service class from " + candidate);
+                return found;
+            } catch (Throwable error) {
+                Log.w(TAG, "Wi-Fi class not in " + candidate + ": " + error);
+            }
+        }
+        // 逐个找 Wi-Fi 服务对象自己的类：它一定由能加载该类的那个 classloader 定义。
+        for (Class<?> type : definedClasses(loader)) {
+            if (type.getName().endsWith("WifiServiceImpl")) {
+                Log.i(TAG, "Wi-Fi service class recovered by scanning: " + type.getName());
+                return type;
+            }
+        }
+        throw new ClassNotFoundException(name);
+    }
+
+    /** 目标是 system_server：已加载的类不多，扫一遍类名是可接受的代价。 */
+    private static List<Class<?>> definedClasses(ClassLoader loader) {
+        List<Class<?>> found = new ArrayList<>();
+        try {
+            Method getLoaded = ClassLoader.class.getDeclaredMethod("getLoadedClasses");
+            getLoaded.setAccessible(true);
+            for (Class<?> type : (Class<?>[]) getLoaded.invoke(null)) {
+                if (type.getClassLoader() == loader) found.add(type);
+            }
+        } catch (Throwable error) {
+            Log.w(TAG, "Cannot list loaded classes", error);
+        }
+        return found;
     }
 
     private static void installTelephonyRegistry(ClassLoader loader) {        try {
