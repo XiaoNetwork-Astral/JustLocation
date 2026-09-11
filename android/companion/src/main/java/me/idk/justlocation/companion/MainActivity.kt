@@ -89,6 +89,7 @@ class MainActivity : Activity() {
         } }
         button("停止接收") { stopReceiving() }
         button("读取 Wi-Fi") { readWifi() }
+        button("通道自检") { startActivity(android.content.Intent(this, ChannelCheckActivity::class.java)) }
         button("清空结果") { results.clear(); output.text = "暂无结果" }
         button("悬浮摇杆") { startActivity(android.content.Intent(this, JoystickActivity::class.java)) }
         // 路线录制：取真实移动交给后台，成品落到本应用的外部目录。

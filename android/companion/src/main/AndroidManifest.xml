@@ -4,6 +4,8 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
+    <!-- 读取订阅列表（卡槽与运营商）用；这是普通权限，装上即授予。 -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
@@ -14,6 +16,12 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity android:name=".JoystickActivity" android:exported="false" />
+        <!--
+          自检页导出给 adb 启动，供 tests/device/run-checks.mjs 抓取报告。
+          可导出的理由：它只读调用方自己的公开接口读数（位置、卫星、NMEA、基站、SIM、Wi-Fi），
+          不写任何状态、不暴露后台控制通道，读到的就是调用者本来就能读到的东西。
+        -->
+        <activity android:name=".ChannelCheckActivity" android:exported="true" />
         <service android:name=".JoystickService" android:exported="false" android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="User-controlled floating joystick for location simulation" />

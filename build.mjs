@@ -246,6 +246,11 @@ try {
     case 'test:e2e': npm(['run', 'test:e2e']); break;
     case 'test:android': gradle([':bridge:testDebugUnitTest', ':companion:testDebugUnitTest']); break;
     case 'test:device': testDevice(); break;
+    case 'test:checks':
+      if (!process.argv[3]) throw new Error('Usage: node build.mjs test:checks <adb-serial>');
+      android();
+      run(process.execPath, [join(root, 'tests/device/run-checks.mjs'), join(sdk(), 'platform-tools', `adb${exe}`), process.argv[3]]);
+      break;
     case 'test:transport-io':
       if (!process.argv[3]) throw new Error('Usage: node build.mjs test:transport-io <adb-serial>');
       run(process.execPath, [join(root, 'tests/device/run-transport-io.mjs'), sdk(), process.argv[3], config.ndkVer]);
@@ -262,7 +267,7 @@ try {
     case 'pack': pack(); break;
     case 'build': native(); backend(); npm(['run', 'build']); android(); pack(); break;
     case 'help':
-      console.log('node build.mjs <setup|test|test:e2e|test:android|test:device <serial>|test:transport <serial>|test:transport-io <serial>|build|pack|native|backend|ui|android>');
+      console.log('node build.mjs <setup|test|test:e2e|test:android|test:device <serial>|test:checks <serial>|test:transport <serial>|test:transport-io <serial>|build|pack|native|backend|ui|android>');
       break;
     default: throw new Error(`Unknown command: ${command}`);
   }
