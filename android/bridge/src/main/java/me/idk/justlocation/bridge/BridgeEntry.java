@@ -37,12 +37,21 @@ public final class BridgeEntry {
     private static native String readState(int installed);
     private static native Method hook(Method target, Object callback, Method method);
 
+    /** Wi-Fi 服务实现类的全名；ROM 上加载它的 classloader 与 system_server 的那个不是同一个。 */
+    private static final String WIFI_SERVICE = "com.android.server.wifi.WifiServiceImpl";
+    /** 真正加载了 Wi-Fi 服务类的那个 classloader；拿到它才能装 Wi-Fi hook。 */
+    private static volatile ClassLoader wifiLoader;
+
     public static void start(ClassLoader systemServerLoader) throws Exception {
         installProvider(Class.forName(PROVIDER, false, systemServerLoader));
         installGnss(systemServerLoader, "GnssStatusProvider", "IGnssStatusListener", 2);
         installGnss(systemServerLoader, "GnssNmeaProvider", "IGnssNmeaListener", 4);
         installTelephonyRegistry(systemServerLoader);
-        installWifi(systemServerLoader);
+        // Wi-Fi 服务类由 Wi-Fi APEX 的 classloader 加载，system_server 那个 classloader 的
+        // DexPathList 里没有它的 jar（本机实测），因此这里按类名加载必然失败。
+        // `wifiLoader` 要等"接住 Wi-Fi 服务实例"那条路做出来才会被填上；在那之前
+        // Wi-Fi 通道保持系统原值，不会输出任何合成读数。
+        installWifi(wifiLoader);
         Thread thread = new Thread(() -> {
             while (!Thread.currentThread().isInterrupted()) {
                 try {
@@ -103,15 +112,30 @@ public final class BridgeEntry {
     /**
      * 安装 Wi-Fi 的两处 Hook：当前连接信息与扫描结果。
      *
-     * <p>Android 15 的 `WifiServiceImpl` 由 Wi-Fi 主line 模块提供实现类，但服务对象是
-     * system_server 注册的，所以和定位一样在 `system_server` 里注入，不需要新的定向入口。
-     * 两个目标方法自己会先做权限检查（`enforceAccessPermission`、
+     * <p>两个目标方法自己会先做权限检查（`enforceAccessPermission`、
      * `enforceCanAccessScanResults`）再取数据，替换的是它们的**返回值**，
      * 因此调用方该有的权限与会抛出的异常都照旧。
+     *
+     * <p>**当前状态：调用不到。** 本机（HyperOS / Android 15 主line Wi-Fi）实测：
+     * Wi-Fi 服务的实现类由 Wi-Fi APEX 的 classloader 加载，`system_server` 自身
+     * classloader 的 DexPathList 里没有 `/apex/com.android.wifi/javalib/service-wifi.jar`
+     * （列出的 15 个 APEX service jar 里没有它），boot classloader 也看不见，
+     * 所以按类名加载只会 ClassNotFoundException。
+     *
+     * <p>也试过挂钩 `ClassLoader.loadClass` 等系统自己加载它的那一刻：整个开机过程该方法
+     * 只被走到个位数次（`android.miui.R` 这类），一次 Wi-Fi 类都没有——ART 内部解析类
+     * 基本不走这个 Java 方法，所以这条路不成立。
+     *
+     * <p>可行的下一步是**接住服务实例**：Wi-Fi 服务在启动期间向系统注册，实例就在注册
+     * 调用的参数里，拿到实例即拿到它的 Class，再走这里现有的挂钩逻辑即可。
      */
     private static void installWifi(ClassLoader loader) {
+        if (loader == null) {
+            // 还没有拿到 APEX 那个 classloader；Wi-Fi 通道保持系统原值。
+            return;
+        }
         try {
-            Class<?> service = wifiServiceClass(loader);
+            Class<?> service = Class.forName(WIFI_SERVICE, false, loader);
             Class<?> info = Class.forName("android.net.wifi.WifiInfo", false, loader);
             Class<?> scan = Class.forName("android.net.wifi.ScanResult", false, loader);
             Class<?> slice = Class.forName(
@@ -143,57 +167,8 @@ public final class BridgeEntry {
         }
     }
 
-    /**
-     * 找到 Wi-Fi 服务的实现类。
-     *
-     * <p>AOSP 的类名是 `com.android.server.wifi.WifiServiceImpl`，但 ROM 的 classpath 组合
-     * 各不相同：本机 HyperOS 上 jar 里确实有这个名字，用 Zygisk 拿到的那个 classloader
-     * 却加载不到。所以逐个候选试过去，并把每次失败的原因记下来，便于以后定位。
-     */
-    private static Class<?> wifiServiceClass(ClassLoader loader) throws ClassNotFoundException {
-        String name = "com.android.server.wifi.WifiServiceImpl";
-        ClassLoader[] candidates = {
-                loader,
-                Thread.currentThread().getContextClassLoader(),
-                ClassLoader.getSystemClassLoader(),
-                BridgeEntry.class.getClassLoader(),
-        };
-        for (ClassLoader candidate : candidates) {
-            if (candidate == null) continue;
-            try {
-                Class<?> found = Class.forName(name, false, candidate);
-                Log.i(TAG, "Wi-Fi service class from " + candidate);
-                return found;
-            } catch (Throwable error) {
-                Log.w(TAG, "Wi-Fi class not in " + candidate + ": " + error);
-            }
-        }
-        // 逐个找 Wi-Fi 服务对象自己的类：它一定由能加载该类的那个 classloader 定义。
-        for (Class<?> type : definedClasses(loader)) {
-            if (type.getName().endsWith("WifiServiceImpl")) {
-                Log.i(TAG, "Wi-Fi service class recovered by scanning: " + type.getName());
-                return type;
-            }
-        }
-        throw new ClassNotFoundException(name);
-    }
-
-    /** 目标是 system_server：已加载的类不多，扫一遍类名是可接受的代价。 */
-    private static List<Class<?>> definedClasses(ClassLoader loader) {
-        List<Class<?>> found = new ArrayList<>();
+    private static void installTelephonyRegistry(ClassLoader loader) {
         try {
-            Method getLoaded = ClassLoader.class.getDeclaredMethod("getLoadedClasses");
-            getLoaded.setAccessible(true);
-            for (Class<?> type : (Class<?>[]) getLoaded.invoke(null)) {
-                if (type.getClassLoader() == loader) found.add(type);
-            }
-        } catch (Throwable error) {
-            Log.w(TAG, "Cannot list loaded classes", error);
-        }
-        return found;
-    }
-
-    private static void installTelephonyRegistry(ClassLoader loader) {        try {
             Class<?> registry = Class.forName("com.android.server.TelephonyRegistry", false, loader);
             Class<?> listener = Class.forName("com.android.internal.telephony.IPhoneStateListener", false, loader);
             TelephonyRegistryAdapter adapter = new TelephonyRegistryAdapter(registry,
