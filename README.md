@@ -1,8 +1,10 @@
 # JustLocation
 
-个人自用的 Android 虚拟定位项目。采用一个 Git 仓库管理 Zygisk 模块、Rust 后台、React 控制面板和可选 Kotlin App。
+个人自用的 Android 虚拟定位项目。仓库名与模块 id 保持 `justlocation`，模块在管理器里显示为 **Zygisk - JustLocation**。采用一个 Git 仓库管理 Zygisk 模块、Rust 后台、React 控制面板和可选 Kotlin App。
 
 首个运行目标为 Android 15 ARM64、KernelSU 3.3.0（32601-2）和 Zygisk Next，面板使用 KernelSU WebUI。
+
+模块包的组织参考 LSPosed 模块的惯例：`module.prop` 的 `id` 用下划线小写、`name` 是显示名、`description` 写成完整句子；**每个打包文件在打包时生成一份 `.sha256` 清单**并用 ZIP 一起分发，安装脚本用 `verify_tree` 逐个核对、运行脚本在启动后台前核对二进制，清单不一致就不启动。清单描述的是当次构建的字节内容，因此由 `build.mjs` 生成、不提交到仓库。
 
 ## 工作区布局
 
