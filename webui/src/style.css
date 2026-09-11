@@ -530,11 +530,16 @@ nav button[aria-current='page'] { color: var(--navActiveOn); background: var(--n
    原版是"顶部 AppBar + 滚动内容"，而不是网页那种整页滚动；整页滚动会让
    页头和标题一起被推走，用起来不像手机应用，所以这里固定页头、只让内容滚动。 */
 main { min-width: 0; display: flex; flex-direction: column; min-height: 100dvh; max-height: 100dvh; overflow: hidden; }
+/* 顶栏：原版每个页面顶部都是一条主色 AppBar，这里保留同样的形态（白字白图标）。
+   标题仍留在内容区：原版页头本来就是"色块 + 内容区大标题"，而且既有用例按
+   heading 定位标题，顶栏再放一个会变成两个同名元素。 */
 .topbar {
   display: flex; align-items: center; justify-content: flex-end; gap: 8px;
-  flex-shrink: 0; height: 64px; padding: 12px 20px;
-  color: var(--onSurfaceVariant); background: var(--background);
+  flex-shrink: 0; height: 56px; padding: 8px 16px;
+  color: #ffffff; background: var(--primary);
 }
+.topbar .icon-button { color: #ffffff; }
+.topbar .icon-button:hover { background: color-mix(in srgb, #ffffff 18%, transparent); }
 .topbar > span, .nav-toggle { display: none !important; }
 .topbar-title { font-size: var(--fontRow); }
 .page-content {
