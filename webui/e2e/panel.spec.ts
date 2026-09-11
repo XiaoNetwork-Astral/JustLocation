@@ -40,7 +40,8 @@ test('feature switches fit small screens and stop color follows confirmed state'
   await page.evaluate(() => (window as any).confirmStart());
   await expect(primary).toHaveText('停止模拟');
   expect(await primary.evaluate(element => getComputedStyle(element).backgroundColor)).not.toBe(initialColor);
-  // 三个功能入口现在是同一张卡片里的整行开关，窄屏下每行都不能溢出。
+  // 作用范围与基站是"模拟功能"卡片里的整行开关；摇杆已按原版移进目标卡的操作行
+  // （见 TargetCard），所以单独断言它那一行不溢出。
   for (const theme of ['light', 'dark']) {
     await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
     for (const name of ['作用范围', '基站模拟', '摇杆']) {

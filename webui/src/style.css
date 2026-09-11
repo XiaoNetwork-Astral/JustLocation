@@ -547,7 +547,47 @@ h1 { font-weight: var(--weightStrong); font-size: 30px; line-height: 1.3; letter
 }
 .scrim { display: none; }
 
-/* 目标位置卡片：整页最重要的信息，加大留白 */
+/* 目标卡：结构照 Fake Location 的 ci.xml —— 小标题、加粗主值、副值、坐标行、
+   以及一行内联的操作区（绿色药丸在左，弹簧撑开，基站与摇杆在右）。 */
+.target-caption { font-size: 14px; color: var(--primary); font-weight: 500; margin-bottom: 10px; }
+.target-name { display: block; width: 100%; text-align: left; padding: 0; }
+.target-name strong { display: block; font-size: 20px; font-weight: var(--weightStrong); overflow-wrap: anywhere; }
+.target-summary { display: block; font-size: 14px; font-weight: var(--weightStrong); margin-top: 6px; color: var(--onSurfaceVariant); overflow-wrap: anywhere; }
+.target-altitude { display: block; font-size: var(--fontSmall); margin-top: 6px; color: var(--onSurfaceVariantSummary); }
+.target-coordinates { display: flex; align-items: baseline; gap: 6px; margin-top: 12px; font-size: 14px; }
+.target-coordinates output { font-weight: var(--weightStrong); color: var(--primary); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.target-actions { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+.target-actions .spacer { flex: 1; }
+/* 主按钮：原版是高 28dp、圆角 14dp 的绿色药丸，文字白色 14dp。
+   同时声明 primary 类以保留既有的选择器契约，所以这里显式覆盖它的尺寸。 */
+.pill, .primary.pill {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 34px; padding: 0 18px 0 16px;
+  border-radius: var(--radiusPill);
+  background: var(--primary); color: var(--onPrimary);
+  font-size: 14px; font-weight: 500;
+}
+.primary.pill.stop, .pill.stop { background: var(--errorContainer); color: var(--error); box-shadow: none; }
+.cells-label { font-size: 14px; font-weight: var(--weightStrong); color: var(--primary); }
+.cells-label:not(.on) { color: var(--onSurfaceVariant); }
+.round-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 15px; flex-shrink: 0;
+  color: var(--primary);
+}
+.round-icon:hover { background: color-mix(in srgb, var(--primary) 12%, transparent); }
+.joystick-toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: var(--weightStrong); color: var(--primary); cursor: pointer; }
+.joystick-toggle .switch { width: 38px; height: 22px; }
+.joystick-toggle .switch::after { width: 16px; height: 16px; }
+.joystick-toggle .switch:checked::after { transform: translateY(-50%) translateX(16px); }
+
+.target-note { margin-top: 10px; font-size: var(--fontSmall); color: var(--onSurfaceVariantSummary); line-height: 1.6; }
+
+/* 区块头：灰字标题 + 弹簧 + 右侧箭头，对应原版的 [B] 区块。 */
+.block-header { display: flex; align-items: center; gap: 8px; padding: 4px 8px 10px; }
+.block-header h2 { font-size: 14px; font-weight: 400; color: var(--onSurfaceGrey); }
+.block-header .spacer { flex: 1; }
+.block-header .round-icon { width: 32px; height: 32px; color: var(--onSurfaceGrey); }
 .target-card { padding: 22px; }
 .target-top { display: flex; align-items: center; gap: 10px; }
 .target-symbol { display: flex; color: var(--primary); }

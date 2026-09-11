@@ -46,21 +46,19 @@ it('keeps the two dictionaries in step for keys a screen needs', () => {
   expect(translate('en', 'settings.language')).toBe('Language');
 });
 
-it('reports how much of the dictionary the screens already use', async () => {
+it('reports how much of the dictionary the screens already use', () => {
   // 迁移是分批做的：组件还写着硬编码中文时，字典里的键暂时没人引用。
-  // 因此这里不把"未使用"当失败，只把它当作进度；等全部迁移完，
-  // 把 pending 改成空数组，这道检查就会开始拦住没人用的僵尸键。
-  const { readdirSync, readFileSync } = await import('node:fs');
-  const { join, dirname } = await import('node:path');
-  const { fileURLToPath } = await import('node:url');
-  const directory = dirname(fileURLToPath(import.meta.url));
-  const sources = readdirSync(directory)
-    .filter(name => (name.endsWith('.ts') || name.endsWith('.tsx')) && !name.includes('.test.') && name !== 'i18n.ts')
-    .map(name => readFileSync(join(directory, name), 'utf8'))
-    .join('\n');
+  // 因此这里不把"未使用"当失败，只当作进度；等组件全部迁移完，
+  // 把下面这行换成断言"没有未使用的键"，这道检查就会开始拦住僵尸键。
+  //
+  // 用 Vite 自带的 import.meta.glob 读源码：比引入 @types/node 更轻，
+  // 也不会让 `tsc --noEmit` 因为缺少 Node 类型而报错。
+  const sources = Object.entries(import.meta.glob(['./*.ts', './*.tsx', '!./*.test.*', '!./i18n.ts'], { query: '?raw', import: 'default', eager: true }))
+    .map(([, text]) => String(text)).join('\n');
   const keys = Object.keys(zh) as (keyof typeof zh)[];
   const unused = keys.filter(key => !sources.includes(`'${key}'`));
-  // 迁移完成前允许存在未使用的键；这里只保证"不会反过来漏掉已使用的键"（那会直接报未知键）。
-  expect(keys.length - unused.length).toBeGreaterThanOrEqual(0);
   expect(keys.length).toBeGreaterThan(100);
+  // 已经迁移的键必须真的出现在组件里；这条现在恒真，迁移完再收紧。
+  expect(keys.length - unused.length).toBeGreaterThanOrEqual(0);
+  expect(translate('zh', 'location.coordinatesLabel')).toBe('经纬度:');
 });

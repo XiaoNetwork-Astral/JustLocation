@@ -9,6 +9,7 @@ import { FeatureMenus } from './FeatureMenus';
 import { BackupPanel } from './BackupPanel';
 import { CellPanel } from './CellPanel';
 import { ImportPlaceSheet } from './ImportPlaceSheet';
+import { TargetCard } from './TargetCard';
 import { WifiPanel } from './WifiPanel';
 import { Segmented, SwitchRow } from './Controls';
 import { colorModes, readColorMode, readStyle, saveTheme, styleFamilies, type ColorMode, type StyleFamily } from './theme';
@@ -325,29 +326,20 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
         </div>
         {error && <div role="alert" className="notice error">{error}<button className="icon-button" aria-label="关闭提示" onClick={() => setError('')}><X size={18} /></button></div>}
         {page === 'location' && <>
-          <section className="target-card card" aria-label="目标位置">
-            <div className="target-top"><span className="target-symbol"><Crosshair size={25} /></span><span className="eyebrow">目标位置</span>
-              <span className={`status-chip ${state?.requested_active ? 'active' : ''}`}>{state?.requested_active ? '会话已启动' : '未启动'}</span></div>
-            <button className="target-detail" disabled={busy || !!state?.route} onClick={() => setEditing(true)}>
-              <h2>{position ? name || '自定义位置' : '选择模拟位置'}</h2>
-              <p>{position ? coordinates(position) : '点击这里填写坐标'}</p>
-              {position && <span className="altitude">海拔 {position.altitude} m · WGS84</span>}
-              {position && !state?.route && <span className="change-position">更改位置</span>}
-              <ChevronRight className="target-chevron" />
-            </button>
-            <div className="target-actions"><button className={`primary ${state?.requested_active ? 'stop' : ''}`} disabled={busy || !state || (!state.requested_active && !canStart)} onClick={() => void toggle()}>
-              {state?.requested_active ? <Square size={18} /> : <Play size={18} />} {busy ? '处理中…' : state?.requested_active ? '停止模拟' : '开始模拟'}</button></div>
-          </section>
+          {/* 目标卡按原版 ci.xml：小标题、主值、副值、坐标行，操作区在同一行内联。 */}
+          <TargetCard position={position} name={name} summary="" active={!!state?.requested_active} busy={busy} canStart={canStart}
+            joystickOpen={joystickOpen} joystickDisabled={state?.route ? true : !joystickOpen && (!state || !(state.requested_active || canStart))}
+            cellsEnabled={!!state?.telephony?.cells_enabled}
+            joystickNote={state?.route ? '请先停止路线播放，再使用摇杆。' : joystickNote}
+            joystickSpeed={joystickSpeed} setJoystickSpeed={setJoystickSpeed}
+            onToggle={() => void toggle()} onEdit={() => setEditing(true)} onCells={openCells}
+            onToggleJoystick={open => void controlJoystick(open)} />
           <p className="session-note">{state?.requested_active ? (state.location_hook_ready ? '模拟已开启，关闭面板后仍会继续。' : '模拟已开启，正在连接系统定位服务。') : !position ? '先选择位置，再决定要模拟哪些应用。' : !canStart ? '还没有选择应用，请打开“作用范围”开关并选择应用。' : '准备好了，点击“开始模拟”即可。'}</p>
           <FeatureMenus scopeLimited={scopeLimited} scopeSummary={scopeSummary} scopeLocked={locked}
             toggleScope={toggleScopeMode} openScope={() => navigate('scope')}
             cellsEnabled={!!state?.telephony?.cells_enabled}
             cellNote={!state?.telephony ? '读取当前状态中' : !state.telephony.cells_enabled ? '使用目标位置附近的基站数据' : !state.requested_active ? '已启用，开始位置模拟后生效' : state.cell_hook_ready ? '已连接基站服务' : '等待基站服务连接'}
-            busy={busy} toggleCells={(next: boolean) => void toggleCells(next)} openCells={openCells}
-            joystickOpen={joystickOpen} joystickKnown={joystickKnown || joystickOpen} joystickSpeed={joystickSpeed} setSpeed={setJoystickSpeed}
-            canOpenJoystick={!busy && !!state && !state.route && (state.requested_active || canStart)}
-            joystickNote={state?.route ? '请先停止路线播放，再使用摇杆。' : joystickNote}
-            controlJoystick={open => void controlJoystick(open)} />
+            busy={busy} toggleCells={(next: boolean) => void toggleCells(next)} openCells={openCells} />
           <section className="card" aria-label="卫星">
             <h2>卫星</h2>
             <div className="feature-list">
