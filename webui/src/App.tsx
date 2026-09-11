@@ -71,6 +71,13 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
   const [style, setStyle] = useState<StyleFamily>(readStyle);
   const [mode, setMode] = useState<ColorMode>(readColorMode);
   const initialized = useRef(false);
+  // 轮询回调要读最新值，但不希望这些值变化就重建定时器，所以用 ref 传递。
+  const stateRef = useRef<State | null>(null);
+  const cellsOpenRef = useRef(false);
+  const busyRef = useRef(false);
+  stateRef.current = state;
+  cellsOpenRef.current = cellsOpen;
+  busyRef.current = busy;
   const locked = busy || !!state?.requested_active;
 
   async function refresh() {
@@ -103,24 +110,38 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
     finally { setBusy(false); }
   }
   useEffect(() => { void refresh(); }, [client]);
+  // 空闲时也轮询，只是慢一些：桥接是否连上、各通道接口是否就绪都来自后台，
+  // 只在模拟进行中才查会让设置页永远停在打开面板那一刻。后台不可用时放慢到 15 秒，
+  // 避免在没装模块的环境里持续打扰，同时仍然能自动恢复。
   useEffect(() => {
-    if ((!state?.requested_active && !cellsOpen) || busy) return;
     let cancelled = false;
     let pending = false;
-    const timer = window.setInterval(async () => {
-      if (pending) return;
-      pending = true;
-      try {
-        const next = await client({ op: 'status' });
-        if (!cancelled) {
-          setState(next);
-          if (next.requested_active && next.config) setPosition(next.config.position);
-        }
-      } catch (e) { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); }
-      finally { pending = false; }
-    }, 2000);
-    return () => { cancelled = true; window.clearInterval(timer); };
-  }, [client, state?.requested_active, busy, cellsOpen]);
+    let timer = 0;
+    let delay = 0;
+    const tick = async () => {
+      if (!cancelled && !pending) {
+        pending = true;
+        try {
+          const next = await client({ op: 'status' });
+          if (!cancelled) {
+            setState(next);
+            // 只有模拟进行中才用后台坐标覆盖草稿，空闲时不要动用户正在编辑的内容。
+            if (next.requested_active && next.config) setPosition(next.config.position);
+            setError('');
+          }
+        } catch (e) { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); }
+        finally { pending = false; }
+      }
+      if (cancelled) return;
+      const active = !!stateRef.current?.requested_active || cellsOpenRef.current;
+      const reachable = !!stateRef.current;
+      const wanted = active ? 2000 : reachable ? 5000 : 15000;
+      delay = busyRef.current ? Math.min(delay || wanted, 2000) : wanted;
+      timer = window.setTimeout(tick, delay);
+    };
+    timer = window.setTimeout(tick, 5000);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [client]);
   useEffect(() => {
     document.documentElement.dataset.style = style;
     document.documentElement.dataset.theme = mode;

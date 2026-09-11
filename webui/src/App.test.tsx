@@ -236,6 +236,25 @@ it('manages saved Wi-Fi networks and says the output is not wired up yet', async
   expect(client.mock.calls.every(call => call[0]?.op === 'status')).toBe(true);
 });
 
+it('keeps the backend status fresh while idle instead of freezing at mount', async () => {
+  // 空闲时也必须继续查状态：桥接是否连上、各通道接口是否就绪都来自后台，
+  // 只在"模拟进行中"才轮询会让设置页永远停在打开面板那一刻。
+  vi.useFakeTimers();
+  try {
+    const client = vi.fn().mockResolvedValue({ requested_active: false, config: null, hook_connected: false });
+    render(<App client={client} />);
+    await vi.advanceTimersByTimeAsync(50);
+    const atMount = client.mock.calls.length;
+    expect(atMount).toBeGreaterThan(0);
+    await vi.advanceTimersByTimeAsync(11_000);
+    expect(client.mock.calls.length).toBeGreaterThan(atMount);
+    // 空闲轮询不该像模拟进行中那样每 2 秒一次。
+    expect(client.mock.calls.length).toBeLessThan(atMount + 5);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it('shows a connection failure and never presents an active session', async () => {
   render(<App client={async () => { throw new Error('后台未启动'); }} />);
   expect(await screen.findByRole('alert')).toHaveProperty('textContent', expect.stringContaining('后台未启动'));
