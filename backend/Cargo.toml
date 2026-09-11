@@ -1,0 +1,23 @@
+[package]
+name = "justlocation-backend"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+publish = false
+
+[[bin]]
+name = "justlocationd"
+path = "src/main.rs"
+
+[profile.release]
+lto = "thin"
+strip = "debuginfo"
+
+[dependencies]
+base64 = "0.23.1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+ureq = { version = "3.4.1", default-features = false, features = ["rustls"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+libc = "0.2"

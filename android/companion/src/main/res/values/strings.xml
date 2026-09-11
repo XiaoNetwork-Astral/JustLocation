@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">JustLocation</string>
+    <string name="workspace_status">JustLocation\n辅助应用尚未连接后台</string>
+</resources>

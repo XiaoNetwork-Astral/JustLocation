@@ -1,0 +1,26 @@
+# ShadowHook 2.0.1's four-byte entry trampoline uses X17 for its return address.
+# An existing LDR X17 / BR X17 veneer needs that register to retain its loaded
+# destination. Reuse upstream's register-preserving resume island in this case.
+# Compile a generated copy; keep the pinned FetchContent checkout pristine.
+if(ANDROID_ABI STREQUAL "arm64-v8a")
+    set(original_source "${shadowhook_SOURCE_DIR}/shadowhook/src/main/cpp/arch/arm64/sh_inst.c")
+    file(READ "${original_source}" patched_source)
+    set(old_return "if (addr_info->is_proc_start)\n    rinfo.buf_offset +=\n        sh_a64_absolute_jump_with_ret_ip")
+    set(new_return "if (addr_info->is_proc_start && resume_addr == target_addr + self->backup_len)\n    rinfo.buf_offset +=\n        sh_a64_absolute_jump_with_ret_ip")
+    set(old_resume "if (addr_info->is_proc_start) {\n    resume_addr = target_addr + self->backup_len;\n  } else {")
+    set(new_resume "// Preserve the destination loaded by an existing LDR (literal) X17 entry.\n  bool loads_x17 = (*(const uint32_t *)target_addr & 0xff00001fU) == 0x58000011U;\n  if (addr_info->is_proc_start && !loads_x17) {\n    resume_addr = target_addr + self->backup_len;\n  } else {")
+    foreach(part return resume)
+        string(FIND "${patched_source}" "${old_${part}}" match)
+        if(match EQUAL -1)
+            message(FATAL_ERROR "ShadowHook ARM64 ${part} patch no longer matches pinned source")
+        endif()
+        string(REPLACE "${old_${part}}" "${new_${part}}" patched_source "${patched_source}")
+    endforeach()
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/patched-shadowhook")
+    set(patched_file "${CMAKE_CURRENT_BINARY_DIR}/patched-shadowhook/sh_inst.c")
+    file(CONFIGURE OUTPUT "${patched_file}" CONTENT "${patched_source}" @ONLY)
+    get_target_property(shadowhook_sources shadowhook SOURCES)
+    list(REMOVE_ITEM shadowhook_sources "${original_source}")
+    set_property(TARGET shadowhook PROPERTY SOURCES "${shadowhook_sources}")
+    target_sources(shadowhook PRIVATE "${patched_file}")
+endif()

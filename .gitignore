@@ -1,0 +1,34 @@
+# Local assistant configuration, private inputs, and historical references
+/.codex/
+
+# Private scratch notes
+草稿纸.md
+
+# Build outputs and staging
+build/
+/dist/
+.cxx/
+
+# Rust
+target/
+
+# React / Node.js
+node_modules/
+.vite/
+/webui/dist/
+
+# Android / Gradle
+.gradle/
+.kotlin/
+local.properties
+
+# Local editor state
+.idea/
+.vscode/
+
+# Local environment and signing material
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore

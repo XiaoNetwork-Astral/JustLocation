@@ -1,0 +1,9 @@
+{
+  "ndkVer": "29.0.14206865",
+  "cmakeVer": "4.0.3",
+  "ninjaSdkVer": "3.31.6",
+  "platform": "android-35",
+  "abi": "arm64-v8a",
+  "rustTarget": "aarch64-linux-android",
+  "buildToolsVer": "36.0.0"
+}
