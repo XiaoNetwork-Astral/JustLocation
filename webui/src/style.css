@@ -18,27 +18,31 @@
   font-synthesis: none;
   color-scheme: light;
 
-  /* 语义色：浅色默认值（Material 3 基准，稍后由 data-style 覆盖） */
-  --background: #fdf8f6;
-  --surface: #fdf8f6;
-  --tonalSurface: #f7f2fa;
-  --surfaceContainer: #f3edf7;
-  --surfaceContainerHigh: #ece6f0;
-  --surfaceContainerHighest: #e6e0e9;
-  --onBackground: #1d1b20;
-  --onSurface: #1d1b20;
-  --onSurfaceVariant: #49454f;
-  --onSurfaceVariantSummary: #49454f;
-  --onSurfaceGrey: #79747e;
-  --outline: #79747e;
-  --outlineVariant: #cac4d0;
-  --primary: #6750a4;
+  /* 语义色：基准取自 Fake Location 的资源值（see .codex/project/fl-ui-inventory.md），
+     这样"原版那个绿"就不会因为另选调色板而永远对不上：
+     主色 #008577、页面底 #fafafa、卡片 #ffffff、正文 #4e6161、次要 #a1a1a1、
+     分隔线 #f2d4d4d4、进度黄 #f7cd1a。 */
+  --background: #fafafa;
+  --surface: #fafafa;
+  --tonalSurface: #ffffff;
+  --surfaceContainer: #ffffff;
+  --surfaceContainerHigh: #f2f2f2;
+  --surfaceContainerHighest: #e8e8e8;
+  --onBackground: #4e6161;
+  --onSurface: #4e6161;
+  --onSurfaceVariant: #4e6161;
+  --onSurfaceVariantSummary: #a1a1a1;
+  --onSurfaceGrey: #a1a1a1;
+  --outline: #d8d8d8;
+  --outlineVariant: #f2d4d4d4;
+  --primary: #008577;
   --onPrimary: #ffffff;
-  --primaryContainer: #eaddff;
-  --onPrimaryContainer: #21005d;
-  --primaryVariant: #4f378b;
-  --secondaryContainer: #e8def8;
-  --tertiaryContainer: #ffd8e4;
+  --primaryContainer: #d7efec;
+  --onPrimaryContainer: #00453d;
+  --primaryVariant: #007266;
+  --secondaryContainer: #e6f2f0;
+  --tertiaryContainer: #e8f0f8;
+  --progress: #f7cd1a;
   --error: #b3261e;
   --onError: #ffffff;
   --errorContainer: #f9dedc;
@@ -84,37 +88,38 @@
 }
 
 /* 深色令牌：先给一套默认，再分别按外观覆盖 */
+/* 深色令牌：原版没有深色模式，这里是按上面那套绿色派生的值，保持同一套语义名。 */
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --background: #141218;
-  --surface: #141218;
-  --tonalSurface: #1d1b20;
-  --surfaceContainer: #211f26;
-  --surfaceContainerHigh: #2b2930;
-  --surfaceContainerHighest: #36343b;
-  --onBackground: #e6e0e9;
-  --onSurface: #e6e0e9;
-  --onSurfaceVariant: #cac4d0;
-  --onSurfaceVariantSummary: #cac4d0;
-  --onSurfaceGrey: #938f99;
-  --outline: #938f99;
-  --outlineVariant: #49454f;
-  --primary: #d0bcff;
-  --onPrimary: #381e72;
-  --primaryContainer: #4f378b;
-  --onPrimaryContainer: #eaddff;
-  --primaryVariant: #b39ddb;
-  --secondaryContainer: #4a4458;
-  --tertiaryContainer: #633b48;
+  --background: #121514;
+  --surface: #121514;
+  --tonalSurface: #1b1f1e;
+  --surfaceContainer: #1b1f1e;
+  --surfaceContainerHigh: #242928;
+  --surfaceContainerHighest: #2e3433;
+  --onBackground: #c8d2d0;
+  --onSurface: #c8d2d0;
+  --onSurfaceVariant: #c8d2d0;
+  --onSurfaceVariantSummary: #8b9593;
+  --onSurfaceGrey: #8b9593;
+  --outline: #3a403f;
+  --outlineVariant: #2a2f2e;
+  --primary: #4fd1c0;
+  --onPrimary: #00312b;
+  --primaryContainer: #0f3f39;
+  --onPrimaryContainer: #b8ece4;
+  --primaryVariant: #35b3a3;
+  --secondaryContainer: #1f2f2d;
+  --tertiaryContainer: #22303a;
+  --progress: #f7cd1a;
   --error: #f2b8b5;
   --onError: #601410;
   --errorContainer: #8c1d18;
   --onErrorContainer: #f9dedc;
-  --scrim: #000000;
-  --inverseSurface: #e6e0e9;
-  --inverseOnSurface: #322f35;
-  --success: #8fd6a2;
-  --successContainer: #1f4529;
+  --inverseSurface: #c8d2d0;
+  --inverseOnSurface: #1b1f1e;
+  --success: #7fd6a4;
+  --successContainer: #14351f;
 }
 
 /* 跟随系统：未显式选择浅色时，套用深色令牌 */
@@ -134,11 +139,11 @@
     --onSurfaceGrey: #938f99;
     --outline: #938f99;
     --outlineVariant: #49454f;
-    --primary: #d0bcff;
-    --onPrimary: #381e72;
-    --primaryContainer: #4f378b;
-    --onPrimaryContainer: #eaddff;
-    --primaryVariant: #b39ddb;
+    --primary: #4fd1c0;
+    --onPrimary: #00312b;
+    --primaryContainer: #0f3f39;
+    --onPrimaryContainer: #b8ece4;
+    --primaryVariant: #35b3a3;
     --secondaryContainer: #4a4458;
     --tertiaryContainer: #633b48;
     --error: #f2b8b5;
@@ -214,11 +219,11 @@
   --onSurfaceGrey: #999999;
   --outline: #cccccc;
   --outlineVariant: #e5e5e5;
-  --primary: #3482ff;
+  --primary: #2a9d8f;
   --onPrimary: #ffffff;
-  --primaryContainer: #dcebff;
-  --onPrimaryContainer: #0a3d80;
-  --primaryVariant: #5c9dff;
+  --primaryContainer: #d6f0ec;
+  --onPrimaryContainer: #0c3b36;
+  --primaryVariant: #1f7d72;
   --secondaryContainer: #e8f0fe;
   --tertiaryContainer: #f0e6ff;
   --error: #e11919;
@@ -243,10 +248,10 @@
     --onSurfaceGrey: #737373;
     --outline: #4d4d4d;
     --outlineVariant: #333333;
-    --primary: #5c9dff;
-    --onPrimary: #00274d;
-    --primaryContainer: #143a66;
-    --onPrimaryContainer: #d6e6ff;
+    --primary: #6ec8bb;
+    --onPrimary: #00302b;
+    --primaryContainer: #123f3a;
+    --onPrimaryContainer: #cdeee9;
     --error: #ff6b6b;
     --errorContainer: #4d1414;
     --onErrorContainer: #ffd9d9;
@@ -268,10 +273,10 @@
   --onSurfaceGrey: #737373;
   --outline: #4d4d4d;
   --outlineVariant: #333333;
-  --primary: #5c9dff;
-  --onPrimary: #00274d;
-  --primaryContainer: #143a66;
-  --onPrimaryContainer: #d6e6ff;
+  --primary: #6ec8bb;
+  --onPrimary: #00302b;
+  --primaryContainer: #123f3a;
+  --onPrimaryContainer: #cdeee9;
   --error: #ff6b6b;
   --errorContainer: #4d1414;
   --onErrorContainer: #ffd9d9;
@@ -498,7 +503,7 @@ dialog::backdrop { background: color-mix(in srgb, var(--scrim) 55%, transparent)
 
 /* ============================ 4. 布局层 ============================ */
 
-.app-shell { min-height: 100dvh; display: grid; grid-template-columns: 268px minmax(0, 1fr); }
+.app-shell { height: 100dvh; display: grid; grid-template-columns: 268px minmax(0, 1fr); overflow: hidden; }
 .sidebar {
   background: var(--surfaceContainer);
   padding: 36px 12px 20px;
@@ -521,11 +526,22 @@ nav button[aria-current='page'] { color: var(--navActiveOn); background: var(--n
 .sidebar-footer small { display: block; margin-top: 8px; font-size: var(--fontTiny); }
 .dot { display: inline-block; width: 6px; height: 6px; background: var(--onSurfaceGrey); border-radius: 50%; margin-right: 8px; }
 .dot.connected { background: var(--success); }
-main { min-width: 0; }
-.topbar { display: flex; align-items: center; justify-content: flex-end; gap: 8px; height: 68px; padding: 12px 24px; color: var(--onSurfaceVariant); }
+/* 应用骨架：固定页头 + 中间独立滚动区。
+   原版是"顶部 AppBar + 滚动内容"，而不是网页那种整页滚动；整页滚动会让
+   页头和标题一起被推走，用起来不像手机应用，所以这里固定页头、只让内容滚动。 */
+main { min-width: 0; display: flex; flex-direction: column; min-height: 100dvh; max-height: 100dvh; overflow: hidden; }
+.topbar {
+  display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+  flex-shrink: 0; height: 64px; padding: 12px 20px;
+  color: var(--onSurfaceVariant); background: var(--background);
+}
 .topbar > span, .nav-toggle { display: none !important; }
 .topbar-title { font-size: var(--fontRow); }
-.page-content { max-width: 860px; padding: 4px var(--pagePadding) 56px; margin: 0 auto; }
+.page-content {
+  flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  width: 100%; max-width: 860px; margin: 0 auto;
+  padding: 4px var(--pagePadding) 32px;
+}
 .page-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .page-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .page-actions .text-button { font-size: var(--fontBody); }
@@ -751,7 +767,7 @@ dt { color: var(--onSurfaceVariant); } dd { margin: 0; }
 /* ============================ 5. 响应式 ============================ */
 
 @media (max-width: 899px) {
-  .app-shell { display: block; }
+  .app-shell { display: block; height: 100dvh; overflow: hidden; }
   .sidebar {
     position: fixed; z-index: 30; width: min(300px, 85vw);
     transform: translateX(-100%); visibility: hidden;
