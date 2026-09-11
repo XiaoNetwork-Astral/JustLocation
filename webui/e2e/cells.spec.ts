@@ -1,13 +1,12 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 
 /**
- * 功能开关的语义层 checkbox 只有 1px 且 `pointer-events: none`（视觉在旁边的 .switch 上），
- * 鼠标点不到它，所以用键盘激活：聚焦后按空格，跟键盘/读屏用户的操作一致。
+ * 切换开关。开关就是可见的 checkbox 本身，直接点它就是真实用户的操作路径；
+ * 如果这条失败，说明真机上手指也点不动，属于产品缺陷而不是测试写法问题。
+ * 状态已经符合期望时不再点击，避免"点两下等于没点"。
  */
 async function toggleSwitch(page: Page, box: Locator, checked: boolean) {
-  await box.focus();
-  await expect(box).toBeFocused();
-  await page.keyboard.press('Space');
+  if (await box.isChecked() !== checked) await box.click();
   await expect(box).toBeChecked({ checked });
 }
 
@@ -41,10 +40,10 @@ test('mobile cell panel configures detected cards, applies target data and prese
   const cellsSwitch = page.getByRole('checkbox', { name: '基站模拟', exact: true });
   await expect(page.getByText('使用目标位置附近的基站数据')).toBeVisible();
   await toggleSwitch(page, cellsSwitch, true);
-  const dialog = page.getByRole('dialog', { name: '附近基站' });
+  const dialog = page.getByRole('dialog', { name: '基站模拟' });
   await expect(dialog).toBeVisible();
-  await page.getByLabel('模拟基站', { exact: true }).check();
-  await page.getByLabel('模拟 SIM 运营商', { exact: true }).check();
+  await toggleSwitch(page, page.getByRole('checkbox', { name: '模拟基站', exact: true }), true);
+  await toggleSwitch(page, page.getByRole('checkbox', { name: '模拟 SIM 运营商', exact: true }), true);
   await page.getByText('修改运营商', { exact: true }).click();
   await page.getByLabel('运营商名称').fill('自己的运营商📱');
   await page.getByRole('button', { name: '保存模拟设置' }).click();

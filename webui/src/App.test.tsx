@@ -223,7 +223,7 @@ it('opens the cell data page from the cell switch when no operator is configured
   await screen.findByText('后台已连接');
   const user = userEvent.setup();
   await user.click(screen.getByRole('checkbox', { name: '基站模拟' }));
-  expect(await screen.findByText('还没有基站数据')).toBeTruthy();
+  expect(await screen.findByText('还没有查询结果。上面的按钮会按目标位置取这一带的基站，也可以直接导入离线数据。')).toBeTruthy();
   // 没有可配置的运营商时不应该偷偷改动后台配置。
   expect(client.mock.calls.filter(call => call[0]?.op === 'set_telephony')).toHaveLength(0);
 });

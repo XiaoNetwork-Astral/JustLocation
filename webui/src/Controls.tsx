@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 
 type SwitchRowProps = {
   icon?: ReactNode;
@@ -14,18 +14,15 @@ type SwitchRowProps = {
 /**
  * 整行可点的开关行。
  *
- * 语义由一个原生 checkbox 承载（它能表达 checked/disabled，键盘操作也免费），
- * 名称直接写在 checkbox 的 aria-label 上；视觉由 .switch 呈现。视觉开关是一个
- * label（htmlFor 指向该 checkbox），所以点它、点标题文字都能切换。checkbox 自身
- * 用 pointer-events: none 隐藏、不参与命中测试；视觉开关标记 aria-hidden，避免
- * 辅助技术读到两个同名控件。
+ * 开关就是一个 `input[type=checkbox]`，用 CSS（`.switch`）把它画成开关样子：
+ * 这样 checked / disabled / 键盘空格 / 点击全部由浏览器原生处理，不需要
+ * 隐藏输入框再用 label 转发点击——那种结构在真机上出现过"点两次相互抵消"和
+ * 被其他 CSS 覆盖成默认复选框的问题。标题用 label 关联，点文字也能切换。
  */
 export function SwitchRow({ icon, title, summary, checked, disabled, value, onChange }: SwitchRowProps) {
-  // 用标题派生 id：同一面板里标题唯一，调试和测试时也容易对应。
-  const id = `switch-${title}`;
+  // id 必须唯一：同一标题可能在页面上出现两次（首页与基站面板都有"基站模拟"）。
+  const id = `switch-${useId()}`;
   return <div className={`row switch-row${disabled ? ' disabled' : ''}`}>
-    <input className="switch-input" id={id} type="checkbox" aria-label={title} checked={checked} disabled={disabled}
-      onChange={event => onChange(event.target.checked)} />
     {icon && <span className="row-icon">{icon}</span>}
     <label className="row-text" htmlFor={id}>
       <span className="row-title">{title}</span>
@@ -33,7 +30,8 @@ export function SwitchRow({ icon, title, summary, checked, disabled, value, onCh
     </label>
     <span className="row-end">
       {value && <span className="row-value">{value}</span>}
-      <label className="switch" htmlFor={id} aria-hidden="true" data-checked={checked ? 'true' : 'false'} />
+      <input className="switch" id={id} type="checkbox" aria-label={title} checked={checked} disabled={disabled}
+        onChange={event => onChange(event.target.checked)} />
     </span>
   </div>;
 }

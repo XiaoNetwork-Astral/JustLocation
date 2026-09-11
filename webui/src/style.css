@@ -331,21 +331,17 @@ input::placeholder, textarea::placeholder { color: var(--onSurfaceGrey); opacity
 .switch-row { cursor: pointer; }
 .switch-row.disabled { opacity: .45; cursor: default; }
 
-/* 开关：两套外观共用一套结构，只换令牌。
-   语义由 .switch-input（原生 checkbox）承担，视觉由 .switch 承担。 */
-.switch-input {
-  position: absolute;
-  width: 1px; height: 1px;
-  margin: 0; padding: 0; border: 0;
-  opacity: 0;
-  pointer-events: none;
-}
+/* 开关：就是一个原生 checkbox，用 appearance:none 画成开关。
+   checked / disabled / 键盘空格都由浏览器处理，因此不需要隐藏输入框再转发点击。 */
 .switch {
+  appearance: none;
+  -webkit-appearance: none;
   position: relative;
   flex-shrink: 0;
   cursor: pointer;
   width: 46px;
   height: 28px;
+  margin: 0;
   border-radius: var(--radiusPill);
   background: var(--surfaceContainerHighest);
   border: 1px solid color-mix(in srgb, var(--outline) 40%, transparent);
@@ -361,19 +357,20 @@ input::placeholder, textarea::placeholder { color: var(--onSurfaceGrey); opacity
   border-radius: 50%;
   background: var(--onSurfaceGrey);
   transform: translateY(-50%);
-  transition: transform .18s, background-color .18s, width .18s;
+  transition: transform .18s, background-color .18s;
 }
-.switch[data-checked='true'] {
+.switch:checked {
   background: var(--primary);
   border-color: var(--primary);
 }
-.switch[data-checked='true']::after {
+.switch:checked::after {
   background: var(--onPrimary);
   transform: translateY(-50%) translateX(18px);
 }
+.switch:disabled { cursor: default; opacity: .5; }
 :root[data-style='miuix'] .switch { width: 48px; height: 30px; }
 :root[data-style='miuix'] .switch::after { width: 24px; height: 24px; }
-:root[data-style='miuix'] .switch[data-checked='true']::after { transform: translateY(-50%) translateX(16px); }
+:root[data-style='miuix'] .switch:checked::after { transform: translateY(-50%) translateX(16px); }
 
 /* 分组小标题（米 UI 习惯：放在卡片外，弱化） */
 .group-title {
@@ -603,7 +600,7 @@ dt { color: var(--onSurfaceVariant); } dd { margin: 0; }
 .app-picker h3 { font-size: var(--fontRow); font-weight: var(--weightStrong); }
 .app-list { min-height: 0; overflow-y: auto; overscroll-behavior: contain; flex: 1; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
 .app-choice { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 0; border-bottom: var(--separator); cursor: pointer; }
-.app-choice input { width: 20px; height: 20px; flex-shrink: 0; accent-color: var(--primary); }
+.app-choice input:not(.switch-input) { width: 20px; height: 20px; flex-shrink: 0; accent-color: var(--primary); }
 .app-choice span { min-width: 0; overflow-wrap: anywhere; font-size: var(--fontBody); }
 .app-choice:has(input:disabled) { opacity: .6; cursor: default; }
 .picker-empty, .app-picker > p { color: var(--onSurfaceVariantSummary); font-size: var(--fontBody); padding: 14px 0; }
@@ -613,7 +610,7 @@ dt { color: var(--onSurfaceVariant); } dd { margin: 0; }
 .picker-toolbar input { width: 18px; height: 18px; margin: 0; }
 .app-picker > .search-field, .picker-toolbar { flex-shrink: 0; }
 .choice { display: flex; align-items: center; gap: 14px; padding: 14px 0; }
-.choice input { width: 20px; height: 20px; accent-color: var(--primary); }
+.choice input:not(.switch-input) { width: 20px; height: 20px; accent-color: var(--primary); }
 .choice strong { font-size: var(--fontRow); font-weight: var(--weightRow); }
 .choice small { display: block; font-size: var(--fontSmall); margin-top: 4px; color: var(--onSurfaceVariantSummary); }
 
@@ -681,6 +678,10 @@ dt { color: var(--onSurfaceVariant); } dd { margin: 0; }
 .cell-heading h2 { font-size: 20px; font-weight: 500; }
 .cell-content { width: 100%; max-width: 760px; margin: 0 auto; padding: 4px var(--pagePadding) max(20px, env(safe-area-inset-bottom)); overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
 .cell-content p { line-height: 1.6; color: var(--onSurfaceVariant); margin-bottom: 12px; overflow-wrap: anywhere; }
+.cell-content .card > h2 { margin-bottom: 4px; }
+.cell-content .card > p:first-of-type { margin-bottom: 12px; }
+.cell-state { padding: 10px 12px; border-radius: var(--radiusField); background: var(--surfaceContainerHigh); color: var(--onSurfaceVariant); font-size: var(--fontSmall); }
+.tonal-button.muted { opacity: .5; }
 .cell-settings { border-radius: var(--radiusCard); background: var(--cardTint); padding: 14px 16px; margin: 12px 0; }
 .cell-settings summary { cursor: pointer; color: var(--primary); }
 .cell-settings[open] summary { margin-bottom: 12px; }
@@ -697,8 +698,9 @@ dt { color: var(--onSurfaceVariant); } dd { margin: 0; }
 .telephony-settings { border-bottom: var(--separator); padding-bottom: 12px; margin-bottom: 16px; }
 .telephony-settings h3 { margin: 0 0 10px; font-size: var(--fontRow); font-weight: var(--weightStrong); }
 .telephony-settings fieldset { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 8px; }
+/* 开关行的语义 checkbox 由 .switch-input 统一处理，这里不再给复选框单独定尺寸，
+   否则会覆盖 .switch-input 的隐藏样式，把开关显示成一个默认复选框。 */
 .telephony-settings .choice { min-height: 44px; }
-.telephony-settings input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--primary); flex-shrink: 0; }
 
 /* 功能占位 */
 .feature-placeholder { padding-top: 48px; }

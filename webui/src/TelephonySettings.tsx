@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { State, Subscription, TelephonyConfig } from './control';
+import { SwitchRow } from './Controls';
 
 const defaults: TelephonyConfig = { cells_enabled: false, sim_enabled: false, radius_m: 500, subscriptions: [] };
 function draftFor(state: State): TelephonyConfig {
@@ -54,21 +55,24 @@ export function TelephonySettings({ state, busy, onSave }: { state: State; busy:
     <h3>模拟设置</h3>
     {!state.phone_connected ? <p role="status">等待电话服务连接</p> : state.detected_subscriptions == null
       ? <p role="status">正在读取 SIM 卡</p> : !state.detected_subscriptions.length && <p role="status">没有检测到可用的 SIM 卡</p>}
-    <fieldset disabled={busy || saving || unavailable}>
-      <label className="choice"><input type="checkbox" checked={draft.cells_enabled} onChange={e => update({ ...draft, cells_enabled: e.target.checked })} />模拟基站</label>
-      <label className="choice"><input type="checkbox" checked={draft.sim_enabled} onChange={e => update({ ...draft, sim_enabled: e.target.checked })} />模拟 SIM 运营商</label>
+    <fieldset className="telephony-fields">
+      <SwitchRow title="模拟基站" checked={draft.cells_enabled} disabled={busy || saving || unavailable}
+        summary="按目标位置附近的基站返回读数" onChange={next => update({ ...draft, cells_enabled: next })} />
+      <SwitchRow title="模拟 SIM 运营商" checked={draft.sim_enabled} disabled={busy || saving || unavailable}
+        summary="让应用读到你设置的运营商信息" onChange={next => update({ ...draft, sim_enabled: next })} />
       {draft.subscriptions.map((sub, index) => <div className="sim-card" key={`${sub.slot}:${sub.id}`}>
-        <label className="choice"><input type="checkbox" checked={sub.enabled} onChange={e => card(index, { enabled: e.target.checked })} />SIM {sub.slot + 1} · {sub.carrier}</label>
+        <SwitchRow title={`SIM ${sub.slot + 1} · ${sub.carrier}`} checked={sub.enabled} disabled={busy || saving || unavailable}
+          summary="参与基站与运营商模拟" onChange={next => card(index, { enabled: next })} />
         <details><summary>修改运营商</summary><div className="sim-fields">
-          <label className="field">运营商名称<input value={sub.carrier} onChange={e => card(index, { carrier: e.target.value })} /></label>
-          <label className="field">国家代码（MCC）<input inputMode="numeric" maxLength={3} value={sub.mcc} onChange={e => card(index, { mcc: e.target.value })} /></label>
-          <label className="field">网络代码（MNC）<input inputMode="numeric" maxLength={3} value={sub.mnc} onChange={e => card(index, { mnc: e.target.value })} /></label>
-          <label className="field">国家/地区<input maxLength={2} placeholder="例如 cn" value={sub.country} onChange={e => card(index, { country: e.target.value.toLowerCase() })} /></label>
-          <label className="field">CDMA 系统 ID（可选）<input inputMode="numeric" value={sub.cdma_sid ?? ''} onChange={e => card(index, { cdma_sid: e.target.value.trim() ? Number(e.target.value) : undefined })} /></label>
+          <label className="field">运营商名称<input disabled={busy || saving || unavailable} value={sub.carrier} onChange={e => card(index, { carrier: e.target.value })} /></label>
+          <label className="field">国家代码（MCC）<input disabled={busy || saving || unavailable} inputMode="numeric" maxLength={3} value={sub.mcc} onChange={e => card(index, { mcc: e.target.value })} /></label>
+          <label className="field">网络代码（MNC）<input disabled={busy || saving || unavailable} inputMode="numeric" maxLength={3} value={sub.mnc} onChange={e => card(index, { mnc: e.target.value })} /></label>
+          <label className="field">国家/地区<input disabled={busy || saving || unavailable} maxLength={2} placeholder="例如 cn" value={sub.country} onChange={e => card(index, { country: e.target.value.toLowerCase() })} /></label>
+          <label className="field">CDMA 系统 ID（可选）<input disabled={busy || saving || unavailable} inputMode="numeric" value={sub.cdma_sid ?? ''} onChange={e => card(index, { cdma_sid: e.target.value.trim() ? Number(e.target.value) : undefined })} /></label>
         </div></details>
       </div>)}
-      <label className="field">模拟半径（米）<input inputMode="numeric" value={radius} onChange={e => { setRadius(e.target.value); setDirty(true); setNote(''); }} /></label>
-      <button className="text-button" onClick={() => void save()}>保存模拟设置</button>
+      <label className="field">模拟半径（米）<input disabled={busy || saving || unavailable} inputMode="numeric" value={radius} onChange={e => { setRadius(e.target.value); setDirty(true); setNote(''); }} /></label>
+      <button className={`tonal-button${dirty ? '' : ' muted'}`} disabled={busy || saving || unavailable || !dirty} onClick={() => void save()}>保存模拟设置</button>
     </fieldset>
     {dirty && <p>设置有修改，保存后生效。</p>}
     {error && <p className="form-error" role="alert">{error}</p>}{note && <p role="status">{note}</p>}

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
+import { useState } from 'react';
 import userEvent from '@testing-library/user-event';
 import { SwitchRow } from './Controls';
 
@@ -26,4 +27,23 @@ it('passes the requested value instead of dropping the argument', async () => {
   render(<SwitchRow title="基站模拟" checked onChange={onChange} />);
   await userEvent.click(screen.getByRole('checkbox', { name: '基站模拟' }));
   expect(onChange).toHaveBeenCalledWith(false);
+});
+
+it('toggles once per click and also responds to the row title', async () => {
+  // 收回来的缺陷：开关点不动，以及点一次相互抵消。开关现在是原生 checkbox 本身，
+  // 这里确认点开关只切换一次，点标题文字同样只切换一次。
+  function Harness() {
+    const [on, setOn] = useState(false);
+    return <><SwitchRow title="作用范围" checked={on} onChange={setOn} /><span data-testid="state">{on ? 'on' : 'off'}</span></>;
+  }
+  render(<Harness />);
+  const user = userEvent.setup();
+  const box = screen.getByRole('checkbox', { name: '作用范围' }) as HTMLInputElement;
+  await user.click(box);
+  expect(box.checked).toBe(true);
+  expect(screen.getByTestId('state').textContent).toBe('on');
+  await user.click(box);
+  expect(box.checked).toBe(false);
+  await user.click(screen.getByText('作用范围'));
+  expect(box.checked).toBe(true);
 });
