@@ -119,8 +119,11 @@ class MainActivity : Activity() {
     private fun readWifi() {
         permitted {
             val wifi = getSystemService(android.net.wifi.WifiManager::class.java)
-            val info = try { wifi.connectionInfo } catch (error: Exception) { null }
-            if (info == null || info.ssid == null) log("Wi-Fi：无法读取连接信息")
+            // 读取连接信息与扫描结果都属于受保护接口：应用自己必须持有 ACCESS_WIFI_STATE，
+            // 模块的替换只作用于返回值，不会替应用绕过权限检查。
+            val info = try { wifi.connectionInfo } catch (error: Exception) { log("Wi-Fi：${error.message}"); null }
+            if (info == null) return@permitted
+            if (info.ssid == null) log("Wi-Fi：无法读取连接信息")
             else log(String.format(Locale.ROOT, "Wi-Fi 连接\nSSID %s\nBSSID %s\n信号 %d dBm · 频率 %d MHz · 链路 %d Mbps",
                 info.ssid, info.bssid, info.rssi, info.frequency, info.linkSpeed))
             val results = try { wifi.scanResults } catch (error: Exception) {
