@@ -2,6 +2,7 @@ package me.idk.justlocation.bridge;
 
 import android.location.Location;
 import android.location.GnssStatus;
+import android.net.wifi.WifiInfo;
 import android.os.SystemClock;
 import android.util.Log;
 import org.json.JSONObject;
@@ -27,6 +28,10 @@ public final class BridgeEntry {
     private static int gnssFlags;
     private static volatile TelephonySnapshot telephony;
     private static TelephonyRegistryAdapter telephonyRegistry;
+    /** Wi-Fi 合成读数：与定位/卫星同一套作用范围与新鲜度规则。 */
+    private static volatile WifiOutput wifi;
+    /** 反射构造 ParceledListSlice：Wi-Fi 服务的返回类型在 framework 的混淆包里。 */
+    private static java.lang.reflect.Constructor<?> listSlice;
     private BridgeEntry() {}
 
     private static native String readState(int installed);
@@ -37,6 +42,7 @@ public final class BridgeEntry {
         installGnss(systemServerLoader, "GnssStatusProvider", "IGnssStatusListener", 2);
         installGnss(systemServerLoader, "GnssNmeaProvider", "IGnssNmeaListener", 4);
         installTelephonyRegistry(systemServerLoader);
+        installWifi(systemServerLoader);
         Thread thread = new Thread(() -> {
             while (!Thread.currentThread().isInterrupted()) {
                 try {
@@ -44,7 +50,9 @@ public final class BridgeEntry {
                     fix = response == null || !hooksInstalled ? null : Fix.parse(response);
                     try { telephony = TelephonySnapshot.parse(response, SystemClock.elapsedRealtime()); }
                     catch (Exception error) { telephony = null; }
-                } catch (Exception error) { fix = null; telephony = null; }
+                    try { wifi = WifiOutput.parse(response, SystemClock.elapsedRealtime()); }
+                    catch (Exception error) { wifi = null; }
+                } catch (Exception error) { fix = null; telephony = null; wifi = null; }
                 Fix current = fix;
                 gnssOutput = current == null ? null : new GnssListener.Output(current.scope,
                         new GnssFrame(current.latitude, current.longitude, current.altitude, current.speed, current.bearing, System.currentTimeMillis()),
@@ -92,8 +100,50 @@ public final class BridgeEntry {
 
     }
 
-    private static void installTelephonyRegistry(ClassLoader loader) {
+    /**
+     * 安装 Wi-Fi 的两处 Hook：当前连接信息与扫描结果。
+     *
+     * <p>Android 15 的 `WifiServiceImpl` 由 Wi-Fi 主line 模块提供实现类，但服务对象是
+     * system_server 注册的，所以和定位一样在 `system_server` 里注入，不需要新的定向入口。
+     * 两个目标方法自己会先做权限检查（`enforceAccessPermission`、
+     * `enforceCanAccessScanResults`）再取数据，替换的是它们的**返回值**，
+     * 因此调用方该有的权限与会抛出的异常都照旧。
+     */
+    private static void installWifi(ClassLoader loader) {
         try {
+            Class<?> service = Class.forName("com.android.server.wifi.WifiServiceImpl", false, loader);
+            Class<?> info = Class.forName("android.net.wifi.WifiInfo", false, loader);
+            Class<?> scan = Class.forName("android.net.wifi.ScanResult", false, loader);
+            Class<?> slice = Class.forName(
+                    "com.android.wifi.x.com.android.modules.utils.ParceledListSlice", false, loader);
+            listSlice = slice.getConstructor(List.class);
+            install(service.getDeclaredMethod("getConnectionInfo", String.class, String.class), call -> {
+                WifiOutput current = wifi;
+                if (current != null && current.appliesTo((String) call.arguments[1], SystemClock.elapsedRealtime())) {
+                    Object result = call.original();
+                    // Wi-Fi 关闭时系统返回一个空对象，它的 SSID 就是占位名；
+                    // 这种情况下不接管，否则关掉 Wi-Fi 反而会凭空出现一个"已连接"的网络。
+                    if (result != null && !WifiSettings.isPlaceholder(((WifiInfo) result).getSSID())) {
+                        call.arguments[0] = current.connectionInfo();
+                        return call.original();
+                    }
+                    return result;
+                }
+                return call.original();
+            });
+            install(service.getDeclaredMethod("getScanResults", String.class, String.class), call -> {
+                WifiOutput current = wifi;
+                if (current == null || !current.appliesTo((String) call.arguments[0], SystemClock.elapsedRealtime())) return call.original();
+                // 泛型在擦除后与方法的参数类型一致：传一个 ArrayList<ScanResult> 进去即可。
+                return listSlice.newInstance(current.scanResults(SystemClock.elapsedRealtime()));
+            });
+            Log.i(TAG, "Wi-Fi service hooks installed");
+        } catch (Exception error) {
+            Log.w(TAG, "Cannot install Wi-Fi hooks; Wi-Fi channel remains system output", error);
+        }
+    }
+
+    private static void installTelephonyRegistry(ClassLoader loader) {        try {
             Class<?> registry = Class.forName("com.android.server.TelephonyRegistry", false, loader);
             Class<?> listener = Class.forName("com.android.internal.telephony.IPhoneStateListener", false, loader);
             TelephonyRegistryAdapter adapter = new TelephonyRegistryAdapter(registry,
