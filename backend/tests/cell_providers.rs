@@ -163,13 +163,10 @@ fn boxes_cover_date_line_poles_and_respect_provider_area_limit() {
 }
 
 #[test]
-fn legacy_supplier_is_explicitly_unavailable_until_auth_is_verified() {
-    let mut http = MockHttp::default();
-    assert_eq!(
-        fetch(&mut http, &Provider::FakeLocation, query(), 0).unwrap_err(),
-        QueryError::NotReady
-    );
-    assert!(http.requests.is_empty());
+fn provider_kind_serialises_to_the_names_the_panel_sends() {
+    // 接口上的名字：改这里等于改协议，面板的 `ProviderKind` 要一起改。
+    assert_eq!(json!(ProviderKind::OpenCellId), json!("open_cell_id"));
+    assert_eq!(json!(ProviderKind::Custom), json!("custom"));
 }
 
 #[test]

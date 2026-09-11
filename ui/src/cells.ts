@@ -1,6 +1,6 @@
 import { exec as ksuExec } from 'kernelsu';
 
-export type ProviderKind = 'open_cell_id' | 'fake_location' | 'custom';
+export type ProviderKind = 'open_cell_id' | 'custom';
 export interface Coordinate { latitude: number; longitude: number }
 export interface Cell { identity: { radio: string; [key: string]: string | number }; position: Coordinate; range_m: number }
 export interface CellRegion { center: Coordinate; radius_m: number; source: string; fetched_at_ms: number; cells: Cell[] }
@@ -12,7 +12,7 @@ export interface CellDataset {
 }
 export interface CellSettings {
   primary: ProviderKind; fallback: ProviderKind | null; opencellid_configured: boolean;
-  custom_endpoint: string; custom_token_configured: boolean; fake_location_ready: boolean;
+  custom_endpoint: string; custom_token_configured: boolean;
 }
 export interface CellSettingsUpdate {
   primary: ProviderKind; fallback: ProviderKind | null; custom_endpoint: string;

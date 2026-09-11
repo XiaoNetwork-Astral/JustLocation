@@ -8,7 +8,7 @@ import type { State, TelephonyConfig } from './control';
 import type { CellRegion } from './cells';
 
 const providers: { value: ProviderKind; label: string }[] = [
-  { value: 'open_cell_id', label: 'OpenCellID' }, { value: 'fake_location', label: 'Fake Location（待接入）' }, { value: 'custom', label: '自定义' },
+  { value: 'open_cell_id', label: 'OpenCellID' }, { value: 'custom', label: '自定义' },
 ];
 const availabilityText: Record<string, string> = {
   disabled: '基站模拟未启用',
@@ -167,8 +167,8 @@ export function CellPanel({ target, client = cellClient, onClose, state, control
       </section>
 
       {settings && <details className="card cell-settings"><summary>数据来源设置</summary>
-        <label className="field">首选供应商<select disabled={busy} value={settings.primary} onChange={e => setSettings({ ...settings, primary: e.target.value as ProviderKind })}>{providers.map(p => <option key={p.value} value={p.value} disabled={p.value === 'fake_location'}>{p.label}</option>)}</select></label>
-        <label className="field">备用供应商<select disabled={busy} value={settings.fallback || ''} onChange={e => setSettings({ ...settings, fallback: e.target.value as ProviderKind || null })}><option value="">不使用备用</option>{providers.map(p => <option key={p.value} value={p.value} disabled={p.value === 'fake_location' || p.value === settings.primary}>{p.label}</option>)}</select></label>
+        <label className="field">首选供应商<select disabled={busy} value={settings.primary} onChange={e => setSettings({ ...settings, primary: e.target.value as ProviderKind })}>{providers.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}</select></label>
+        <label className="field">备用供应商<select disabled={busy} value={settings.fallback || ''} onChange={e => setSettings({ ...settings, fallback: e.target.value as ProviderKind || null })}><option value="">不使用备用</option>{providers.map(p => <option key={p.value} value={p.value} disabled={p.value === settings.primary}>{p.label}</option>)}</select></label>
         <label className="field">OpenCellID API Key<input type="password" autoComplete="off" disabled={busy} value={key ?? ''} placeholder={key === '' ? '保存后清除' : settings.opencellid_configured ? '已保存，留空不修改' : '填写自己的 API Key'} onChange={e => setKey(e.target.value || undefined)} /></label>
         {settings.opencellid_configured && <button className="text-button" disabled={busy} onClick={() => setKey('')}>清除已保存的 API Key</button>}
         {(settings.primary === 'custom' || settings.fallback === 'custom') && <>
@@ -176,7 +176,6 @@ export function CellPanel({ target, client = cellClient, onClose, state, control
           <label className="field">访问令牌（可选）<input type="password" autoComplete="off" disabled={busy} value={token ?? ''} placeholder={token === '' ? '保存后清除' : settings.custom_token_configured ? '已保存，留空不修改' : '填写访问令牌'} onChange={e => setToken(e.target.value || undefined)} /></label>
           {settings.custom_token_configured && <button className="text-button" disabled={busy} onClick={() => setToken('')}>清除已保存的访问令牌</button>}
         </>}
-        {settings.fallback === 'fake_location' && <p>Fake Location 尚未接通，当前不会自动切换到它。</p>}
         <button className="tonal-button" disabled={busy || !dirty} onClick={() => void saveSettings()}>保存数据来源</button>
       </details>}
 

@@ -19,9 +19,9 @@ fn settings_default_to_opencellid_and_keep_saved_credentials_out_of_responses() 
     let service = CellService::new(&dir);
     let status = send(&service, json!({"version":1,"op":"settings"}));
     assert_eq!(status["settings"]["primary"], "open_cell_id");
-    assert_eq!(status["settings"]["fallback"], "fake_location");
-    assert_eq!(status["settings"]["fake_location_ready"], false);
-    let update = json!({"version":1,"op":"configure","settings":{"primary":"open_cell_id","fallback":"fake_location","opencellid_key":"user-secret","custom_endpoint":"https://cells.example/query","custom_token":"token-secret"}});
+    assert_eq!(status["settings"]["fallback"], "custom");
+    assert!(status["settings"].get("fake_location_ready").is_none());
+    let update = json!({"version":1,"op":"configure","settings":{"primary":"open_cell_id","fallback":"custom","opencellid_key":"user-secret","custom_endpoint":"https://cells.example/query","custom_token":"token-secret"}});
     let status = send(&service, update);
     assert_eq!(status["ok"], true, "{status}");
     assert_eq!(status["settings"]["opencellid_configured"], true);
@@ -40,6 +40,28 @@ fn settings_default_to_opencellid_and_keep_saved_credentials_out_of_responses() 
         send(&service, json!({"version":1,"op":"settings"}))["settings"]["custom_endpoint"],
         "https://cells.example/query"
     );
+    std::fs::remove_file(dir.join("cell-providers.json")).unwrap();
+    std::fs::remove_dir(dir).unwrap();
+}
+
+#[test]
+fn a_stored_file_naming_the_removed_supplier_still_loads_the_rest_of_the_settings() {
+    // 历史配置里可能还写着那个已删除的供应商名。宽容读法要把它降级成默认值，
+    // 而不是让整份设置读取失败——后者会让面板连 API Key 都看不到。
+    let dir = std::env::temp_dir().join(format!("justlocation-cell-legacy-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("cell-providers.json"),
+        r#"{"primary":"fake_location","fallback":"fake_location","opencellid_key":"kept","custom_endpoint":"https://cells.example/query","custom_token":null}"#,
+    )
+    .unwrap();
+    let service = CellService::new(&dir);
+    let status = send(&service, json!({"version":1,"op":"settings"}));
+    assert_eq!(status["ok"], true, "{status}");
+    // 降级成默认值，但同一份文件里的凭据不能丢。
+    assert_eq!(status["settings"]["primary"], "open_cell_id");
+    assert_eq!(status["settings"]["fallback"], "open_cell_id");
+    assert_eq!(status["settings"]["opencellid_configured"], true);
     std::fs::remove_file(dir.join("cell-providers.json")).unwrap();
     std::fs::remove_dir(dir).unwrap();
 }

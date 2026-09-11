@@ -12,7 +12,9 @@ const FRESH_MS: u64 = 7 * 86_400_000;
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Settings {
+    #[serde(deserialize_with = "crate::cell_providers::lenient_kind")]
     primary: ProviderKind,
+    #[serde(default, deserialize_with = "crate::cell_providers::lenient_optional_kind")]
     fallback: Option<ProviderKind>,
     opencellid_key: String,
     custom_endpoint: String,
@@ -22,7 +24,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             primary: ProviderKind::OpenCellId,
-            fallback: Some(ProviderKind::FakeLocation),
+            fallback: Some(ProviderKind::Custom),
             opencellid_key: String::new(),
             custom_endpoint: String::new(),
             custom_token: None,
@@ -35,7 +37,6 @@ impl Settings {
             ProviderKind::OpenCellId => Provider::OpenCellId {
                 key: self.opencellid_key.clone(),
             },
-            ProviderKind::FakeLocation => Provider::FakeLocation,
             ProviderKind::Custom => Provider::Custom {
                 endpoint: self.custom_endpoint.clone(),
                 token: self.custom_token.clone(),
@@ -43,7 +44,7 @@ impl Settings {
         }
     }
     fn public(&self) -> Value {
-        json!({"primary":self.primary,"fallback":self.fallback,"opencellid_configured":!self.opencellid_key.is_empty(),"custom_endpoint":self.custom_endpoint,"custom_token_configured":self.custom_token.is_some(),"fake_location_ready":false})
+        json!({"primary":self.primary,"fallback":self.fallback,"opencellid_configured":!self.opencellid_key.is_empty(),"custom_endpoint":self.custom_endpoint,"custom_token_configured":self.custom_token.is_some()})
     }
 }
 #[derive(Deserialize)]
@@ -203,10 +204,9 @@ impl CellService {
                 let data = match fetch(http, &primary, area, now_ms) {
                     Ok(data) => data,
                     Err(first) => {
-                        // Preserve the useful primary error while the legacy adapter is unavailable.
-                        let Some(second) = fallback.as_ref().filter(|p| {
-                            p.kind() != ProviderKind::FakeLocation && p.origin() != primary.origin()
-                        }) else {
+                        // Preserve the useful primary error while the fallback is unavailable.
+                        let Some(second) = fallback.as_ref().filter(|p| p.origin() != primary.origin())
+                        else {
                             return Err(first.to_string());
                         };
                         if matches!(first, QueryError::InvalidQuery | QueryError::AreaTooLarge) {

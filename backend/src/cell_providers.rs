@@ -14,8 +14,39 @@ const MAX_CELLS: usize = 128;
 pub enum ProviderKind {
     #[default]
     OpenCellId,
-    FakeLocation,
     Custom,
+}
+
+/// 读供应商名，并容忍已删除的旧名字。
+///
+/// <p>历史上这里有过一个指向 Fake Location 远程服务的候选项，它从未真正可用（一旦被选中就
+/// 直接返回 `NotReady`），已按用户要求删除。但用户存下的 `cell-providers.json` 里可能还写着
+/// 那个名字；直接反序列化会让整份设置读取失败（`deny_unknown_fields` + 枚举），
+/// 于是把"选了一个不存在的供应商"降级成默认值，而不是让面板失去全部配置。
+pub fn lenient_kind<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<ProviderKind, D::Error> {
+    let name = String::deserialize(deserializer)?;
+    match name.as_str() {
+        "open_cell_id" => Ok(ProviderKind::OpenCellId),
+        "custom" => Ok(ProviderKind::Custom),
+        "fake_location" => Ok(ProviderKind::OpenCellId),
+        other => Err(serde::de::Error::custom(format!("未知的供应商：{other}"))),
+    }
+}
+
+/// [`lenient_kind`] 的可选版本，给 `fallback` 用。
+pub fn lenient_optional_kind<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<ProviderKind>, D::Error> {
+    Ok(Option::<String>::deserialize(deserializer)?
+        .map(|name| match name.as_str() {
+            "open_cell_id" => Ok(ProviderKind::OpenCellId),
+            "custom" => Ok(ProviderKind::Custom),
+            "fake_location" => Ok(ProviderKind::OpenCellId),
+            other => Err(serde::de::Error::custom(format!("未知的供应商：{other}"))),
+        })
+        .transpose()?)
 }
 
 // Intentionally no Debug: configuration contains credentials.
@@ -25,7 +56,6 @@ pub enum Provider {
     OpenCellId {
         key: String,
     },
-    FakeLocation,
     Custom {
         endpoint: String,
         token: Option<String>,
@@ -40,14 +70,12 @@ impl Provider {
     pub fn kind(&self) -> ProviderKind {
         match self {
             Self::OpenCellId { .. } => ProviderKind::OpenCellId,
-            Self::FakeLocation => ProviderKind::FakeLocation,
             Self::Custom { .. } => ProviderKind::Custom,
         }
     }
     pub fn origin(&self) -> &str {
         match self {
             Self::OpenCellId { .. } => "https://opencellid.org",
-            Self::FakeLocation => "https://api.fakeloc.cc:4430/FakeLocation/",
             Self::Custom { endpoint, .. } => endpoint,
         }
     }
@@ -162,7 +190,6 @@ pub enum QueryError {
     AreaTooLarge,
     Unavailable,
     InvalidResponse,
-    NotReady,
     Network,
 }
 impl std::fmt::Display for QueryError {
@@ -179,7 +206,6 @@ impl std::fmt::Display for QueryError {
                     "OpenCellID 在线查询半径最多 5 公里，请缩小范围或导入离线数据",
                 Self::Unavailable => "供应商暂时无法查询",
                 Self::InvalidResponse => "供应商返回的数据格式不兼容",
-                Self::NotReady => "Fake Location 供应商的鉴权尚未验证，暂不可用",
                 Self::Network => "无法连接基站供应商",
             }
         )
@@ -376,7 +402,6 @@ pub fn fetch(
 ) -> Result<Dataset, QueryError> {
     area.validate()?;
     let (cells, attribution, incomplete, skipped) = match provider {
-        Provider::FakeLocation => return Err(QueryError::NotReady),
         Provider::OpenCellId { key } => {
             if key.trim().is_empty() {
                 return Err(QueryError::MissingCredential);
@@ -476,7 +501,6 @@ pub fn fetch(
             source: match provider.kind() {
                 ProviderKind::OpenCellId => "OpenCellID",
                 ProviderKind::Custom => "Custom",
-                ProviderKind::FakeLocation => "Fake Location",
             }
             .into(),
             fetched_at_ms: now_ms,

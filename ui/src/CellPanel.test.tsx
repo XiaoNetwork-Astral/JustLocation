@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { CellPanel } from './CellPanel';
 
 afterEach(cleanup);
-const settings = { primary: 'open_cell_id', fallback: 'fake_location', opencellid_configured: true, custom_endpoint: '', custom_token_configured: false, fake_location_ready: false };
+const settings = { primary: 'open_cell_id', fallback: 'custom', opencellid_configured: true, custom_endpoint: '', custom_token_configured: false };
 const dataset = { provider: 'open_cell_id', origin: 'https://opencellid.org', region: { center: { latitude: 1, longitude: 2 }, radius_m: 500, source: 'OpenCellID', fetched_at_ms: 1000, cells: [] }, attribution: { text: 'OpenCellID', source: 'https://opencellid.org', license: 'https://creativecommons.org/licenses/by-sa/4.0/', changes: null }, incomplete: false, skipped: 0, failures: [] };
 const telephony = { cells_enabled: false, sim_enabled: false, radius_m: 500, subscriptions: [] };
 
@@ -48,7 +48,7 @@ it('leaves an existing key untouched when saving other settings and ignores a la
   // 先改一项再保存：没有改动时保存按钮是禁用的。
   await user.selectOptions(screen.getByLabelText('首选供应商'), 'custom');
   await user.click(screen.getByRole('button', { name: '保存数据来源' }));
-  expect(client).toHaveBeenLastCalledWith({ op: 'configure', settings: { primary: 'custom', fallback: 'fake_location', custom_endpoint: '' } });
+  expect(client).toHaveBeenLastCalledWith({ op: 'configure', settings: { primary: 'custom', fallback: 'custom', custom_endpoint: '' } });
   await screen.findByText('数据来源已保存');
   expect(client.mock.calls.some(call => call[0]?.settings && 'opencellid_key' in call[0].settings)).toBe(false);
   // 让这次查询一直挂着，再改目标位置，最后才返回结果：迟到的结果必须被丢弃。
