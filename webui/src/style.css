@@ -18,7 +18,7 @@
   font-synthesis: none;
   color-scheme: light;
 
-  /* 语义色：基准取自 Fake Location 的资源值（see .codex/project/fl-ui-inventory.md），
+  /* 语义色：基准取自 Fake Location 的资源值（见 .deepseek/project/ui-reference.md 的配色表），
      这样"原版那个绿"就不会因为另选调色板而永远对不上：
      主色 #008577、页面底 #fafafa、卡片 #ffffff、正文 #4e6161、次要 #a1a1a1、
      分隔线 #f2d4d4d4、进度黄 #f7cd1a。 */

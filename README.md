@@ -20,8 +20,9 @@ JustLocation/
 │   └── companion/       # Kotlin：可选 App，提供悬浮摇杆等原生操作
 ├── module/              # 模块元数据、安装和启动脚本等打包输入
 ├── .deepseek/           # 本地协作资料，忽略提交
-│   ├── project/         # 备忘录与必要的工作记录
-│   └── references/      # 下载的参考仓库
+│   ├── project/         # 备忘录与工作记录（界面复刻参考见 ui-reference.md）
+│   ├── references/      # 下载的参考仓库
+│   └── tools/           # 第三方工具与安装包，例如 LSPosed
 ├── build/               # 构建时生成：集中组装与临时产物，忽略提交
 └── dist/                # 构建时生成：最终模块 ZIP、可选 APK，忽略提交
 ```
@@ -133,9 +134,7 @@ AVD 可使用 `adb root`，但尚未安装 KernelSU/Zygisk；由于 ShadowHook �
 
 后台以 `justlocationd serve` 启动，数据位于 `/data/adb/justlocation`。WebUI 使用 KernelSU `exec` 调用 `justlocationd request <base64-json>`，命令经 Unix socket 交给同一个常驻进程；`stdio` 用于主机进程测试。协议版本为 1，支持 `status/start/update/stop/shutdown`；系统桥接通过 root companion 上报 `hook_status` 心跳并读取快照。心跳每秒更新，超过 3 秒的快照不用于模拟，停止操作在下一次轮询生效。配置重启后保留但默认停止；保存失败不改变原会话。历史位置暂存在 WebUI 本地存储中。
 
-开发按阶段推进：工作区 → 后台模型 → 控制链路/WebUI → 系统定位 Hook → 路线与环境通道 → 可选 App → Android 15 真机验收。功能采用先失败测试、再实现、通过后整理的 TDD 流程；主机测试和编译不能替代系统接口的真机验证。
-
-当前阶段和待办见 [开发进度](docs/development-plan.md)。
+功能采用先失败测试、再实现、通过后整理的 TDD 流程；主机测试和编译不能替代系统接口的真机验证。
 
 ## 上游参考
 
