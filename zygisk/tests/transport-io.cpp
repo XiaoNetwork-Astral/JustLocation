@@ -3,6 +3,7 @@
 #include <cstdio>
 
 #include "io.hpp"
+#include "phone_protocol.hpp"
 #include "transport.hpp"
 
 // A slow ART bootstrap or GC pause must not permanently disconnect the bridge.
@@ -43,7 +44,16 @@ static bool exchange(unsigned delay) {
 }
 
 int main() {
+    bool operators =
+            phone_protocol::operator_fields("Carrier|SIM|46011|46011") ==
+                    ",\"network_alpha\":\"Carrier\",\"sim_alpha\":\"SIM\",\"network_numeric\":\"46011\",\"sim_numeric\":\"46011\"" &&
+            phone_protocol::operator_fields("|A\"B\\C||46011") ==
+                    ",\"sim_alpha\":\"A\\\"B\\\\C\",\"sim_numeric\":\"46011\"" &&
+            phone_protocol::operator_fields("|||").empty() &&
+            phone_protocol::quote("line\nnext") == "\"line\\u000anext\"";
+    printf("%s: phone operator metadata preserves fields and JSON framing\n",
+           operators ? "PASS" : "FAIL");
     bool immediate = exchange(0);
     bool delayed = exchange(5);
-    return immediate && delayed ? 0 : 1;
+    return operators && immediate && delayed ? 0 : 1;
 }

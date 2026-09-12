@@ -6,9 +6,9 @@
 #include <unistd.h>
 
 #include <string>
-#include <vector>
 
 #include "io.hpp"
+#include "phone_protocol.hpp"
 #include "transport.hpp"
 #include "zygisk.hpp"
 
@@ -57,28 +57,11 @@ std::string status(unsigned char installed, unsigned wifi_calls, const std::stri
     } else if (installed & 128) {
         // Phone operator fields use a pipe separator. Literal newlines would invalidate the JSON
         // request.
-        std::vector<std::string> operators{"", "", "", ""};
-        {
-            size_t start = 0;
-            for (size_t index = 0; index < operators.size() && start <= gnss_raw.size(); index++) {
-                auto end = gnss_raw.find('|', start);
-                if (end == std::string::npos)
-                    end = gnss_raw.size();
-                operators[index] = gnss_raw.substr(start, end - start);
-                start = end + 1;
-            }
-        }
-        auto field = [](const char* name, const std::string& value) {
-            // Omit unavailable operator fields; absence differs from an explicitly empty value.
-            return value.empty() ? std::string()
-                                 : (std::string(",\"") + name + "\":\"" + value + "\"");
-        };
         request = std::string("{\"version\":1,\"op\":\"telephony_hook_status\",\"cells\":") +
                   ((installed & 1) ? "true" : "false") +
                   ",\"sim\":" + ((installed & 2) ? "true" : "false") +
-                  ",\"subscriptions\":" + subscriptions + field("network_alpha", operators[0]) +
-                  field("sim_alpha", operators[1]) + field("network_numeric", operators[2]) +
-                  field("sim_numeric", operators[3]) + "}\n";
+                  ",\"subscriptions\":" + subscriptions +
+                  phone_protocol::operator_fields(gnss_raw) + "}\n";
     }
     std::string result;
     if (connect(fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == 0 &&

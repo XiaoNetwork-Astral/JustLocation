@@ -35,9 +35,30 @@ public:
             if (name)
                 env_->ReleaseStringUTFChars(args->nice_name, name);
         }
-        if (phone_)
+        if (phone_) {
             prepare();
-        else
+            if (companion_ >= 0 && args->fds_to_ignore && !api_->exemptFd(companion_)) {
+                // Some Zygisk implementations do not implement exemptFd. The public
+                // specialization argument provides the same exclusion for zygote's FD check.
+                auto previous = *args->fds_to_ignore;
+                jsize count = previous ? env_->GetArrayLength(previous) : 0;
+                auto keep = env_->NewIntArray(count + 1);
+                if (keep) {
+                    if (count) {
+                        std::vector<jint> descriptors(count);
+                        env_->GetIntArrayRegion(previous, 0, count, descriptors.data());
+                        env_->SetIntArrayRegion(keep, 0, count, descriptors.data());
+                    }
+                    env_->SetIntArrayRegion(keep, count, 1, &companion_);
+                    *args->fds_to_ignore = keep;
+                } else {
+                    close(companion_);
+                    companion_ = -1;
+                    failure_ = "companion descriptor exclusion unavailable";
+                    env_->ExceptionClear();
+                }
+            }
+        } else
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
     }
 

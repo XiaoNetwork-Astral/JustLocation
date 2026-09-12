@@ -154,7 +154,7 @@ public final class PhoneBridge {
     }
 
     /**
-     * Encode operator names and PLMNs read in this process, separated by newlines. Field order is
+     * Encode operator names and PLMNs read in this process, separated by pipes. Field order is
      * network name, SIM name, network code, SIM code; unavailable fields remain empty.
      */
     private static String realOperators(Context context) {
@@ -162,7 +162,7 @@ public final class PhoneBridge {
             var manager = context.getSystemService(android.telephony.TelephonyManager.class);
             if (manager == null)
                 return null;
-            return String.join("\n", safe(() -> manager.getNetworkOperatorName()),
+            return PhoneOperators.encode(safe(() -> manager.getNetworkOperatorName()),
                     safe(() -> manager.getSimOperatorName()),
                     safe(() -> manager.getNetworkOperator()), safe(() -> manager.getSimOperator()));
         } catch (Exception error) {
@@ -172,9 +172,7 @@ public final class PhoneBridge {
 
     private static String safe(java.util.function.Supplier<String> value) {
         try {
-            String text = value.get();
-            // Reject embedded newlines that would break the field separator.
-            return text == null || text.indexOf('\n') >= 0 ? "" : text;
+            return value.get();
         } catch (Exception error) {
             return "";
         }
