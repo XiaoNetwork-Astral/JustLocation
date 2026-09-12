@@ -1,23 +1,5 @@
 #!/system/bin/sh
 
-# Installation output also serves as a diagnostic log and stays in English.
-MSG_NEED_KSU='Install this module from the KernelSU manager.'
-MSG_NEED_BOOTMODE='Install from the KernelSU manager, not from recovery.'
-MSG_NEED_ARM64='This build supports ARM64 only.'
-MSG_NEED_API='This build targets Android 15 (API 35).'
-MSG_INSTALLING='JustLocation: installing'
-MSG_NEED_ZYGISK='Zygisk Next must be enabled.'
-MSG_VERIFY_OK='File integrity check passed'
-MSG_VERIFY_FAIL='File verification failed. Rebuild or download the package again.'
-MSG_VERIFY_SKIPPED='No checksum manifest found; skipping integrity checks for this source archive.'
-MSG_EXTRACTING='Extracting module files...'
-MSG_EXTRACT_FAIL='Extraction failed; the installation package may be damaged.'
-MSG_JOYSTICK_OK='Joystick app installed and overlay permission granted.'
-MSG_JOYSTICK_FAIL='Joystick app installation failed. Reinstall the module to retry.'
-MSG_JOYSTICK_OVERLAY_FAIL='Joystick app installed, but overlay permission is missing. Allow it to display over other apps in system settings, or reinstall the module.'
-MSG_LEGACY_REMOVED='Removed the obsolete combined app.'
-MSG_DONE='Installation complete. Reboot to apply changes.'
-
 # Root access must be granted by the user in KernelSU.
 JOYSTICK_PACKAGE='me.idk.justlocation.joystick'
 
@@ -38,19 +20,19 @@ fail() {
 }
 
 require_arm64() {
-    [ "$ARCH" = "arm64" ] || fail "$MSG_NEED_ARM64"
+    [ "$ARCH" = "arm64" ] || fail "Unsupported architecture: $ARCH (requires arm64)"
 }
 
 require_kernelsu() {
-    [ "$KSU" = "true" ] || fail "$MSG_NEED_KSU"
+    [ "$KSU" = "true" ] || fail "KernelSU is required; install through KernelSU Manager"
 }
 
 require_bootmode() {
-    [ "$BOOTMODE" = "true" ] || fail "$MSG_NEED_BOOTMODE"
+    [ "$BOOTMODE" = "true" ] || fail "Recovery installation is not supported; use KernelSU Manager"
 }
 
 require_api() {
-    [ "$API" = "35" ] || fail "$MSG_NEED_API"
+    [ "$API" = "35" ] || fail "Unsupported Android API: $API (requires 35)"
 }
 
 sha256_of() {
