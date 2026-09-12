@@ -40,6 +40,10 @@ justlocationd scode import --without-wifi < location.scode > imported-address.js
 
 字段为 `enabled`、`drift_radius_m`（0–100）、`altitude_m`（0–100）、`bearing_degrees`（0–45）、`speed_variation`（0–0.5）、`period_seconds`（1–60）、`corner_radius_m`（0–100）和 `seed`。速度浮动会影响实际路程；路线暂停和重复等待按真实时间处理，静态漂移不计步。原始路线点和端点与用于播放的平滑路径分开保留。
 
+## 地图供应商 Key
+
+高德、腾讯、百度的地点搜索分别使用自己的 WebService Key。`maps` 入口接受版本 1 的 `settings`、`configure_key`（`provider`、`key`；空 Key 表示删除）和 `search`（`provider`、`query`、`region`）请求。供应商标识为 `amap`、`tencent`、`baidu`。Key 保存在独立的私有 `map-keys.json` 中，不在设置回包中回显，也不加入 S 码。缺少 Key 时返回对应的配置入口。搜索结果统一为 WGS84 坐标；这些 Key 用于搜索服务，当前公共瓦片地址不使用它们。
+
 ## 开发
 
 ```sh

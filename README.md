@@ -40,6 +40,10 @@ Address JSON contains `latitude`, `longitude`, optional `altitude`, and any addr
 
 The fields are `enabled`, `drift_radius_m` (0–100), `altitude_m` (0–100), `bearing_degrees` (0–45), `speed_variation` (0–0.5), `period_seconds` (1–60), `corner_radius_m` (0–100), and `seed`. Speed variation changes travelled distance; route pauses and repeat waits use real time. Static drift does not count as steps. Original route points and endpoints are retained separately from the smoothed playback path.
 
+## Map provider keys
+
+Amap, Tencent and Baidu place search use separate WebService keys. The `maps` endpoint accepts version 1 requests with `settings`, `configure_key` (`provider`, `key`; an empty key removes it) and `search` (`provider`, `query`, `region`). Provider IDs are `amap`, `tencent` and `baidu`. Keys are kept in a private `map-keys.json` file and are never returned in settings or included in S codes. Missing keys return the provider's configuration link. Search results use WGS84 coordinates; these keys are for search services, not the current public tile URLs.
+
 ## Development
 
 ```sh

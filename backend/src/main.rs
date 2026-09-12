@@ -23,12 +23,14 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
-        Some(mode @ ("request" | "cells")) => {
+        Some(mode @ ("request" | "cells" | "maps")) => {
             let result = std::env::args()
                 .nth(2)
                 .ok_or_else(|| "missing base64 request".to_owned())
                 .and_then(|request| {
-                    if mode == "cells" {
+                    if mode == "maps" {
+                        justlocation_backend::maps::request(&request)
+                    } else if mode == "cells" {
                         justlocation_backend::cell_service::request(&request)
                     } else {
                         justlocation_backend::transport::request(&request)
@@ -62,7 +64,7 @@ fn main() -> ExitCode {
         }
         Some("--help") | Some("-h") => {
             println!(
-                "justlocationd serve | request <base64-json> | cells <base64-json> | scode --help | stdio | --version"
+                "justlocationd serve | request <base64-json> | cells <base64-json> | maps <base64-json> | scode --help | stdio | --version"
             );
             ExitCode::SUCCESS
         }

@@ -50,6 +50,7 @@ export function pack() {
       'licenses/lss.txt',
     ],
     ['zygisk/include/zygisk.hpp', 'licenses/zygisk.hpp'],
+    ['backend/licenses/coordtransform.txt', 'licenses/coordtransform.txt'],
   ];
   for (const [source, target] of inputs) {
     const destination = join(stage, target);
