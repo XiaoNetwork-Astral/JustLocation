@@ -168,6 +168,6 @@ public final class BridgeEntry {
     }
 
     public static String getBuildVersion() {
-        return "0.1.0";
+        return BuildConfig.MODULE_VERSION;
     }
 }

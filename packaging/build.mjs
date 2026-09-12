@@ -10,9 +10,18 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
-import { exe, output, root, run } from '../tool/build.mjs';
+import { config, exe, output, root, run } from '../tool/build.mjs';
 
 export function pack() {
+  const metadata = readFileSync(join(root, 'packaging/module/module.prop'), 'utf8');
+  const cargo = readFileSync(join(root, 'backend/Cargo.toml'), 'utf8');
+  if (
+    metadata.match(/^version=(.+)$/m)?.[1].trim() !== config.version ||
+    Number(metadata.match(/^versionCode=(.+)$/m)?.[1]) !== config.versionCode ||
+    cargo.match(/^version = "([^"]+)"/m)?.[1] !== config.version
+  ) {
+    throw new Error('Release versions must match project-config.json before packaging.');
+  }
   const stage = resolve(output, 'module');
   if (dirname(stage) !== resolve(output))
     throw new Error('Module staging must stay inside build/.');
@@ -67,7 +76,7 @@ export function pack() {
   writeManifest(stage);
   mkdirSync(join(root, 'dist'), { recursive: true });
   const jar = process.env.JAVA_HOME ? join(process.env.JAVA_HOME, 'bin', `jar${exe}`) : `jar${exe}`;
-  const zip = join(root, 'dist/justlocation-0.1.0-dev-arm64.zip');
+  const zip = join(root, `dist/justlocation-${config.version}-arm64.zip`);
   run(jar, ['--create', '--file', zip, '--no-manifest', '-C', stage, '.']);
   run(jar, ['--list', '--file', zip]);
 }

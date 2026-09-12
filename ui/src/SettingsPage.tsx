@@ -1,3 +1,4 @@
+import { version } from '../package.json';
 import { Check, Monitor, Moon, Sun } from 'lucide-react';
 import type { State } from './protocol';
 import { BackupPanel } from './BackupPanel';
@@ -84,7 +85,7 @@ export function SettingsPage({
         <dl>
           <div>
             <dt>模块</dt>
-            <dd>JustLocation 0.1.0</dd>
+            <dd>JustLocation {version}</dd>
           </div>
           <div>
             <dt>控制入口</dt>
