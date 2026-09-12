@@ -2,6 +2,20 @@ use std::process::ExitCode;
 
 fn main() -> ExitCode {
     match std::env::args().nth(1).as_deref() {
+        Some("scode") => {
+            let args: Vec<_> = std::env::args().skip(2).collect();
+            match justlocation_backend::cli::scode(
+                &args,
+                std::io::stdin().lock(),
+                std::io::stdout().lock(),
+            ) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(error) => {
+                    eprintln!("{error}");
+                    ExitCode::from(2)
+                }
+            }
+        }
         Some("serve") => match justlocation_backend::transport::serve() {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
@@ -48,7 +62,7 @@ fn main() -> ExitCode {
         }
         Some("--help") | Some("-h") => {
             println!(
-                "justlocationd serve | request <base64-json> | cells <base64-json> | stdio | --version"
+                "justlocationd serve | request <base64-json> | cells <base64-json> | scode --help | stdio | --version"
             );
             ExitCode::SUCCESS
         }

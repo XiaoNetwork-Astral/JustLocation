@@ -22,6 +22,18 @@ node build.mjs build
 
 The module ZIP and APKs are written to `dist/`. The joystick is bundled with the module; the diagnostic app is packaged separately.
 
+## Location S codes
+
+The backend can exchange location S codes without the UI or a running service. Run these in a shell with the built `justlocationd` on PATH (on Android it is in `/data/adb/modules/justlocation/bin/`):
+
+```sh
+justlocationd scode encode < address.json > location.scode
+justlocationd scode decode < location.scode > original-address.json
+justlocationd scode import --without-wifi < location.scode > imported-address.json
+```
+
+Address JSON contains `latitude`, `longitude`, optional `altitude`, and any address metadata or `nearbyCells` / `nearbyWifis` attachments. Decode preserves the address; import creates a new ID and sets `from=2`. Import keeps both attachment types unless `--without-cells` or `--without-wifi` is supplied. Neither operation changes simulation state. Input and expanded JSON are limited to 2 MiB. Use `scode --help` for details.
+
 ## Development
 
 ```sh
