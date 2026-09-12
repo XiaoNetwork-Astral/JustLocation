@@ -22,36 +22,11 @@ node build.mjs build
 
 The module ZIP and APKs are written to `dist/`. The joystick is bundled with the module; the diagnostic app is packaged separately.
 
-## Location S codes
-
-The backend can exchange location S codes without the UI or a running service. Run these in a shell with the built `justlocationd` on PATH (on Android it is in `/data/adb/modules/justlocation/bin/`):
-
-```sh
-justlocationd scode encode < address.json > location.scode
-justlocationd scode decode < location.scode > original-address.json
-justlocationd scode import --without-wifi < location.scode > imported-address.json
-```
-
-Address JSON contains `latitude`, `longitude`, optional `altitude`, and any address metadata or `nearbyCells` / `nearbyWifis` attachments. Decode preserves the address; import creates a new ID and sets `from=2`. Import keeps both attachment types unless `--without-cells` or `--without-wifi` is supplied. Neither operation changes simulation state. Input and expanded JSON are limited to 2 MiB. Use `scode --help` for details.
-
-## Motion realism
-
-`set_realism` accepts an optional configuration (omitted fields use defaults). Stop simulation before changing it. It defaults to disabled; enabling it applies the same continuous noise to static, route and joystick output. Saved coordinates remain unchanged. Defaults: 2 m drift radius, ±1 m altitude, ±3° bearing, ±10% speed, 5 s transitions, and up to 5 m corner cuts. `seed` optionally makes a session reproducible.
-
-The fields are `enabled`, `drift_radius_m` (0–100), `altitude_m` (0–100), `bearing_degrees` (0–45), `speed_variation` (0–0.5), `period_seconds` (1–60), `corner_radius_m` (0–100), and `seed`. Speed variation changes travelled distance; route pauses and repeat waits use real time. Static drift does not count as steps. Original route points and endpoints are retained separately from the smoothed playback path.
-
-## Map provider keys
-
-Amap, Tencent and Baidu place search use separate WebService keys. The `maps` endpoint accepts version 1 requests with `settings`, `configure_key` (`provider`, `key`; an empty key removes it) and `search` (`provider`, `query`, `region`). Provider IDs are `amap`, `tencent` and `baidu`. Keys are kept in a private `map-keys.json` file and are never returned in settings or included in S codes. Missing keys return the provider's configuration link. Search results use WGS84 coordinates; these keys are for search services, not the current public tile URLs.
-
 ## Development
-
-GNSS simulation provides GPS L1 C/A navigation messages, raw measurements and satellite status from one offline synthetic orbit model. LNAV includes parity, time, clock parameters, ephemerides and the 25-page cycle. Measurements account for propagation time and Earth rotation. The model uses ideal satellite clocks and no atmospheric errors; it does not relay real satellite broadcasts. GNSS and NMEA default to disabled and respect the selected application scope.
 
 ```sh
 node build.mjs test         # Rust, TypeScript and React tests
 node build.mjs test:android # Android JVM tests
-node --test integration/gnss-model.test.mjs # Independent decoder and position solver; requires JDK
 node build.mjs help         # All build and test commands
 ```
 
