@@ -24,7 +24,7 @@ const clang = join(sdk, 'ndk', ndkVersion, 'toolchains/llvm/prebuilt', host, 'bi
 const output = join(root, 'build/probe', `transport-io-${triple}`);
 mkdirSync(join(root, 'build/probe'), { recursive: true });
 run(clang, [`--target=${triple}`, '-std=c++17', '-static-libstdc++', '-Wall', '-Wextra', '-Werror',
-  '-I', join(root, 'native/src'), join(root, 'tests/device/transport-io.cpp'), '-o', output]);
+  '-I', join(root, 'zygisk/src'), join(root, 'zygisk/tests/transport-io.cpp'), '-o', output]);
 const before = device(['shell', 'pidof system_server']);
 assert.ok(before);
 assert.equal(device(['shell', 'getprop sys.boot_completed']), '1');

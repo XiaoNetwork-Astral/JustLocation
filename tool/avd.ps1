@@ -30,6 +30,6 @@ switch ($Action) {
         Start-Process -FilePath $emulatorPath -ArgumentList $arguments -WindowStyle Hidden `
             -RedirectStandardOutput (Join-Path $projectRoot 'build\avd-stdout.log') `
             -RedirectStandardError (Join-Path $projectRoot 'build\avd-stderr.log') | Out-Null
-        Write-Output 'Started JustLocation_API35 on emulator-5580. Use tools/avd.ps1 status to check boot completion.'
+        Write-Output 'Started JustLocation_API35 on emulator-5580. Use tool/avd.ps1 status to check boot completion.'
     }
 }

@@ -55,19 +55,19 @@ target_compile_options(justlocation_runtime PRIVATE -Wall -Wextra -Werror -fvisi
 target_link_options(justlocation_runtime PRIVATE -Wl,-z,max-page-size=16384)
 
 # Explicit device-test target only; not built by default or included in module ZIPs.
-add_executable(justlocation_loader_probe EXCLUDE_FROM_ALL ../tests/device/loader.cpp)
-add_executable(justlocation_veneer_probe EXCLUDE_FROM_ALL ../tests/device/veneer.cpp)
+add_executable(justlocation_loader_probe EXCLUDE_FROM_ALL tests/loader.cpp)
+add_executable(justlocation_veneer_probe EXCLUDE_FROM_ALL tests/veneer.cpp)
 target_include_directories(justlocation_veneer_probe PRIVATE ${shadowhook_SOURCE_DIR}/shadowhook/src/main/cpp/include)
 target_link_libraries(justlocation_veneer_probe PRIVATE shadowhook)
-add_executable(justlocation_transport_probe EXCLUDE_FROM_ALL ../tests/device/transport.cpp)
+add_executable(justlocation_transport_probe EXCLUDE_FROM_ALL tests/transport.cpp)
 target_include_directories(justlocation_transport_probe PRIVATE src)
 target_include_directories(justlocation_loader_probe PRIVATE src)
 target_link_libraries(justlocation_loader_probe PRIVATE dl log)
-add_library(justlocation_bootstrap_probe SHARED EXCLUDE_FROM_ALL ../tests/device/bootstrap.cpp)
+add_library(justlocation_bootstrap_probe SHARED EXCLUDE_FROM_ALL tests/bootstrap.cpp)
 target_include_directories(justlocation_bootstrap_probe PRIVATE src)
 target_link_libraries(justlocation_bootstrap_probe PRIVATE dl log)
 add_library(justlocation_probe SHARED EXCLUDE_FROM_ALL
-    ../tests/device/probe.cpp src/hook_engine.cpp src/art_symbols.cpp)
+    tests/probe.cpp src/hook_engine.cpp src/art_symbols.cpp)
 target_compile_features(justlocation_probe PRIVATE cxx_std_23)
 target_include_directories(justlocation_probe PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src

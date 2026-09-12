@@ -98,7 +98,7 @@ let installed = false;
 try {
   phase('setup');
   // 请求助手要先到位，后面每一步都要用它；结束时删掉。
-  run(['push', resolve(root, 'tests/device/request.sh'), helper]);
+  run(['push', resolve(root, 'integration/device/request.sh'), helper]);
   shell(`chmod 700 ${helper}`);
   check('request helper installed', shell(`test -x ${helper} && echo yes`) === 'yes');
   check('device booted', shell('getprop sys.boot_completed') === '1');

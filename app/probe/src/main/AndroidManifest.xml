@@ -16,7 +16,7 @@
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <!--
           逐通道自检用的独立 App：**不进模块包**，由开发者在需要验收时自己装
-          （`tests/device/run-checks.mjs` 会装它、跑完不卸）。
+          （`integration/device/run-checks.mjs` 会装它、跑完不卸）。
           导出的理由：它只读调用方自己的公开接口（位置、卫星、NMEA、基站、SIM、Wi-Fi），
           不写任何状态、不暴露后台控制通道，读到的就是调用者本来就能读到的东西；
           而 adb 启动未导出的 Activity 会被拒。

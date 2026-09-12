@@ -256,7 +256,7 @@ fn synthesize_cells(
             latitude: (target.latitude + latitude_delta).clamp(-90.0, 90.0),
             longitude: target.longitude + longitude_delta,
         };
-        let mix = seed.wrapping_add(index as u64 * 0x9e37_79b9_7f4a_7c15);
+        let mix = seed.wrapping_add((index as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15));
         // 先按模板决定制式：第 0、2 个跟模板走，第 1 个特意用另一种，凑出双制式。
         let want_nr = match radio_hint {
             Some(CellIdentity::Nr { .. }) => index != 1,
