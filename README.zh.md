@@ -6,7 +6,12 @@
 
 ## 构建
 
-需要 Node.js、Rust 1.89+（通过 rustup 安装）、JDK 21 和 Android SDK。设置 `ANDROID_HOME`，或在 `tool/gradle/local.properties` 中配置 `sdk.dir`。工具链版本见 [project-config.json](project-config.json)。
+- Node.js
+- Rust 1.89+（通过 rustup 安装）
+- JDK 21
+- Android SDK — 设置 `ANDROID_HOME`，或在 `tool/gradle/local.properties` 中配置 `sdk.dir`
+
+工具链版本：[project-config.json](project-config.json)。
 
 ```sh
 git clone https://github.com/XiaoNetwork-Astral/JustLocation.git
@@ -27,4 +32,9 @@ node build.mjs help         # 全部构建与测试命令
 
 ## 致谢
 
-基于 [zygisk-module-template](https://github.com/5ec1cff/zygisk-module-template)，使用 [LSPlant](https://github.com/LSPosed/LSPlant)、[ShadowHook](https://github.com/bytedance/android-inline-hook) 和 [KernelSU JavaScript SDK](https://github.com/tiann/KernelSU/tree/main/js)。依赖的许可文件随模块分发。
+基于以下开源项目：
+
+- [zygisk-module-template](https://github.com/5ec1cff/zygisk-module-template)
+- [LSPlant](https://github.com/LSPosed/LSPlant)
+- [ShadowHook](https://github.com/bytedance/android-inline-hook)
+- [KernelSU JavaScript SDK](https://github.com/tiann/KernelSU/tree/main/js)
