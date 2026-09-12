@@ -54,11 +54,11 @@ internal class JoystickOverlay(
         val header = LinearLayout(context)
         val title =
             TextView(context).apply {
-                text = "摇杆"
+                text = "Joystick"
                 textSize = 12f
                 setTextColor(Color.rgb(30, 47, 68))
                 gravity = Gravity.CENTER
-                contentDescription = "拖动摇杆，贴边收起"
+                contentDescription = "Drag the joystick to an edge to collapse it"
             }
         header.addView(title, LinearLayout.LayoutParams(-1, dp(28)))
         val handle =
@@ -66,7 +66,7 @@ internal class JoystickOverlay(
                 textSize = 22f
                 gravity = Gravity.CENTER
                 visibility = View.GONE
-                contentDescription = "展开摇杆"
+                contentDescription = "Expand joystick"
                 setTextColor(Color.rgb(70, 103, 155))
             }
         var initialX = 0

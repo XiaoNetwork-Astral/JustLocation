@@ -17,7 +17,7 @@ internal class StickView(context: Context, val changed: (StickInput) -> Unit) : 
         get() = minOf(width, height) * 0.36f
 
     init {
-        contentDescription = "方向摇杆"
+        contentDescription = "Directional joystick"
     }
 
     fun reset() {

@@ -54,7 +54,7 @@ class RouteRecordService : Service() {
         manager = getSystemService(LocationManager::class.java)
         val notifications = getSystemService(NotificationManager::class.java)
         notifications.createNotificationChannel(
-            NotificationChannel(CHANNEL, "路线录制", NotificationManager.IMPORTANCE_LOW)
+            NotificationChannel(CHANNEL, "Route recording", NotificationManager.IMPORTANCE_LOW)
         )
     }
 
@@ -77,8 +77,8 @@ class RouteRecordService : Service() {
             NOTIFICATION_ID,
             Notification.Builder(this, CHANNEL)
                 .setSmallIcon(android.R.drawable.ic_menu_mylocation)
-                .setContentTitle("正在录制路线")
-                .setContentText("请先停止位置模拟，这里记录的是真实移动")
+                .setContentTitle("Recording route")
+                .setContentText("Recording real movement. Keep location simulation stopped.")
                 .setOngoing(true)
                 .build(),
         )
@@ -91,7 +91,7 @@ class RouteRecordService : Service() {
                 RootControl.request("record_start")
                 origin = SystemClock.elapsedRealtime()
                 lastError = ""
-                lastMessage = "正在录制，走完路线后在面板停止"
+                lastMessage = "Recording. Run 'justlocationd record stop' when finished."
                 startUpdates()
             } catch (error: Exception) {
                 lastError = error.message ?: "cannot start recording"
@@ -170,11 +170,11 @@ class RouteRecordService : Service() {
     }
 
     private fun store(recorded: JSONObject?): String {
-        if (recorded == null) return "没有录到点"
+        if (recorded == null) return "No points recorded"
         val points = recorded.optJSONArray("points")?.length() ?: 0
         val file = File(getExternalFilesDir(null) ?: filesDir, "recorded-route.json")
         file.writeText(recorded.toString())
-        return "已录 $points 个点，保存在 ${file.absolutePath}"
+        return "Recorded $points points; saved to ${file.absolutePath}"
     }
 
     private fun providers(): List<String> =

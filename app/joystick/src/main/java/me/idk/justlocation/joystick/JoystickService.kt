@@ -40,14 +40,16 @@ class JoystickService : Service() {
         super.onCreate()
         val notifications = getSystemService(NotificationManager::class.java)
         notifications.createNotificationChannel(
-            NotificationChannel(CHANNEL, "悬浮摇杆", NotificationManager.IMPORTANCE_LOW)
+            NotificationChannel(CHANNEL, "Floating joystick", NotificationManager.IMPORTANCE_LOW)
         )
         startForeground(
             1,
             Notification.Builder(this, CHANNEL)
                 .setSmallIcon(android.R.drawable.ic_menu_mylocation)
-                .setContentTitle("悬浮摇杆已打开")
-                .setContentText("松手后停留，关闭摇杆不会停止位置模拟")
+                .setContentTitle("Floating joystick is open")
+                .setContentText(
+                    "Release to hold position. Closing the joystick keeps simulation running."
+                )
                 .setOngoing(true)
                 .build(),
         )
@@ -118,7 +120,7 @@ class JoystickService : Service() {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 
-    private fun speedLabel() = String.format(Locale.ROOT, "最高 %.1f km/h", maximumSpeed * 3.6)
+    private fun speedLabel() = String.format(Locale.ROOT, "Max %.1f km/h", maximumSpeed * 3.6)
 
     private fun send(input: StickInput) {
         try {
@@ -129,7 +131,7 @@ class JoystickService : Service() {
             moving = false
             desired.set(StickInput.Still)
             main.post {
-                if (!closed) overlay?.reset(error.message ?: "连接中断，已停止移动")
+                if (!closed) overlay?.reset(error.message ?: "Connection lost; movement stopped")
             }
         }
     }

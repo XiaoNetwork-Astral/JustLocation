@@ -14,8 +14,8 @@ compare_sha256() {
 verify_zip() {
     _zip=$1
     _list=$2
-    [ -f "$_zip" ] || { echo "找不到安装包：$_zip"; return 1; }
-    [ -f "$_list" ] || { echo "找不到校验清单"; return 1; }
+    [ -f "$_zip" ] || { echo "Installation package not found: $_zip"; return 1; }
+    [ -f "$_list" ] || { echo "Checksum manifest not found"; return 1; }
     _count=0
     while IFS= read -r _line; do
         case "$_line" in
@@ -27,15 +27,15 @@ verify_zip() {
         [ -n "$_name" ] || continue
         _result=$(unzip -p "$_zip" "$_name" 2>/dev/null | compare_sha256 - "$_want")
         if [ "$_result" != ok ]; then
-            echo "校验失败：$_name"
+            echo "Verification failed: $_name"
             return 1
         fi
         _count=$((_count + 1))
     done < "$_list"
     if [ "$_count" -eq 0 ]; then
-        echo "校验清单是空的"
+        echo "Checksum manifest is empty"
         return 1
     fi
-    echo "已核对 $_count 个文件"
+    echo "Verified $_count files"
     return 0
 }
