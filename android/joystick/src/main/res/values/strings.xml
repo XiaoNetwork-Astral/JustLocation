@@ -1,0 +1,24 @@
+<resources>
+    <!-- 显示名。包名保持 me.idk.justlocation.joystick：改包名会让 KernelSU 里的 root 授权失效，
+         那是一次性、只能由用户在管理器里操作的授权，不该为了名字去动它。 -->
+    <string name="app_name">JustLoystick</string>
+
+    <!--
+      唤起用的空壳 Activity 的主题：完全透明、无标题、不进最近任务、没有转场动画。
+      它只做一件事——在前台状态下把摇杆前台服务拉起来，然后立刻结束。
+      系统禁止 shell 从后台启动前台服务（Background start not allowed），
+      但允许处于前台的自己启动；MIUI 的「后台弹出界面」授权正是放行这条路的开关。
+    -->
+    <style name="CallerTheme" parent="@android:style/Theme.Translucent.NoTitleBar">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowDisablePreview">true</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:taskAffinity">@null</item>
+        <item name="android:excludeFromRecents">true</item>
+        <item name="android:noHistory">true</item>
+    </style>
+</resources>

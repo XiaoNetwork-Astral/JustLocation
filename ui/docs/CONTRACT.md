@@ -81,6 +81,10 @@ interface State {
   phone_connected?: boolean; cell_hook_ready?: boolean; sim_hook_ready?: boolean
   gnss_hook_ready?: boolean; nmea_hook_ready?: boolean
   cell_query_hook_ready?: boolean; cell_callback_hook_ready?: boolean
+  // 运营商名称与 PLMN：TelephonyManager 的 getter 读系统属性，与订阅记录是两条独立的出口
+  operator_hook_ready?: boolean
+  // Wi-Fi 服务端两项适配：扫描结果与连接信息是两次独立的安装，分开报告
+  wifi_scan_hook_ready?: boolean; wifi_connection_hook_ready?: boolean
   route?: RouteState | null
   detected_subscriptions?: DetectedSubscription[] | null
   telephony?: TelephonyConfig
@@ -123,7 +127,8 @@ interface State {
 
 除 `justlocationd` 外，面板还会直接执行这些命令（`joystick.ts` / `fileExport.ts`）：
 
-- 摇杆：`pm path me.idk.justlocation.companion`（检查可选 App 是否装了）、`am start -n me.idk.justlocation.companion/.JoystickActivity --es speed <km/h> --ez open true`、`am stopservice -n me.idk.justlocation.companion/.JoystickService`。关闭摇杆**不停止位置模拟**。
+- 摇杆：`pm path me.idk.justlocation.joystick`（检查模块自带的摇杆 App 是否装了；显示名 JustLoystick）、`am start -n me.idk.justlocation.joystick/.CallActivity --ef speed <m/s>`（透明空壳 Activity，由它在前台状态下启动摇杆服务；界面给的 km/h 需先除以 3.6）、`am stopservice -n me.idk.justlocation.joystick/.JoystickService`。关闭摇杆**不停止位置模拟**。摇杆 App 随模块安装、随模块卸载删除，没有启动器与页面；它要调 `su`，**需要用户在 KernelSU 管理器里授权一次 root**，否则面板点开摇杆会看到"会话未就绪"。
+  **不要改成 `am start-foreground-service`**：shell 从后台启动前台服务会被系统拒绝（`Background start not allowed`），这条限制只认调用方，授 appop、改待机桶、用 root 下发都绕不过去（2026-09-12 真机逐条试过）。
 - 导出：在 KernelSU 下分块 base64 写入 `Download/JustLocation`，写完才发布文件；普通浏览器走 Blob 下载。
 - 应用列表：KernelSU SDK 的 `listPackages` / `getPackagesInfo`，不是 `justlocationd`。
 

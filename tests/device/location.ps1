@@ -6,7 +6,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-$package = 'me.idk.justlocation.companion'
+$package = 'me.idk.justlocation.probe'
 function Device([string]$Command) {
     $result = & $Adb -s $Serial shell $Command
     if ($LASTEXITCODE -ne 0) { throw "Device command failed: $Command" }

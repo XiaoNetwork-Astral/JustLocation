@@ -7,7 +7,15 @@ use std::{collections::HashSet, fs, io, path::Path};
 
 const EARTH: f64 = 6_371_008.8;
 const MAX_REQUESTS: usize = 64;
-const MAX_CELLS: usize = 128;
+/// 一次查询返回的小区上限。**在线与离线两条路径共用**：面板与装置都不该被一次查询塞爆。
+pub const MAX_CELLS: usize = 128;
+/// 单个查询格子允许的最大球面面积。
+///
+/// <p>OpenCellID 的 `getInArea` 拒绝超过 4,000,000 m² 的包围盒（实测：直接回
+/// `BBOX too big - Limit to 4,000,000 sq.mts.`），而我们的实现把这种回绝当成
+/// "无法连接基站供应商"，界面上根本看不出原因。这里先留 20% 余量，再由
+/// [`AreaQuery::boxes`] 收尾自检，保证发出去的每一格都在上限之内。
+const MAX_CELL_AREA_M2: f64 = 3_200_000.0;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -31,7 +39,7 @@ pub fn lenient_kind<'de, D: serde::Deserializer<'de>>(
         "open_cell_id" => Ok(ProviderKind::OpenCellId),
         "custom" => Ok(ProviderKind::Custom),
         "fake_location" => Ok(ProviderKind::OpenCellId),
-        other => Err(serde::de::Error::custom(format!("未知的供应商：{other}"))),
+        other => Err(serde::de::Error::custom(format!("unknown provider: {other}"))),
     }
 }
 
@@ -44,7 +52,7 @@ pub fn lenient_optional_kind<'de, D: serde::Deserializer<'de>>(
             "open_cell_id" => Ok(ProviderKind::OpenCellId),
             "custom" => Ok(ProviderKind::Custom),
             "fake_location" => Ok(ProviderKind::OpenCellId),
-            other => Err(serde::de::Error::custom(format!("未知的供应商：{other}"))),
+            other => Err(serde::de::Error::custom(format!("unknown provider: {other}"))),
         })
         .transpose()?)
 }
@@ -149,20 +157,25 @@ impl AreaQuery {
         } else {
             vec![(west, east)]
         };
-        let rows = (((north - south).to_radians() * EARTH / 1800.0).ceil() as usize).max(1);
+        // 切分的每格必须落在供应商的面积上限之内。**按球面面积反推**，不要按"边长"拍脑袋：
+        // 球面上一个小格的面积是 `R²·Δλ·(sin φ₂ − sin φ₁)`。
+        // 先切纬度带，再**逐格**算它自己的经度跨度——同一行里不同经度上的格宽度并不相同，
+        // 按"整行统一列数"算会让最靠极点的那一格超标（这正是自检要拦的情况）。
+        let target = MAX_CELL_AREA_M2.sqrt();
+        let rows = (((north - south).to_radians() * EARTH / target).ceil() as usize).max(1);
         let mut boxes = Vec::new();
         for row in 0..rows {
             let s = south + (north - south) * row as f64 / rows as f64;
             let n = south + (north - south) * (row + 1) as f64 / rows as f64;
-            let closest = if s <= 0.0 && n >= 0.0 {
-                0.0
-            } else {
-                s.abs().min(n.abs())
-            };
+            let band = (s.to_radians().sin() - n.to_radians().sin()).abs().max(1e-15);
             for &(w, e) in &spans {
-                let cols = (((e - w).to_radians() * EARTH * closest.to_radians().cos() / 1800.0)
-                    .ceil() as usize)
-                    .max(1);
+                // 该纬度带上，一格允许的最大经度跨度（弧度）。
+                // 以前这里用的是"离赤道最近"的纬度，格子在远离赤道的一侧被拉宽，
+                // 西安（34°N）这种中纬度就会超出供应商上限，表现是查询回
+                // "无法连接基站供应商"——其实是供应商回绝了（2026-09-12 实测）。
+                let column = (MAX_CELL_AREA_M2 / (EARTH.powi(2) * band)).min(std::f64::consts::PI);
+                let span = (e - w).abs().to_radians();
+                let cols = ((span / column).ceil() as usize).max(1);
                 for col in 0..cols {
                     boxes.push(BoundingBox {
                         south: s,
@@ -174,6 +187,11 @@ impl AreaQuery {
             }
         }
         if boxes.len() > MAX_REQUESTS {
+            return Err(QueryError::AreaTooLarge);
+        }
+        // 最后一道自检：算出来的格子必须真的在上限之内，否则宁可报"范围太大"，
+        // 也不要发一个注定被供应商回绝的请求（那种失败在界面上看不出原因）。
+        if boxes.iter().any(|b| b.area_m2() > MAX_CELL_AREA_M2) {
             return Err(QueryError::AreaTooLarge);
         }
         Ok(boxes)
@@ -198,15 +216,16 @@ impl std::fmt::Display for QueryError {
             f,
             "{}",
             match self {
-                Self::MissingCredential => "请先填写供应商的 API Key",
-                Self::Unauthorized => "供应商未接受凭据，请检查 API Key",
-                Self::RateLimited => "供应商的查询额度已用完",
-                Self::InvalidQuery => "查询参数无效",
-                Self::AreaTooLarge =>
-                    "OpenCellID 在线查询半径最多 5 公里，请缩小范围或导入离线数据",
-                Self::Unavailable => "供应商暂时无法查询",
-                Self::InvalidResponse => "供应商返回的数据格式不兼容",
-                Self::Network => "无法连接基站供应商",
+                Self::MissingCredential => "enter an API key for the provider first",
+                Self::Unauthorized => "the provider rejected the credential; check the API key",
+                Self::RateLimited => "the provider query quota is used up",
+                Self::InvalidQuery => "invalid query parameters",
+                Self::AreaTooLarge => {
+                    "OpenCellID online queries are limited to a 5 km radius; narrow the area or import offline data"
+                }
+                Self::Unavailable => "the provider is temporarily unavailable",
+                Self::InvalidResponse => "the provider returned an incompatible data format",
+                Self::Network => "cannot reach the cell provider",
             }
         )
     }
@@ -226,6 +245,20 @@ pub struct HttpResponse {
 }
 pub trait Http {
     fn send(&mut self, request: HttpRequest) -> Result<HttpResponse, QueryError>;
+}
+
+/// 流式下载一个**大文件**（国家数据集）。
+///
+/// <p>单独一个 trait 而不是给 [`Http`] 加方法：那条通道的契约是"小 JSON 整包读"，
+/// 而数据集是几十 MB 的 gz 流，两者的超时、体积与错误处理都不一样。给一个**默认实现**
+/// （直接报"暂时无法查询"）是为了让既有的测试替身不必跟着实现下载——下载那条路
+/// 另有自己的测试，不该把它拖进每个查询用例里。
+pub trait Downloader {
+    /// 返回一个可读流。调用方负责解压与解析，**不要整包读进内存**。
+    fn download(&mut self, url: &str, accept: &str) -> Result<Box<dyn std::io::Read + Send>, QueryError> {
+        let _ = (url, accept);
+        Err(QueryError::Unavailable)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -282,6 +315,14 @@ impl Dataset {
 }
 
 fn body(response: HttpResponse) -> Result<Value, QueryError> {
+    // **先读响应体，再按状态码兜底**：OpenCellID 的"额度用完"是 `HTTP 400` 加
+    // `{"code":7}`，只按状态码判会把它当成"查询参数无效"，界面上再被包装成
+    // "无法连接基站供应商"——2026-09-12 就是这句话把人带偏了整整一轮。
+    let parsed = serde_json::from_str::<Value>(&response.body).ok();
+    // 报错体：不论 HTTP 状态是 2xx 还是 4xx，都以供应商的 `code` 为准。
+    if parsed.as_ref().is_some_and(|value| value.get("error").is_some()) {
+        return Err(classify(parsed.as_ref()));
+    }
     match response.status {
         401 | 403 => return Err(QueryError::Unauthorized),
         429 => return Err(QueryError::RateLimited),
@@ -289,18 +330,17 @@ fn body(response: HttpResponse) -> Result<Value, QueryError> {
         200..=299 => {}
         _ => return Err(QueryError::Unavailable),
     }
-    let value: Value =
-        serde_json::from_str(&response.body).map_err(|_| QueryError::InvalidResponse)?;
-    // Error messages may echo the submitted API key. Never forward upstream strings.
-    if value.get("error").is_some() {
-        return Err(match value.get("code").and_then(Value::as_u64) {
-            Some(2) => QueryError::Unauthorized,
-            Some(7) => QueryError::RateLimited,
-            Some(3) => QueryError::InvalidQuery,
-            _ => QueryError::Unavailable,
-        });
+    parsed.ok_or(QueryError::InvalidResponse)
+}
+
+/// 供应商的 `code` 字段：2 凭据无效、3 参数无效、7 额度用完。
+fn classify(value: Option<&Value>) -> QueryError {
+    match value.and_then(|v| v.get("code")).and_then(Value::as_u64) {
+        Some(2) => QueryError::Unauthorized,
+        Some(3) => QueryError::InvalidQuery,
+        Some(7) => QueryError::RateLimited,
+        _ => QueryError::Unavailable,
     }
-    Ok(value)
 }
 fn integer(value: &Value, name: &str) -> Result<u64, QueryError> {
     value
@@ -612,8 +652,7 @@ impl CellCache {
     }
 }
 
-pub fn atomic_save(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    use std::{
+pub fn atomic_save(path: &Path, bytes: &[u8]) -> io::Result<()> {    use std::{
         io::Write,
         sync::atomic::{AtomicU64, Ordering},
     };
@@ -641,4 +680,59 @@ pub fn atomic_save(path: &Path, bytes: &[u8]) -> io::Result<()> {
         let _ = fs::remove_file(&temp);
     }
     result
+}
+
+#[cfg(test)]
+mod area_tests {
+    use super::*;
+
+    fn target(latitude: f64, longitude: f64, radius_m: f64) -> AreaQuery {
+        AreaQuery {
+            target: Coordinate { latitude, longitude },
+            radius_m,
+        }
+    }
+
+    /// 每一格都必须落在供应商的 4,000,000 m² 上限之内，否则请求会被直接回绝，
+    /// 而界面上只会看到"无法连接基站供应商"（2026-09-12 实测踩过）。
+    #[test]
+    fn every_box_stays_under_the_provider_area_limit() {
+        for &(latitude, longitude, radius) in &[
+            (34.3546, 108.9360, 3000.0), // 西安未央区：中纬度，改造前会超标
+            (31.2304, 121.4737, 2000.0), // 上海：低纬度
+            (45.0, 126.6, 5000.0),       // 哈尔滨：改造前必然超标
+            (0.0, 0.0, 5000.0),          // 赤道
+            (-69.3733, 76.3767, 2000.0), // 南极：高纬度，格子会变窄
+        ] {
+            let boxes = target(latitude, longitude, radius).boxes().unwrap();
+            assert!(!boxes.is_empty(), "({latitude},{longitude}) should produce at least one box");
+            for b in &boxes {
+                assert!(
+                    b.area_m2() <= 4_000_000.0,
+                    "({latitude},{longitude}) box area {} m² exceeds the provider limit",
+                    b.area_m2()
+                );
+            }
+        }
+    }
+
+    /// 覆盖整个请求圆的性质不能被"只求不超标"牺牲掉。
+    #[test]
+    fn every_box_keeps_the_requested_circle_covered() {
+        let query = target(34.3546, 108.9360, 3000.0);
+        let boxes = query.boxes().unwrap();
+        for bearing in (0..360).step_by(15) {
+            let radians = (bearing as f64).to_radians();
+            let point = Coordinate {
+                latitude: query.target.latitude + (query.radius_m / EARTH).to_degrees() * radians.cos(),
+                longitude: query.target.longitude
+                    + (query.radius_m / EARTH).to_degrees() * radians.sin()
+                        / query.target.latitude.to_radians().cos(),
+            };
+            assert!(
+                boxes.iter().any(|b| b.contains(point)),
+                "the edge point at bearing {bearing}° is not covered by any box"
+            );
+        }
+    }
 }

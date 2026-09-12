@@ -1,6 +1,7 @@
 package me.idk.justlocation.bridge;
 
 import android.net.wifi.ScanResult;
+import android.net.wifi.SupplicantState;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiSsid;
 import java.lang.reflect.Method;
@@ -29,13 +30,26 @@ final class WifiOutput {
     /** 一个偏高的 5GHz 常用频段带宽，仅用于让字段看起来合理，不代表真实测量。 */
     private static final int CHANNEL_WIDTH_MHZ = 80;
 
+    /**
+     * 合成连接的"网络号"与"评分"。
+     *
+     * <p>取值照搬原版模型（`setNetworkId(1000)`、`score = 60`）：系统给真实连接的评分就是这个量级，
+     * 应用常拿它判断"是不是连着网"。给 {@code -1}（`INVALID_NETWORK_ID`）会让合成对象看起来没连上。
+     */
+    private static final int NETWORK_ID = 1000;
+    private static final int SCORE = 60;
+
     private static final java.lang.reflect.Constructor<WifiInfo> NEW_INFO;      // WifiInfo()
     private static final java.lang.reflect.Constructor<ScanResult> NEW_SCAN;    // ScanResult(WifiSsid,String,String,int,int,long,int,int)
     private static final Method SET_SSID;         // WifiInfo.setSSID(WifiSsid)
     private static final Method SET_BSSID;        // WifiInfo.setBSSID(String)
+    private static final Method SET_MAC;          // WifiInfo.setMacAddress(String)
     private static final Method SET_RSSI;         // WifiInfo.setRssi(int)
     private static final Method SET_LINK_SPEED;   // WifiInfo.setLinkSpeed(int)
     private static final Method SET_FREQUENCY;    // WifiInfo.setFrequency(int)
+    private static final Method SET_NETWORK_ID;   // WifiInfo.setNetworkId(int)
+    private static final Method SET_STATE;        // WifiInfo.setSupplicantState(SupplicantState)
+    private static final java.lang.reflect.Field SCORE_FIELD; // WifiInfo.score
     private static final Method FROM_UTF8;        // WifiSsid.fromUtf8Text(CharSequence)
     private static final Method SCAN_SSID;        // ScanResult.setWifiSsid(WifiSsid)
     private static final Method SCAN_STANDARD;    // ScanResult.setWifiStandard(int)
@@ -44,7 +58,9 @@ final class WifiOutput {
     static {
         java.lang.reflect.Constructor<WifiInfo> newInfo = null;
         java.lang.reflect.Constructor<ScanResult> newScan = null;
-        Method setSsid = null, setBssid = null, setRssi = null, setLinkSpeed = null, setFrequency = null;
+        Method setSsid = null, setBssid = null, setMac = null, setRssi = null, setLinkSpeed = null, setFrequency = null;
+        Method setNetworkId = null, setState = null;
+        java.lang.reflect.Field scoreField = null;
         Method fromUtf8 = null, scanSsid = null, scanStandard = null, scanWidth = null;
         try {
             // 必需项：没有这些就构造不出可用的对象，整条通道直接关闭。
@@ -62,14 +78,24 @@ final class WifiOutput {
         // 可选：不同 ROM 暴露的字段并不一致（例如 HyperOS 的 ScanResult 就没有
         // setLinkSpeed / setChannelWidth）。少一个只影响那个字段，不该让整条通道关闭。
         try { setBssid = WifiInfo.class.getMethod("setBSSID", String.class); } catch (Throwable ignored) { }
+        try { setMac = WifiInfo.class.getMethod("setMacAddress", String.class); } catch (Throwable ignored) { }
         try { setRssi = WifiInfo.class.getMethod("setRssi", int.class); } catch (Throwable ignored) { }
         try { setLinkSpeed = WifiInfo.class.getMethod("setLinkSpeed", int.class); } catch (Throwable ignored) { }
         try { setFrequency = WifiInfo.class.getMethod("setFrequency", int.class); } catch (Throwable ignored) { }
+        try { setNetworkId = WifiInfo.class.getMethod("setNetworkId", int.class); } catch (Throwable ignored) { }
+        try {
+            setState = WifiInfo.class.getMethod("setSupplicantState", SupplicantState.class);
+        } catch (Throwable ignored) { }
+        try {
+            scoreField = WifiInfo.class.getDeclaredField("score");
+            scoreField.setAccessible(true);
+        } catch (Throwable ignored) { }
         try { scanStandard = ScanResult.class.getMethod("setWifiStandard", int.class); } catch (Throwable ignored) { }
         try { scanWidth = ScanResult.class.getMethod("setChannelWidth", int.class); } catch (Throwable ignored) { }
         NEW_INFO = newInfo; NEW_SCAN = newScan;
-        SET_SSID = setSsid; SET_BSSID = setBssid; SET_RSSI = setRssi;
+        SET_SSID = setSsid; SET_BSSID = setBssid; SET_MAC = setMac; SET_RSSI = setRssi;
         SET_LINK_SPEED = setLinkSpeed; SET_FREQUENCY = setFrequency;
+        SET_NETWORK_ID = setNetworkId; SET_STATE = setState; SCORE_FIELD = scoreField;
         FROM_UTF8 = fromUtf8; SCAN_SSID = scanSsid; SCAN_STANDARD = scanStandard;
         SCAN_CHANNEL_WIDTH = scanWidth;
     }
@@ -116,21 +142,36 @@ final class WifiOutput {
     /**
      * 当前连接的合成读数。
      *
-     * <p>脱敏沿用平台策略：调用方自己的 {@link WifiInfo#getApplicableRedactions()} 是
-     * `REDACT_FOR_ACCESS_FINE_LOCATION | REDACT_FOR_LOCAL_MAC_ADDRESS |
-     * REDACT_FOR_NETWORK_SETTINGS`，把同样的位应用到合成对象上，编码方式与真实对象一致。
-     * 这里**不能**用系统返回对象的脱敏位——那是服务端按调用方权限算过的，
-     * 套到合成对象上会把合成 SSID 一起抹掉。
+     * <p><b>这里绝不能做脱敏</b>（2026-09-12 真机踩到的坑，代价是一轮重启）：
+     * `WifiInfo.getApplicableRedactions()` 返回的是**这个类支持哪几种脱敏**（三个位全开），
+     * 不是"当前调用方需要脱敏哪几位"。照它调 `makeCopy(...)` 等于把 SSID 与 BSSID 全抹掉，
+     * 应用侧读到的就是 `<unknown ssid>` 配 `02:00:00:00:00:00`——看上去像"挂钩没生效"，
+     * 其实是我们自己把内容擦了（当时 `rssi` 仍是配置值 `-42`，正是这一点暴露了真相）。
+     * 平台的服务端实现是**先按调用方权限算出该脱敏的位**再传进来；我们不去复刻那套权限推导，
+     * 因为作用范围已经限定了只有被选中的应用会走到这里，其余调用方拿到的仍是系统原值。
+     * 原版同样直接返回合成对象，不套任何脱敏位。
+     *
+     * <p>字段集合对齐原版模型（`WifiInfo` 的 `setSSID/setBSSID/setMacAddress/setRssi/
+     * setLinkSpeed/setFrequency/setNetworkId/score/setSupplicantState`）：只填前几个的话，
+     * 应用会读到"名称对得上、但状态是未连接"，照样判定没在 Wi-Fi 上。
      */
     WifiInfo connectionInfo() throws Exception {
         WifiSettings.Target target = targets.get(0);
         WifiInfo info = NEW_INFO.newInstance();
         SET_SSID.invoke(info, ssid(target.ssid()));
-        if (!target.bssid().isEmpty() && has(SET_BSSID)) SET_BSSID.invoke(info, target.bssid());
+        if (!target.bssid().isEmpty()) {
+            if (has(SET_BSSID)) SET_BSSID.invoke(info, target.bssid());
+            if (has(SET_MAC)) SET_MAC.invoke(info, target.bssid());
+        }
         if (has(SET_RSSI)) SET_RSSI.invoke(info, target.rssi());
         if (has(SET_LINK_SPEED)) SET_LINK_SPEED.invoke(info, target.linkSpeed());
         if (has(SET_FREQUENCY)) SET_FREQUENCY.invoke(info, target.frequency());
-        return info.makeCopy(info.getApplicableRedactions());
+        if (has(SET_NETWORK_ID)) SET_NETWORK_ID.invoke(info, NETWORK_ID);
+        if (has(SET_STATE)) SET_STATE.invoke(info, SupplicantState.COMPLETED);
+        try {
+            if (SCORE_FIELD != null) SCORE_FIELD.setInt(info, SCORE);
+        } catch (Throwable ignored) { }
+        return info;
     }
 
     /** 附近网络列表：整份目标列表，逐条构造系统对象。 */

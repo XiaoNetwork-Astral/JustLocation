@@ -3,6 +3,7 @@ use crate::{
     cells::{CellRegion, Coordinate, NearbyCell},
     gnss::GnssConfig,
     motion::Motion,
+    operators::Operators,
     record::Recording,
     route::{Playback, Route, RouteState},
     telephony::{TelephonyConfig, TelephonyFrame, DetectedSubscription, validate_detected},
@@ -27,6 +28,7 @@ struct Request {
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::sync::Arc;
 
     fn route_start(points: &[(f64, f64)], speed: f64) -> String {
         json!({"version":1,"op":"start_route","scope":{"mode":"apps","packages":["example.selected"]},
@@ -67,13 +69,13 @@ mod tests {
 
         let response = control.handle(r#"{"version":1,"op":"record_stop"}"#);
         assert!(response.ok);
-        let track = response.state.recorded.expect("录制结果要交回给面板");
+        let track = response.state.recorded.expect("the recording must be handed back to the panel");
         assert_eq!(track.points.len(), 2);
         assert!(response.state.recording.is_none());
         // 交付一次就取走：重复取要被拒绝，避免界面反复弹同一条成品。
         let taken = control.handle(r#"{"version":1,"op":"record_take"}"#);
         assert!(taken.ok);
-        assert!(taken.state.recorded.is_none(), "取走后同一份成品不应再出现");
+        assert!(taken.state.recorded.is_none(), "the same take must not appear again after it is taken");
         let again = control.handle(r#"{"version":1,"op":"record_take"}"#);
         assert!(!again.ok);
         assert!(again.error.unwrap().contains("no recorded route"));
@@ -420,6 +422,42 @@ mod tests {
         assert!(!response.state.hook_connected);
     }
 
+    /// Wi-Fi 的就绪位与回调计数走同一条心跳，但含义完全不同：两位说明"方法挂上了"，
+    /// 计数说明"回调真的被走到了"。真机验收要能分别看到这两件事。
+    #[test]
+    fn wifi_hook_status_reports_readiness_and_call_count() {
+        let mut control = Control::default();
+        control.handle(r#"{"version":1,"op":"hook_status","installed":true,"wifi_scan":true}"#);
+        let state = serde_json::to_value(control.handle(r#"{"version":1,"op":"status"}"#)).unwrap();
+        assert_eq!(state["state"]["wifi_scan_hook_ready"], true);
+        assert_eq!(state["state"]["wifi_connection_hook_ready"], false);
+        assert_eq!(state["state"]["wifi_hook_calls"], 0);
+
+        control.handle(
+            r#"{"version":1,"op":"hook_status","installed":true,"wifi_scan":true,"wifi_connection":true,"wifi_calls":7}"#,
+        );
+        let state = serde_json::to_value(control.handle(r#"{"version":1,"op":"status"}"#)).unwrap();
+        assert_eq!(state["state"]["wifi_connection_hook_ready"], true);
+        assert_eq!(state["state"]["wifi_hook_calls"], 7);
+    }
+
+    #[test]
+    fn gnss_raw_counters_pass_through_untouched() {
+        let mut control = Control::default();
+        // 老版本桥接不带诊断串：字段缺省即可，不能因为少一个字段就整条回包失败。
+        control.handle(r#"{"version":1,"op":"hook_status","installed":true,"gnss_raw":true}"#);
+        let state = serde_json::to_value(control.handle(r#"{"version":1,"op":"status"}"#)).unwrap();
+        assert_eq!(state["state"]["gnss_raw_hook_ready"], true);
+        assert_eq!(state["state"]["gnss_raw_detail"], serde_json::Value::Null);
+
+        // 新版本桥接报上来什么就原样给出去，后台不解析它的内部格式。
+        control.handle(
+            r#"{"version":1,"op":"hook_status","installed":true,"gnss_raw":true,"gnss_raw_detail":"2:1,9,9,9,8,0;3:1,9,9,0,0,0"}"#,
+        );
+        let state = serde_json::to_value(control.handle(r#"{"version":1,"op":"status"}"#)).unwrap();
+        assert_eq!(state["state"]["gnss_raw_detail"], "2:1,9,9,9,8,0;3:1,9,9,0,0,0");
+    }
+
     #[test]
     fn satellite_switches_round_trip_through_the_protocol() {
         let mut control = Control::default();
@@ -466,6 +504,52 @@ mod tests {
         assert_eq!(state["state"]["gnss"]["gnss_enabled"], false);
         let _ = std::fs::remove_dir_all(&directory);
     }
+
+    /// 运营商属性必须在响应构建**之前**应用：否则客户端拿到的 `operator_hook_ready`
+    /// 永远是上一次的状态，看起来像"没接管"（真机验收踩过）。顺带钉住"同一状态不重复写"。
+    #[test]
+    fn operator_properties_follow_the_session_state() {
+        use crate::operators::{Properties, tests::Recording};
+        let directory = std::env::temp_dir().join(format!("justlocation-operators-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).unwrap();
+        let probe = Arc::new(Recording::default());        probe.set(crate::operators::NETWORK_ALPHA, "中国电信").unwrap();
+        let mut control = Control::open_with(
+            directory.join("state.json"),
+            Some(Box::new(SharedProbe(probe.clone()))),
+        )
+        .unwrap();
+
+        let state = control.handle(r#"{"version":1,"op":"set_telephony","config":{"cells_enabled":false,"sim_enabled":true,"radius_m":500,"subscriptions":[{"id":1,"slot":0,"mcc":"460","mnc":"11","country":"cn","carrier":"中国联通","enabled":true}]}}"#);
+        assert!(state.ok);
+        // 只是配置了、还没开始模拟：不该接管。
+        assert_eq!(state.state.operator_hook_ready, false);
+        assert_eq!(probe.value(crate::operators::NETWORK_ALPHA).unwrap(), "中国电信");
+
+        let started = control.handle(
+            r#"{"version":1,"op":"start","config":{"position":{"latitude":31.23,"longitude":121.47,"altitude":0,"accuracy":5,"speed":0,"bearing":0},"scope":{"mode":"all"}}}"#,
+        );
+        assert!(started.ok);
+        assert_eq!(started.state.operator_hook_ready, true, "the properties must be taken over on the first tick");
+        assert_eq!(probe.value(crate::operators::NETWORK_ALPHA).unwrap(), "中国联通");
+
+        let writes = probe.write_count();
+        let status = control.handle(r#"{"version":1,"op":"status"}"#);
+        assert_eq!(status.state.operator_hook_ready, true);
+        assert_eq!(probe.write_count(), writes, "unchanged state must not write the properties again");
+
+        let stopped = control.handle(r#"{"version":1,"op":"stop"}"#);
+        assert_eq!(stopped.state.operator_hook_ready, false);
+        assert_eq!(probe.value(crate::operators::NETWORK_ALPHA).unwrap(), "中国电信", "the real values must be restored after stopping");
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    struct SharedProbe(Arc<crate::operators::tests::Recording>);
+
+    impl crate::operators::Properties for SharedProbe {
+        fn get(&self, name: &str) -> Option<String> { self.0.get(name) }
+        fn set(&self, name: &str, value: &str) -> io::Result<()> { self.0.set(name, value) }
+    }
 }
 
 #[derive(Deserialize)]
@@ -498,6 +582,23 @@ enum Command {
         nmea: bool,
         #[serde(default)]
         cell_callbacks: bool,
+        /// Wi-Fi 扫描结果适配。老版本原生模块不带这两个字段，按未安装处理。
+        #[serde(default)]
+        wifi_scan: bool,
+        #[serde(default)]
+        wifi_connection: bool,
+        /// 桥接自报的 Wi-Fi 回调计数，仅用于诊断。
+        #[serde(default)]
+        wifi_calls: u32,
+        /// GNSS 原始数据两条出口（原始测量 + 导航电文）是否装好。老版本原生模块不带这个字段。
+        #[serde(default)]
+        gnss_raw: bool,
+        /// GNSS 原始通道的计数串，**原样透传**给客户端的 `gnss_raw_detail`。
+        ///
+        /// <p>为什么不在这里解析成结构体：它是桥接侧的诊断内容，格式由桥接决定，
+        /// 后台不该跟着一起改。老版本原生模块不带这个字段。
+        #[serde(default)]
+        gnss_raw_detail: Option<String>,
     },
     SetCellRegion {
         region: Option<CellRegion>,
@@ -529,6 +630,19 @@ enum Command {
         sim: bool,
         #[serde(default)]
         subscriptions: Option<Vec<DetectedSubscription>>,
+        /// 手机进程读到的**真实**运营商名与 PLMN（`TelephonyManager` 的四个 getter）。
+        ///
+        /// <p>为什么由手机进程报：这四个值在应用进程里读的是系统属性，而属性正是我们改写的地方；
+        /// 运营商服务里的真值没被动过，只有手机进程读得到。它是"还原"最可信的来源。
+        /// 老版本桥接不带这四个字段，缺省即视为没有实时真值。
+        #[serde(default)]
+        network_alpha: Option<String>,
+        #[serde(default)]
+        sim_alpha: Option<String>,
+        #[serde(default)]
+        network_numeric: Option<String>,
+        #[serde(default)]
+        sim_numeric: Option<String>,
     },
     QueryCells {
         target: Coordinate,
@@ -591,6 +705,12 @@ pub struct State {
     pub cell_region: Option<CellRegion>,
     pub telephony: TelephonyConfig,
     pub telephony_output: Option<TelephonyFrame>,
+    /// **当前输出的基站是不是伪造的兜底数据。**
+    ///
+    /// <p>打开基站输出、但那一带一条真实小区数据都没有时，装置会为虚拟位置造几个小区，
+    /// 免得应用因为"周围一个基站都没有"而退回到自己的定位。造出来的编号只在本机成立、
+    /// 云端查不到、也不对应任何真实基站——所以这里如实置 true，让命令行与面板都能提示使用者。
+    pub cells_synthesized: bool,
     pub gnss: GnssConfig,
     pub wifi: WifiConfig,
     /// 正在录制时的实时状态；停止或丢弃后回到 null。
@@ -601,6 +721,28 @@ pub struct State {
     pub cell_query_hook_ready: bool,
     pub cell_callback_hook_ready: bool,
     pub sim_hook_ready: bool,
+    /// 运营商名称与 PLMN 的属性出口 Hook（`TelephonyManager` 的四个 getter 都读它们）。
+    pub operator_hook_ready: bool,
+    /// Wi-Fi 服务端两项适配。**分开报告**：扫描结果与连接信息是两次独立的安装，
+    /// 装上一项不等于另一项也在（原版报告特别强调过这一点）。
+    pub wifi_scan_hook_ready: bool,
+    pub wifi_connection_hook_ready: bool,
+    /// Wi-Fi 两处回调被走到的次数，**由桥接侧自己报上来**。
+    ///
+    /// <p>为什么要它：「hook 就绪」只说明方法挂上了，不说明回调真的被走到。真机验收里
+    /// 出现过"两项报就绪、应用侧仍是真实数据"，而所有基于日志/文件的诊断都栽在同一个坑上——
+    /// `system_server` 既写不进 `/data/adb/justlocation`（`drwx------ root root`），
+    /// 也看不到被环形缓冲冲掉的启动期日志。计数走状态回包本身，没有写入失败这回事。
+    pub wifi_hook_calls: u32,
+    /// GNSS 原始数据两条出口（`GnssMeasurementsProvider` 与 `GnssNavigationMessageProvider`）
+    /// 是否都已接管。**是一个合并位**：两条出口在同一次安装里挂，任一条失败就是 false。
+    pub gnss_raw_hook_ready: bool,
+    /// GNSS 原始通道的计数串（桥接侧原样上报，仅供诊断）。
+    ///
+    /// <p>和 `wifi_hook_calls` 同一个理由：就绪位只说明"挂上了"，说明不了注册有没有被
+    /// 投递到。格式是 `下标:注册数,dispatch 次数,该投次数,真投次数,送达数,失败数`，
+    /// 多条用 `;` 分隔；`installGnssRaw` 里两条通道依次是原始测量、导航电文。
+    pub gnss_raw_detail: Option<String>,
     pub phone_connected: bool,
     pub detected_subscriptions: Option<Vec<DetectedSubscription>>,
 }
@@ -639,6 +781,20 @@ pub struct Control {
     cells_installed: bool,
     cell_callbacks_installed: bool,
     sim_installed: bool,
+    wifi_scan_installed: bool,
+    wifi_connection_installed: bool,
+    /// 桥接上报的 Wi-Fi 回调计数；老版本桥接不带这个字段时保持 0。
+    wifi_hook_calls: u32,
+    /// GNSS 原始数据两条出口（原始测量 + 导航电文）是否装好；老版本桥接不带这个字段。
+    gnss_raw_installed: bool,
+    /// 桥接上报的 GNSS 原始通道计数串；老版本桥接不带这个字段时保持 None。
+    gnss_raw_detail: Option<String>,
+    /// 运营商名称与 PLMN 的系统属性出口（应用进程直接读这些属性）。
+    operators: Operators,
+    /// 手机进程报上来的**真实**运营商值。属性被我们盖住了，而运营商服务里的没被动过，
+    /// 所以它是还原时最可信的真值来源（见 `crate::operators::Live`）。
+    live_operators: Option<crate::operators::Live>,
+    live_operators_seen_at: Option<Instant>,
     detected_subscriptions: Option<Vec<DetectedSubscription>>,
 }
 
@@ -656,9 +812,29 @@ impl Control {
                 .expect("validated route position");
         }
         let result = self.apply(line, now);
+        // 运营商属性跟着状态走：只有"该不该接管"变化时才动系统属性。
+        // 必须在构建响应**之前**做，否则响应里的 operator_hook_ready 会滞后一次请求：
+        // 客户端拿到的永远是上一次的状态，验收时看起来像"没接管"。
+        // 只有**新鲜**的手机进程真值才可用：它和 `phone_connected` 用同一个新鲜度尺度。
+        let live = self
+            .live_operators_seen_at
+            .filter(|seen| seen.elapsed() < Duration::from_secs(3))
+            .and(self.live_operators.clone());
+        if let Err(error) = self
+            .operators
+            .apply(&self.telephony, self.engine.is_running(), live.as_ref())
+        {
+            eprintln!("operator properties: {error}");
+        }
         self.response(result.err())
     }
     pub fn open(path: impl AsRef<Path>) -> io::Result<Self> {
+        Self::open_with(path, None)
+    }
+
+    /// `properties` 只在测试里给出：协议层要验证"运营商属性跟着状态走"，
+    /// 但测试绝不该真去动设备的系统属性。
+    fn open_with(path: impl AsRef<Path>, properties: Option<Box<dyn crate::operators::Properties + Send>>) -> io::Result<Self> {
         let path = path.as_ref();
         let mut engine = Engine::default();
         let mut cell_region = None;
@@ -718,6 +894,27 @@ impl Control {
             cells_installed: false,
             cell_callbacks_installed: false,
             sim_installed: false,
+            wifi_scan_installed: false,
+            wifi_connection_installed: false,
+            wifi_hook_calls: 0,
+            gnss_raw_installed: false,
+            gnss_raw_detail: None,
+            operators: {
+                let data = path.parent().unwrap_or_else(|| Path::new("."));
+                let mut operators = match properties {
+                    Some(properties) => Operators::with_properties(properties, data),
+                    None => Operators::new(data),
+                };
+                // 上一次脱管退出可能把模拟值留在系统里：启动时先还原，再进入正常流程。
+                // 此刻手机进程通常还没连上（没有实时真值），所以这里只能靠备份文件；
+                // 一旦手机进程开始报真值，`handle_at` 那条路径就会用实时值纠正。
+                if let Err(error) = operators.recover(None) {
+                    eprintln!("operator properties: {error}");
+                }
+                operators
+            },
+            live_operators: None,
+            live_operators_seen_at: None,
             detected_subscriptions: None,
         })
     }
@@ -765,11 +962,22 @@ impl Control {
                 self.telephony = config;
                 Ok(())
             }
-            Command::TelephonyHookStatus { cells, sim, subscriptions } => {
+            Command::TelephonyHookStatus { cells, sim, subscriptions, network_alpha, sim_alpha, network_numeric, sim_numeric } => {
                 if let Some(cards) = &subscriptions { validate_detected(cards).map_err(str::to_owned)?; }
                 self.phone_seen_at = Some(Instant::now());
                 self.cells_installed = cells;
                 self.sim_installed = sim;
+                // 四个值一起给才算一份可用的真值快照；只给一部分时不采信（免得半真半假）。
+                let live = crate::operators::Live {
+                    network_alpha: network_alpha.unwrap_or_default(),
+                    sim_alpha: sim_alpha.unwrap_or_default(),
+                    network_numeric: network_numeric.unwrap_or_default(),
+                    sim_numeric: sim_numeric.unwrap_or_default(),
+                };
+                if live.is_usable() {
+                    self.live_operators = Some(live);
+                    self.live_operators_seen_at = Some(Instant::now());
+                }
                 self.detected_subscriptions = subscriptions;
                 Ok(())
             }
@@ -853,12 +1061,22 @@ impl Control {
                 gnss,
                 nmea,
                 cell_callbacks,
+                wifi_scan,
+                wifi_connection,
+                wifi_calls,
+                gnss_raw,
+                gnss_raw_detail,
             } => {
                 self.hook_seen_at = Some(Instant::now());
                 self.hook_installed = installed;
                 self.gnss_installed = gnss;
                 self.nmea_installed = nmea;
                 self.cell_callbacks_installed = cell_callbacks;
+                self.wifi_scan_installed = wifi_scan;
+                self.wifi_connection_installed = wifi_connection;
+                self.wifi_hook_calls = wifi_calls;
+                self.gnss_raw_installed = gnss_raw;
+                self.gnss_raw_detail = gnss_raw_detail;
                 Ok(())
             }
             Command::Start { config } => {
@@ -992,6 +1210,11 @@ impl Control {
         } else {
             None
         };
+        // 单独再报一位：帧里的 `synthesized` 埋在结构里，而这一位是"**现在输出的基站是伪造的**"
+        // 这句要紧的话，命令行、面板与动作脚本都该一眼看到，不必去挖嵌套结构。
+        let cells_synthesized = telephony_output
+            .as_ref()
+            .is_some_and(|frame| frame.synthesized);
         Response {
             version: VERSION,
             ok: error.is_none(),
@@ -1012,6 +1235,7 @@ impl Control {
                 cell_region: self.cell_region.clone(),
                 telephony: self.telephony.clone(),
                 telephony_output,
+                cells_synthesized,
                 gnss: self.gnss,
                 wifi: self.wifi.clone(),
                 recording: self.recording.as_ref().map(|recording| RecordProgress {
@@ -1028,6 +1252,14 @@ impl Control {
                 cell_query_hook_ready: phone_connected && self.cells_installed,
                 cell_callback_hook_ready: hook_connected && self.cell_callbacks_installed,
                 sim_hook_ready: phone_connected && self.sim_installed,
+                operator_hook_ready: self.operators.is_ready(),
+                wifi_scan_hook_ready: hook_connected && self.wifi_scan_installed,
+                wifi_connection_hook_ready: hook_connected && self.wifi_connection_installed,
+                wifi_hook_calls: self.wifi_hook_calls,
+            // 原始测量与导航电文**一起**装好才算就绪：两条出口是同一次安装里的两个钩子。
+            gnss_raw_hook_ready: hook_connected && self.gnss_raw_installed,
+            // 计数串只在钩子还连着的时候有意义；断线时留着旧数字反而误导。
+            gnss_raw_detail: if hook_connected { self.gnss_raw_detail.clone() } else { None },
                 phone_connected,
                 detected_subscriptions: if phone_connected { self.detected_subscriptions.clone() } else { None },
             },

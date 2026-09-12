@@ -1,0 +1,31 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
+    <!-- `ConnectivityManager.getNetworkCapabilities` 要它；漏了会抛 SecurityException，
+         而被自检的兜底 catch 收进"自检异常"一节，报告里那一行就静静消失了。 -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- 读取订阅列表（卡槽与运营商）用；这是普通权限，装上即授予。 -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <application
+        android:allowBackup="false"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <!--
+          逐通道自检用的独立 App：**不进模块包**，由开发者在需要验收时自己装
+          （`tests/device/run-checks.mjs` 会装它、跑完不卸）。
+          导出的理由：它只读调用方自己的公开接口（位置、卫星、NMEA、基站、SIM、Wi-Fi），
+          不写任何状态、不暴露后台控制通道，读到的就是调用者本来就能读到的东西；
+          而 adb 启动未导出的 Activity 会被拒。
+        -->
+        <activity android:name=".ChannelCheckActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

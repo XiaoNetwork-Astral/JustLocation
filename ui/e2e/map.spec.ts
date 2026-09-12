@@ -18,7 +18,7 @@ async function withBackend(page: Page) {
           if (command.indexOf('dumpsys') === 0) { call(0, '', ''); return; }
           call(0, JSON.stringify({ version: 1, ok: true, state: { requested_active: false, config: {
             position: { latitude: 31.2, longitude: 121.5, altitude: 12, accuracy: 5, speed: 0, bearing: 0 },
-            scope: { mode: 'apps', packages: ['me.idk.justlocation.companion'] },
+            scope: { mode: 'apps', packages: ['me.idk.justlocation.probe'] },
           } } }), '');
         },
       };

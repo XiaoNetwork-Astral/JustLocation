@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $adbPath = Join-Path $projectRoot 'build/avd-sdk/platform-tools/adb.exe'
 $consolePath = Join-Path $projectRoot 'tools/avd-console.mjs'
-$package = 'me.idk.justlocation.companion'
+$package = 'me.idk.justlocation.probe'
 function DeviceCommand([string[]]$Arguments) {
     $output = & $adbPath -s emulator-5580 @Arguments
     if ($LASTEXITCODE -ne 0) { throw "AVD command failed: $($Arguments -join ' ')" }

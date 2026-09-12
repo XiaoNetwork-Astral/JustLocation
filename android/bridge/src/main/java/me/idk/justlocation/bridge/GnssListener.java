@@ -16,7 +16,7 @@ import java.util.function.Supplier;
  * `NMEA 报文` 决定是否拦截 NMEA。它们都只在"定位模拟进行中且本应用在作用范围内"时生效；
  * 任一条件不满足就原样转发系统回调——也就是"未启用等于系统原样"。
  */
-final class GnssListener implements InvocationHandler {
+final class GnssListener implements InvocationHandler, GnssTick {
     /** enabledGnss / enabledNmea 来自后台配置，默认关闭。 */
     record Output(SessionSnapshot scope, GnssFrame frame, boolean enabledGnss, boolean enabledNmea) {}
     /** 模拟期间到达的真实报文，停止后按原样补发，避免应用看到报文凭空消失。 */
@@ -44,7 +44,7 @@ final class GnssListener implements InvocationHandler {
     Object proxy() { return proxy; }
 
     /** 该通道当前是否由模拟接管。 */
-    synchronized boolean needsTick() {
+    @Override public synchronized boolean needsTick() {
         Output value = current();
         return value != null && (nmeaChannel ? value.enabledNmea() : value.enabledGnss());
     }
@@ -89,7 +89,7 @@ final class GnssListener implements InvocationHandler {
     }
 
     /** Invoked only by the platform's active-registration delivery operation. */
-    synchronized void tick() throws Throwable {
+    @Override public synchronized void tick() throws Throwable {
         Output value = current();
         if (value == null || (nmeaChannel ? !value.enabledNmea() : !value.enabledGnss())) {
             restore();

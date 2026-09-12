@@ -366,6 +366,9 @@ export function App({ client, loadApps = loadInstalledApps, joystick = joystickC
               <div><dt>NMEA 报文</dt><dd>{state?.nmea_hook_ready ? '已就绪' : state ? '尚未接入' : '后台未连接'}</dd></div>
               <div><dt>基站查询</dt><dd>{state?.cell_query_hook_ready ? '已就绪' : state ? '尚未接入' : '后台未连接'}</dd></div>
               <div><dt>基站回调</dt><dd>{state?.cell_callback_hook_ready ? '已就绪' : state ? '尚未接入' : '后台未连接'}</dd></div>
+              <div><dt>运营商名称与 PLMN</dt><dd>{state?.operator_hook_ready ? '已就绪' : state ? '尚未接入' : '后台未连接'}</dd></div>
+              <div><dt>Wi-Fi 连接信息</dt><dd>{state?.wifi_connection_hook_ready ? '已就绪' : state ? '尚未接入' : '后台未连接'}</dd></div>
+              <div><dt>Wi-Fi 扫描结果</dt><dd>{state?.wifi_scan_hook_ready ? '已就绪' : state ? '尚未接入' : '后台未连接'}</dd></div>
               <div><dt>电话服务</dt><dd>{state?.phone_connected ? '已连接' : state ? '等待连接' : '后台未连接'}</dd></div>
             </dl></section>
           <section className="settings-card"><h2>运行环境</h2><dl><div><dt>模块</dt><dd>JustLocation 0.1.0</dd></div><div><dt>控制入口</dt><dd>KernelSU WebUI</dd></div><div><dt>后台</dt><dd>{state ? '已连接' : '未连接'}</dd></div></dl></section>

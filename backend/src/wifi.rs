@@ -165,10 +165,10 @@ mod tests {
             // 原版用 find() 而非完整匹配，所以更长的串只要包含一个合法地址就算通过。
             "aa:bb:cc:dd:ee:ff:00",
         ] {
-            assert!(WifiTarget::looks_like_bssid(text), "{text} 应该被接受");
+            assert!(WifiTarget::looks_like_bssid(text), "{text} should be accepted");
         }
         for text in ["", "aa:bb:cc:dd:ee", "zz:bb:cc:dd:ee:ff", "aa bb cc dd ee ff"] {
-            assert!(!WifiTarget::looks_like_bssid(text), "{text} 不应该被接受");
+            assert!(!WifiTarget::looks_like_bssid(text), "{text} should be rejected");
         }
     }
 

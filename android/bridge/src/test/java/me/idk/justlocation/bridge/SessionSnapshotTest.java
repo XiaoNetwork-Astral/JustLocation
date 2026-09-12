@@ -9,7 +9,10 @@ public class SessionSnapshotTest {
         SessionSnapshot snapshot = new SessionSnapshot(true, false, Set.of("example.selected"), 1000);
         assertTrue(snapshot.appliesTo("example.selected", 2000));
         assertFalse(snapshot.appliesTo("example.other", 2000));
-        assertFalse(snapshot.appliesTo("example.selected", 4000));
+        // 窗口是 `SessionSnapshot.MAX_AGE_MS`（20 秒，2026-09-12 实测后从 3 秒放宽的）。
+        // 这里按数字写死是为了"改了常量就得改测试"——放宽窗口是失效保护的一部分，不该被顺手改掉。
+        assertTrue(snapshot.appliesTo("example.selected", 19_000));
+        assertFalse(snapshot.appliesTo("example.selected", 21_000));
     }
 
     @Test public void stoppedAndEmptyScopesNeverProduceOutput() {

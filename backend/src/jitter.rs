@@ -160,10 +160,10 @@ mod tests {
     #[test]
     fn the_last_factor_is_reused_until_the_next_tick() {
         let mut jitter = Jitter::new(true);
-        assert_eq!(jitter.factor(), 1.0, "还没有 tick 时按原速处理");
+        assert_eq!(jitter.factor(), 1.0, "the original speed applies before the first tick");
         jitter.advance(5, sequence(vec![0.0, 0.6]));
         let first = jitter.factor();
-        assert_eq!(jitter.factor(), first, "同一个 tick 内读多次必须是同一个值");
+        assert_eq!(jitter.factor(), first, "reads within the same tick must return the same value");
         jitter.advance(6, sequence(vec![0.0, 0.99]));
         assert_ne!(jitter.factor(), first);
     }

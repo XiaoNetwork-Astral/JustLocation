@@ -118,8 +118,9 @@ public class WifiOutputTest {
         assertNotNull(scoped);
         assertTrue(scoped.scope().appliesTo("example.target", NOW));
         assertFalse("不在名单里的应用必须拿到系统数据", scoped.scope().appliesTo("example.other", NOW));
-        // 心跳过期（超过 3 秒）后恢复系统输出。
-        assertFalse(scoped.scope().appliesTo("example.target", NOW + 3_001));
+        // 心跳过期（超过 20 秒，2026-09-12 实测后从 3 秒放宽）后恢复系统输出。
+        assertTrue("窗口内仍然接管", scoped.scope().appliesTo("example.target", NOW + 19_000));
+        assertFalse(scoped.scope().appliesTo("example.target", NOW + 21_000));
 
         var every = WifiSettings.parse(state(twoTargets(), all(), true), NOW);
         assertNotNull(every);

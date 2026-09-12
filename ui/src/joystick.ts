@@ -8,9 +8,10 @@ export interface Joystick {
   read(): Promise<boolean | null>;
 }
 type Exec = (command: string) => Promise<{ errno: number; stdout: string; stderr: string }>;
-const component = 'me.idk.justlocation.companion';
+/** 模块自带的摇杆 App：没有启动器与页面，只能由面板经 am 唤起它的前台服务。 */
+const component = 'me.idk.justlocation.joystick';
 const serviceName = `${component}/.JoystickService`;
-/** 解析 dumpsys 里 "ServiceRecord{... me.idk.justlocation.companion/.JoystickService}" 这类行。 */
+/** 解析 dumpsys 里 "ServiceRecord{... me.idk.justlocation.joystick/.JoystickService}" 这类行。 */
 export function parseServiceRunning(output: string, name = serviceName): boolean {
   return output.includes(name);
 }
@@ -18,12 +19,15 @@ export function createJoystick(exec: Exec): Joystick {
   return {
     async check() {
       const result = await exec(`pm path ${component}`);
-      if (result.errno || !result.stdout.includes('package:')) throw new Error('请先安装 JustLocation 可选 App，再打开摇杆');
+      if (result.errno || !result.stdout.includes('package:')) throw new Error('摇杆 App 未随模块安装，请重装模块');
     },
     async open(kmh) {
       if (!Number.isFinite(kmh) || kmh <= 0 || kmh > 3600) throw new Error('速度须大于 0、不超过 3600 km/h');
-      const result = await exec(`am start -n ${component}/.JoystickActivity --es speed ${kmh} --ez open true`);
-      if (result.errno || /error|exception/i.test(result.stdout + result.stderr)) throw new Error('无法打开摇杆，请检查可选 App 是否为最新版本');
+      // 系统不允许 shell 从后台直接启动前台服务，所以先唤起一个透明空壳 Activity，
+      // 由服务自己的进程在前台状态下把服务拉起来。界面给的是 km/h，服务要 m/s。
+      const metersPerSecond = kmh / 3.6;
+      const result = await exec(`am start -n ${component}/.CallActivity --ef speed ${metersPerSecond}`);
+      if (result.errno || /error|exception/i.test(result.stdout + result.stderr)) throw new Error('无法打开摇杆，请检查模块是否为最新版本');
     },
     async close() {
       const result = await exec(`am stopservice -n ${serviceName}`);

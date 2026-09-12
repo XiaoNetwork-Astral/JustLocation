@@ -40,7 +40,7 @@ try {
   const position = { latitude: 31.2, longitude: 121.5, altitude: 0, accuracy: 5, speed: 0, bearing: 0 };
   const frames = [
     { version: 1, op: 'status' },
-    { version: 1, op: 'start', config: { position, scope: { mode: 'apps', packages: ['me.idk.justlocation.companion'] } } },
+    { version: 1, op: 'start', config: { position, scope: { mode: 'apps', packages: ['me.idk.justlocation.probe'] } } },
     { version: 1, op: 'update', position: { ...position, latitude: 999 } },
     { version: 1, op: 'status' },
     { version: 1, op: 'stop' },

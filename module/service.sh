@@ -12,7 +12,7 @@ mkdir -p "$DATA"
 # 正式包里的后台二进制带 .sha256 清单；不一致就不要启动，避免运行被改坏的程序。
 if command -v verify_file >/dev/null 2>&1; then
     if ! verify_file "$MODDIR/bin/justlocationd" "$MODDIR/bin/justlocationd.sha256"; then
-        echo "justlocationd 校验失败，已跳过启动" >> "$DATA/service.log"
+        echo "justlocationd checksum mismatch; startup skipped" >> "$DATA/service.log"
         exit 1
     fi
 fi

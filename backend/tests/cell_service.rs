@@ -1,4 +1,4 @@
-use justlocation_backend::cell_providers::{Http, HttpRequest, HttpResponse, QueryError};
+use justlocation_backend::cell_providers::{Downloader, Http, HttpRequest, HttpResponse, QueryError};
 use justlocation_backend::cell_service::CellService;
 use serde_json::{Value, json};
 
@@ -6,6 +6,12 @@ struct NoNetwork;
 impl Http for NoNetwork {
     fn send(&mut self, _: HttpRequest) -> Result<HttpResponse, QueryError> {
         panic!("this operation must not connect to a supplier")
+    }
+}
+impl Downloader for NoNetwork {
+    /// 数据集下载走的是另一条流式通道；这里的用例都不该碰它，碰了就是设计错了。
+    fn download(&mut self, _: &str, _: &str) -> Result<Box<dyn std::io::Read + Send>, QueryError> {
+        panic!("this operation must not download a dataset")
     }
 }
 fn send(service: &CellService, value: Value) -> Value {
@@ -90,7 +96,7 @@ fn imported_dataset_is_queryable_offline_without_credentials_or_a_running_daemon
         json!({"version":1,"op":"query","area":{"target":{"latitude":1,"longitude":0},"radius_m":500},"mode":"offline"}),
     );
     assert_eq!(result["ok"], false);
-    assert!(result["error"].as_str().unwrap().contains("离线"));
+    assert!(result["error"].as_str().unwrap().contains("no offline cell data"));
     assert_eq!(
         send(&service, json!({"version":1,"op":"clear_cache"}))["ok"],
         true

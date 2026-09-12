@@ -23,49 +23,72 @@ public final class BridgeEntry {
     private static ProviderDispatcher dispatcher;
     private static Method wrapResult;
     private static long lastDispatchError;
+    /** 当前输出的基站是不是伪造的兜底数据；只用来"变化时记一条日志"。 */
+    private static volatile boolean cellsSynthesized;
     private static volatile GnssListener.Output gnssOutput;
+    /** 原始测量与导航电文的输出快照；与卫星状态同源（同一片天空）。 */
+    private static volatile GnssRawListener.Output gnssRawOutput;
     private static final List<GnssDispatcher> gnssDispatchers = new ArrayList<>();
     private static int gnssFlags;
     private static volatile TelephonySnapshot telephony;
     private static TelephonyRegistryAdapter telephonyRegistry;
+    /** Wi-Fi 服务端挂钩；装载失败时为 null，那条通道保持系统原值。 */
+    private static volatile WifiServiceImplHooks wifiHooks;
     /** Wi-Fi 合成读数：与定位/卫星同一套作用范围与新鲜度规则。 */
     private static volatile WifiOutput wifi;
-    /** 反射构造 ParceledListSlice：Wi-Fi 服务的返回类型在 framework 的混淆包里。 */
-    private static java.lang.reflect.Constructor<?> listSlice;
     private BridgeEntry() {}
 
-    private static native String readState(int installed);
+    private static native String readState(int installed, int wifiCalls, String gnssRawDetail);
     private static native Method hook(Method target, Object callback, Method method);
 
-    /** Wi-Fi 服务实现类的全名；ROM 上加载它的 classloader 与 system_server 的那个不是同一个。 */
-    private static final String WIFI_SERVICE = "com.android.server.wifi.WifiServiceImpl";
-    /** 真正加载了 Wi-Fi 服务类的那个 classloader；拿到它才能装 Wi-Fi hook。 */
-    private static volatile ClassLoader wifiLoader;
 
     public static void start(ClassLoader systemServerLoader) throws Exception {
         installProvider(Class.forName(PROVIDER, false, systemServerLoader));
         installGnss(systemServerLoader, "GnssStatusProvider", "IGnssStatusListener", 2);
         installGnss(systemServerLoader, "GnssNmeaProvider", "IGnssNmeaListener", 4);
+        installGnssRaw(systemServerLoader);
         installTelephonyRegistry(systemServerLoader);
-        // Wi-Fi 服务类由 Wi-Fi APEX 的 classloader 加载，system_server 那个 classloader 的
-        // DexPathList 里没有它的 jar（本机实测），因此这里按类名加载必然失败。
-        // `wifiLoader` 要等"接住 Wi-Fi 服务实例"那条路做出来才会被填上；在那之前
-        // Wi-Fi 通道保持系统原值，不会输出任何合成读数。
-        installWifi(wifiLoader);
+        installWifiService(systemServerLoader);
         Thread thread = new Thread(() -> {
             while (!Thread.currentThread().isInterrupted()) {
                 try {
-                    String response = readState((hooksInstalled ? 1 : 0) | gnssFlags | (telephonyRegistry != null ? 8 : 0));
-                    fix = response == null || !hooksInstalled ? null : Fix.parse(response);
-                    try { telephony = TelephonySnapshot.parse(response, SystemClock.elapsedRealtime()); }
-                    catch (Exception error) { telephony = null; }
-                    try { wifi = WifiOutput.parse(response, SystemClock.elapsedRealtime()); }
-                    catch (Exception error) { wifi = null; }
+                    String response = readState((hooksInstalled ? 1 : 0) | gnssFlags | (telephonyRegistry != null ? 8 : 0)
+                            | (wifiScanReady() ? 16 : 0) | (wifiConnectionReady() ? 32 : 0),
+                            WifiServiceImplHooks.calls(), gnssCounters());
+                    // **拿不到回应时不要立刻清空快照**（2026-09-12 实测纠正）：`readState` 超时
+                    // 或断线都返回 null，而那条路以前走的是"fix = null"，于是守护进程只是卡了一两秒，
+                    // 应用就会读到真实坐标——3 秒窗口与 20 秒窗口都拦不住它，因为清空发生在窗口之前。
+                    // 现在只由看门狗（快照过期）与明确的停止（回包里 requested_active=false）决定何时恢复真值。
+                    if (response != null) {
+                        fix = !hooksInstalled ? null : Fix.parse(response);
+                        try { telephony = TelephonySnapshot.parse(response, SystemClock.elapsedRealtime()); }
+                        catch (Exception error) { telephony = null; }
+                        try { wifi = WifiOutput.parse(response, SystemClock.elapsedRealtime()); }
+                        catch (Exception error) { wifi = null; }
+                        // **只在状态翻转时记一条**：这一位表示"现在输出的基站是伪造的"，
+                        // 每秒重复刷同一句既没信息量、又会把环形缓冲冲掉。
+                        // `system_server` 写不进 /data/adb/justlocation，日志是唯一出口。
+                        boolean manufactured = response.contains("\"cells_synthesized\":true");
+                        if (manufactured != cellsSynthesized) {
+                            cellsSynthesized = manufactured;
+                            if (manufactured) {
+                                Log.w(TAG, "Cell output is synthesized: no real cell data covers this position;"
+                                        + " the reported cells exist only on this device");
+                            } else {
+                                Log.i(TAG, "Cell output is backed by real cell data again");
+                            }
+                        }
+                    }
                 } catch (Exception error) { fix = null; telephony = null; wifi = null; }
                 Fix current = fix;
-                gnssOutput = current == null ? null : new GnssListener.Output(current.scope,
-                        new GnssFrame(current.latitude, current.longitude, current.altitude, current.speed, current.bearing, System.currentTimeMillis()),
-                        current.gnssEnabled, current.nmeaEnabled);
+                GnssFrame frame = current == null ? null
+                        : new GnssFrame(current.latitude, current.longitude, current.altitude,
+                                current.speed, current.bearing, System.currentTimeMillis());
+                gnssOutput = frame == null ? null
+                        : new GnssListener.Output(current.scope, frame, current.gnssEnabled, current.nmeaEnabled);
+                // 三条 GNSS 出口共用同一帧，所以卫星状态、原始测量与导航电文看到的是同一片天空。
+                gnssRawOutput = frame == null ? null
+                        : new GnssRawListener.Output(current.scope, frame, current.gnssEnabled);
                 if (current != null) {
                     try {
                         dispatcher.dispatch(current.scope, SystemClock::elapsedRealtime, name -> {
@@ -109,62 +132,50 @@ public final class BridgeEntry {
 
     }
 
+
+
     /**
-     * 安装 Wi-Fi 的两处 Hook：当前连接信息与扫描结果。
+     * Wi-Fi 服务端替换：装在 `WifiServiceImpl` 自己的 classloader 上。
      *
-     * <p>两个目标方法自己会先做权限检查（`enforceAccessPermission`、
-     * `enforceCanAccessScanResults`）再取数据，替换的是它们的**返回值**，
-     * 因此调用方该有的权限与会抛出的异常都照旧。
+     * <p>classloader 从 `SystemServerClassLoaderFactory.sLoadedPaths` 按 jar 路径取（见
+     * {@link WifiServiceImplHooks} 的说明）。取不到就整条通道不接管——绝不用别的 classloader
+     * 硬凑，那样只会得到一个看起来成功、实际挂在别的类上的假就绪。
      *
-     * <p>**当前状态：调用不到。** 本机（HyperOS / Android 15 主line Wi-Fi）实测：
-     * Wi-Fi 服务的实现类由 Wi-Fi APEX 的 classloader 加载，`system_server` 自身
-     * classloader 的 DexPathList 里没有 `/apex/com.android.wifi/javalib/service-wifi.jar`
-     * （列出的 15 个 APEX service jar 里没有它），boot classloader 也看不见，
-     * 所以按类名加载只会 ClassNotFoundException。
-     *
-     * <p>也试过挂钩 `ClassLoader.loadClass` 等系统自己加载它的那一刻：整个开机过程该方法
-     * 只被走到个位数次（`android.miui.R` 这类），一次 Wi-Fi 类都没有——ART 内部解析类
-     * 基本不走这个 Java 方法，所以这条路不成立。
-     *
-     * <p>可行的下一步是**接住服务实例**：Wi-Fi 服务在启动期间向系统注册，实例就在注册
-     * 调用的参数里，拿到实例即拿到它的 Class，再走这里现有的挂钩逻辑即可。
+     * <p>作用范围与新鲜度沿用定位那条通道：`WifiOutput` 只负责合成对象，
+     * 配置解析与门控由 `WifiSettings` / `WifiOutput` 自己决定（两者都有单测覆盖）。
      */
-    private static void installWifi(ClassLoader loader) {
-        if (loader == null) {
-            // 还没有拿到 APEX 那个 classloader；Wi-Fi 通道保持系统原值。
+    private static void installWifiService(ClassLoader systemServerLoader) {
+        // 合成对象需要的那几个隐藏入口（`WifiInfo`/`ScanResult`/`WifiSsid` 的构造与赋值）缺任何一个，
+        // 这条通道就只会永远走"放行"分支。那种情况下**不挂钩**：两项就绪位保持 false，
+        // 面板与验收能如实看到"这条通道没接管"，而不是报着就绪却一直读到系统原值。
+        if (!WifiOutput.usable()) {
+            Log.w(TAG, "Wi-Fi object APIs unavailable; Wi-Fi channel remains system output");
             return;
         }
         try {
-            Class<?> service = Class.forName(WIFI_SERVICE, false, loader);
-            Class<?> info = Class.forName("android.net.wifi.WifiInfo", false, loader);
-            Class<?> scan = Class.forName("android.net.wifi.ScanResult", false, loader);
-            Class<?> slice = Class.forName(
-                    "com.android.wifi.x.com.android.modules.utils.ParceledListSlice", false, loader);
-            listSlice = slice.getConstructor(List.class);
-            install(service.getDeclaredMethod("getConnectionInfo", String.class, String.class), call -> {
+            WifiServiceImplHooks hooks = new WifiServiceImplHooks(systemServerLoader, packageName -> {
                 WifiOutput current = wifi;
-                if (current != null && current.appliesTo((String) call.arguments[1], SystemClock.elapsedRealtime())) {
-                    Object result = call.original();
-                    // Wi-Fi 关闭时系统返回一个空对象，它的 SSID 就是占位名；
-                    // 这种情况下不接管，否则关掉 Wi-Fi 反而会凭空出现一个"已连接"的网络。
-                    if (result != null && !WifiSettings.isPlaceholder(((WifiInfo) result).getSSID())) {
-                        call.arguments[0] = current.connectionInfo();
-                        return call.original();
-                    }
-                    return result;
-                }
-                return call.original();
+                if (current == null || !current.appliesTo(packageName, SystemClock.elapsedRealtime())) return null;
+                return current;
             });
-            install(service.getDeclaredMethod("getScanResults", String.class, String.class), call -> {
-                WifiOutput current = wifi;
-                if (current == null || !current.appliesTo((String) call.arguments[0], SystemClock.elapsedRealtime())) return call.original();
-                // 泛型在擦除后与方法的参数类型一致：传一个 ArrayList<ScanResult> 进去即可。
-                return listSlice.newInstance(current.scanResults(SystemClock.elapsedRealtime()));
-            });
+            if (!hooks.usable()) throw new IllegalStateException("Wi-Fi service hooks unusable");
+            hooks.install(BridgeEntry::install);
+            wifiHooks = hooks;
             Log.i(TAG, "Wi-Fi service hooks installed");
-        } catch (Exception error) {
-            Log.w(TAG, "Cannot install Wi-Fi hooks; Wi-Fi channel remains system output", error);
+        } catch (Throwable error) {
+            Log.w(TAG, "Cannot install Wi-Fi service hooks; Wi-Fi channel remains system output", error);
         }
+    }
+
+    /** Wi-Fi 两项挂钩是否各自装上了；两项分开报告，与原版"扫描与连接信息不是同一项适配"一致。 */
+    private static boolean wifiScanReady() {
+        WifiServiceImplHooks hooks = wifiHooks;
+        return hooks != null && hooks.scanReady();
+    }
+
+    private static boolean wifiConnectionReady() {
+        WifiServiceImplHooks hooks = wifiHooks;
+        return hooks != null && hooks.connectionReady();
     }
 
     private static void installTelephonyRegistry(ClassLoader loader) {
@@ -214,7 +225,9 @@ public final class BridgeEntry {
             Class<?> registration = Class.forName("com.android.server.location.gnss.GnssListenerMultiplexer$GnssListenerRegistration", false, loader);
             Class<?> operation = Class.forName("com.android.internal.listeners.ListenerExecutor$ListenerOperation", false, loader);
             GnssDispatcher channel = new GnssDispatcher(provider, listener, registration, identity, operation,
-                    () -> gnssOutput, SystemClock::elapsedRealtime, BridgeEntry::gnssStatus);
+                    (delegate, packageName) ->
+                            new GnssListener(listener, delegate, packageName, () -> gnssOutput, SystemClock::elapsedRealtime,
+                                    BridgeEntry::gnssStatus).proxy());
             install(provider.getDeclaredMethod("addListener", identity, listener), call -> {
                 call.arguments[2] = channel.wrap(call.arguments[1], call.arguments[2]);
                 Object result = call.original();
@@ -226,6 +239,106 @@ public final class BridgeEntry {
             Log.i(TAG, providerName + " hooks installed");
         } catch (Exception error) {
             Log.w(TAG, "Cannot install " + providerName + "; location channel remains available", error);
+        }
+    }
+
+    /**
+     * 原始 GNSS 数据：原始测量与导航电文。
+     *
+     * <p>两条接口各只有一个数据回调，形状和卫星状态不同，所以走 {@link GnssRawListener}；
+     * 开关沿用后台的 `gnss_enabled`——开了 GNSS 模拟就三条出口一起接管（见该类的说明）。
+     *
+     * <p>方法签名是**在真机上核过的**（`build/location-investigation/GnssApiProbe.java` 与对
+     * `services.jar` 的 dexdump），不是照 AOSP 印象写的：这台 ROM 上
+     * `GnssMeasurementsProvider.addListener` 比常见的多一个 `GnssMeasurementRequest` 参数。
+     * 签名写错的话这里会抛，通道报不就绪，不会静默挂到别的东西上。
+     */
+    private static void installGnssRaw(ClassLoader loader) {
+        // 合成对象的入口缺任何一个就整体不装：装了也只能产出半成品，还会让"就绪"变成假话。
+        if (!GnssRawOutput.usable()) {
+            Log.w(TAG, "Raw GNSS object APIs missing (" + GnssRawOutput.missing() + "); raw channels stay system output");
+            return;
+        }
+        Class<?> listener, registration, identity, operation, request;
+        try {
+            identity = Class.forName("android.location.util.identity.CallerIdentity", false, loader);
+            registration = Class.forName("com.android.server.location.gnss.GnssListenerMultiplexer$GnssListenerRegistration", false, loader);
+            operation = Class.forName("com.android.internal.listeners.ListenerExecutor$ListenerOperation", false, loader);
+            request = Class.forName("android.location.GnssMeasurementRequest", false, loader);
+        } catch (Exception error) {
+            Log.w(TAG, "Raw GNSS support classes unavailable", error);
+            return;
+        }
+        boolean measurements = installGnssMeasurement(loader, identity, registration, operation, request);
+        boolean messages = installGnssMessage(loader, identity, registration, operation);
+        if (measurements && messages) gnssFlags |= 64;
+        Log.i(TAG, "Raw GNSS hooks: measurements=" + measurements + " navigationMessages=" + messages);
+    }
+
+    /** 计数串每次心跳重算：它只在诊断时看，代价是每秒钟几个小字符串。
+     *
+     * <p>为什么 GNSS 要有这个：这轮"导航电文送不到"卡住的原因，正是"钩子被走到"与
+     * "应用真的收到"之间隔着好几步，而 `system_server` 既写不进 `/data/adb/justlocation`、
+     * 日志又会被环形缓冲冲掉（备忘录的通用经验）。计数走状态回包本身，没有写入失败这回事，
+     * 也不用翻日志：**注册数 > 0 而送达数 = 0，就说明断在投递，而不是没挂上钩子**。
+     */
+    private static String gnssCounters() {
+        StringBuilder counters = new StringBuilder();
+        for (int index = 0; index < gnssDispatchers.size(); index++) {
+            if (counters.length() > 0) counters.append(';');
+            counters.append(index).append(':').append(String.join(",", gnssDispatchers.get(index).counters()));
+        }
+        return counters.toString();
+    }
+
+    private static boolean installGnssMeasurement(ClassLoader loader, Class<?> identity, Class<?> registration,
+                                                  Class<?> operation, Class<?> request) {
+        try {
+            Class<?> provider = Class.forName("com.android.server.location.gnss.GnssMeasurementsProvider", false, loader);
+            Class<?> listener = Class.forName("android.location.IGnssMeasurementsListener", false, loader);
+            GnssDispatcher channel = new GnssDispatcher(provider, listener, registration, identity, operation,
+                    (delegate, packageName) ->
+                            new GnssRawListener(listener, delegate, packageName, () -> gnssRawOutput, SystemClock::elapsedRealtime,
+                                    "onGnssMeasurementsReceived",
+                                    frame -> java.util.List.of(GnssRawOutput.measurements(frame))).proxy(),
+                    // 自己驱动投递：这两条出口的数据全部由我们合成，不该等 HAL 来叫（见 GnssDispatcher 的说明）。
+                    true);
+            install(provider.getDeclaredMethod("addListener", request, identity, listener), call -> {
+                call.arguments[3] = channel.wrap(call.arguments[2], call.arguments[3]);
+                Object result = call.original();
+                channel.track(call.arguments[0]);
+                return result;
+            });
+            gnssDispatchers.add(channel);
+            return true;
+        } catch (Throwable error) {
+            Log.w(TAG, "Cannot install raw GNSS measurements; that channel stays system output", error);
+            return false;
+        }
+    }
+
+    private static boolean installGnssMessage(ClassLoader loader, Class<?> identity, Class<?> registration, Class<?> operation) {
+        try {
+            Class<?> provider = Class.forName("com.android.server.location.gnss.GnssNavigationMessageProvider", false, loader);
+            Class<?> listener = Class.forName("android.location.IGnssNavigationMessageListener", false, loader);
+            GnssDispatcher channel = new GnssDispatcher(provider, listener, registration, identity, operation,
+                    (delegate, packageName) ->
+                            new GnssRawListener(listener, delegate, packageName, () -> gnssRawOutput, SystemClock::elapsedRealtime,
+                                    "onGnssNavigationMessageReceived",
+                                    frame -> new ArrayList<Object>(GnssRawOutput.navigationMessages(frame))).proxy(),
+                    // 同上：导航电文是这轮唯一"钩子挂上了却送不到"的出口，不能依赖 HAL 触发。
+                    true);
+            install(provider.getDeclaredMethod("addListener", identity, listener), call -> {
+                call.arguments[2] = channel.wrap(call.arguments[1], call.arguments[2]);
+                Object result = call.original();
+                channel.track(call.arguments[0]);
+                return result;
+            });
+            gnssDispatchers.add(channel);
+            return true;
+        } catch (Throwable error) {
+            Log.w(TAG, "Cannot install GNSS navigation messages; that channel stays system output", error);
+            return false;
         }
     }
 

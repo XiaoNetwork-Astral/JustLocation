@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = dirname(fileURLToPath(import.meta.url));
@@ -131,11 +131,19 @@ function backend(tests = false) {
 }
 
 function android() {
-  gradle([':bridge:assembleRelease', ':companion:assembleDebug']);
+  gradle([':bridge:assembleRelease', ':joystick:assembleDebug', ':probe:assembleDebug']);
   bridgeDex();
   mkdirSync(join(root, 'dist'), { recursive: true });
-  copyFileSync(join(root, 'android/companion/build/outputs/apk/debug/companion-debug.apk'),
-    join(root, 'dist/justlocation-companion-debug.apk'));
+  // 模块自带摇杆 App：进模块 ZIP，由安装脚本装上、卸载脚本删掉。
+  copyFileSync(join(root, 'android/joystick/build/outputs/apk/debug/joystick-debug.apk'),
+    join(root, 'dist/justlocation-joystick.apk'));
+  // 自检 App：不进模块包，验收时单独装上。
+  copyFileSync(join(root, 'android/probe/build/outputs/apk/debug/probe-debug.apk'),
+    join(root, 'dist/justlocation-probe-debug.apk'));
+  // 改过名的旧产物留着只会让人装错版本（真机上就差点装到上一版）。
+  for (const stale of ['justlocation-companion-debug.apk']) {
+    rmSync(join(root, 'dist', stale), { force: true });
+  }
 }
 
 function bridgeDex() {
@@ -182,6 +190,9 @@ function pack() {
     ['build/native/libjustlocation.so', 'zygisk/arm64-v8a.so'],
     ['build/cargo/aarch64-linux-android/release/justlocationd', 'bin/justlocationd'],
     ['build/bridge/classes.dex', 'bridge/classes.dex'],
+    // 模块自带的摇杆 App：与 LSPosed 把 manager.apk 放在 bin/ 一样，
+    // 附属应用统一收在 bin/ 下，便于打包脚本与安装脚本对齐。
+    ['dist/justlocation-joystick.apk', 'bin/joystick.apk'],
     ['build/native/libjustlocation_runtime.so', 'lib/libjustlocation_runtime.so'],
     ['build/native/_deps/shadowhook-build/libshadowhook.so', 'lib/libshadowhook.so'],
     ['build/native/_deps/shadowhook-build/libshadowhook_nothing.so', 'lib/libshadowhook_nothing.so'],
@@ -192,19 +203,20 @@ function pack() {
     ['build/native/_deps/shadowhook-src/shadowhook/src/main/cpp/third_party/xdl/LICENSE', 'licenses/xdl.txt'],
     ['build/native/_deps/shadowhook-src/shadowhook/src/main/cpp/third_party/lss/LICENSE', 'licenses/lss.txt'],
     ['native/include/zygisk.hpp', 'licenses/zygisk.hpp'],
-    ['ui/node_modules/react/LICENSE', 'licenses/react.txt'],
-    ['ui/node_modules/react-dom/LICENSE', 'licenses/react-dom.txt'],
-    ['ui/node_modules/kernelsu/package.json', 'licenses/kernelsu-package.json'],
-    ['ui/node_modules/lucide-react/LICENSE', 'licenses/lucide.txt'],
-    ['ui/node_modules/leaflet/LICENSE', 'licenses/leaflet.txt'],
   ];
   for (const [source, target] of inputs) {
     const destination = join(stage, target);
+    const from = join(root, source);
+    // 摇杆 App 的 APK 由 `android` 步骤产出；只跑 pack 时会缺，给一句能照着做的提示。
+    if (!existsSync(from)) throw new Error(`缺少 ${source}；先跑 node build.mjs android`);
     mkdirSync(dirname(destination), { recursive: true });
-    copyFileSync(join(root, source), destination);
+    copyFileSync(from, destination);
   }
-  cpSync(join(root, 'ui/dist'), join(stage, 'webroot'), { recursive: true });
+  // 模块**不带 Web UI**（2026-09-12 用户决定：先让模块没有控制面板）。
+  // 因此这里不拷 `ui/dist`，上面也不再带 React / Leaflet / lucide / KernelSU SDK 的许可文件——
+  // 包里没有那些代码，就不该留着它们的许可声明。`ui/` 源码与它的测试原样保留，随时可以再装回去。
   writeChecksums(stage);
+  writeManifest(stage);
   mkdirSync(join(root, 'dist'), { recursive: true });
   const jar = process.env.JAVA_HOME ? join(process.env.JAVA_HOME, 'bin', `jar${exe}`) : `jar${exe}`;
   const zip = join(root, 'dist/justlocation-0.1.0-dev-arm64.zip');
@@ -215,24 +227,48 @@ function pack() {
 /**
  * 给组装出来的每个文件写一份 `.sha256` 清单，与模块包一起分发。
  *
- * 这样安装脚本可以在设备上逐个核对（模块自带的 util_functions.sh 提供 verify_tree），
- * 运行脚本也能在启动后台前确认二进制没被改动。清单必须在打包时生成，不能提交到仓库：
- * 它描述的是这一次构建的字节内容。
+ * 这样运行脚本能在启动后台前确认二进制没被改动（`util_functions.sh` 提供 `verify_file`）。
+ * 清单必须在打包时生成，不能提交到仓库：它描述的是这一次构建的字节内容。
  */
 function writeChecksums(stage) {
-  const walk = directory => readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
-    const full = join(directory, entry.name);
-    if (entry.isDirectory()) return walk(full);
-    // 清单文件自身不再生成清单，否则会无限递归。
-    return entry.name.endsWith('.sha256') ? [] : [full];
-  });
   let count = 0;
-  for (const file of walk(stage)) {
+  for (const file of walkFiles(stage)) {
     const digest = createHash('sha256').update(readFileSync(file)).digest('hex');
     writeFileSync(`${file}.sha256`, `${digest}\n`);
     count += 1;
   }
   console.log(`checksums: ${count} files`);
+}
+
+/**
+ * 整包校验清单 `checksums`：每行 `<sha256>  <包内路径>`，按路径字母序。
+ *
+ * 与上面的逐文件 `.sha256` 解决的不是同一件事：
+ *   - `.sha256` 给**运行期**用（模块目录里的文件有没有被动过）；
+ *   - `checksums` 给**安装期**用（ZIP 里的字节有没有坏）。
+ * 安装时 SKIPUNZIP=1、由 customize.sh 自己解压，所以这份清单必须留在 ZIP 内层，
+ * 不能在打包脚本里直接核对——那样只能证明打包时的字节是对的，证明不了手里这份 ZIP。
+ */
+function writeManifest(stage) {
+  const path = join(stage, 'checksums');
+  const lines = [];
+  for (const file of walkFiles(stage)) {
+    if (file.endsWith('.sha256') || file === path) continue;
+    const name = relative(stage, file).split(sep).join('/');
+    const digest = createHash('sha256').update(readFileSync(file)).digest('hex');
+    lines.push(`${digest}  ${name}`);
+  }
+  lines.sort();
+  writeFileSync(path, `${lines.join('\n')}\n`);
+  console.log(`manifest: ${lines.length} entries`);
+}
+
+/** 列出目录下的所有文件（不含目录本身）。 */
+function walkFiles(directory) {
+  return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+    const full = join(directory, entry.name);
+    return entry.isDirectory() ? walkFiles(full) : [full];
+  });
 }
 
 try {
@@ -244,7 +280,7 @@ try {
       break;
     case 'test': test(); break;
     case 'test:e2e': npm(['run', 'test:e2e']); break;
-    case 'test:android': gradle([':bridge:testDebugUnitTest', ':companion:testDebugUnitTest']); break;
+    case 'test:android': gradle([':bridge:testDebugUnitTest', ':joystick:testDebugUnitTest']); break;
     case 'test:device': testDevice(); break;
     case 'test:checks':
       if (!process.argv[3]) throw new Error('Usage: node build.mjs test:checks <adb-serial>');

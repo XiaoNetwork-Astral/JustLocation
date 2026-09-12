@@ -100,6 +100,32 @@ fn empty_success_does_not_fallback_but_service_failure_does_without_leaking_keys
 }
 
 #[test]
+fn a_quota_error_is_reported_as_a_quota_error_even_though_it_arrives_as_http_400() {
+    // OpenCellID 的额度用完是 `HTTP 400` + `{"code":7}`。以前只按状态码判，于是被当成
+    // "查询参数无效"，界面再包装成"无法连接基站供应商"——排查时被这句话带偏了一整轮。
+    let mut http = MockHttp {
+        replies: [Ok(HttpResponse {
+            status: 400,
+            body: json!({"error":"Rate limit exceeded","code":7}).to_string(),
+        })]
+        .into(),
+        ..Default::default()
+    };
+    assert_eq!(fetch(&mut http, &source(), query(), 0).unwrap_err(), QueryError::RateLimited);
+
+    // 参数类错误仍要如实报成参数问题。
+    let mut http = MockHttp {
+        replies: [Ok(HttpResponse {
+            status: 400,
+            body: json!({"error":"Invalid input data","code":3}).to_string(),
+        })]
+        .into(),
+        ..Default::default()
+    };
+    assert_eq!(fetch(&mut http, &source(), query(), 0).unwrap_err(), QueryError::InvalidQuery);
+}
+
+#[test]
 fn pagination_filters_box_corners_and_marks_unsupported_rows_without_claiming_empty_coverage() {
     let mut first: Vec<_> = (0..50).map(|id| row(id, "LTE")).collect();
     first[0]["lat"] = json!(0.004);

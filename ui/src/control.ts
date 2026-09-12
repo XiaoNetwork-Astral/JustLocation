@@ -20,6 +20,10 @@ export interface State {
   /** 后端已经上报、前端此前没有声明的通道就绪位，用于在设置页展示。 */
   gnss_hook_ready?: boolean; nmea_hook_ready?: boolean;
   cell_query_hook_ready?: boolean; cell_callback_hook_ready?: boolean;
+  /** 运营商名称与 PLMN 的属性出口 Hook：TelephonyManager 的四个 getter 都读系统属性。 */
+  operator_hook_ready?: boolean;
+  /** Wi-Fi 服务端两项适配，分开报告：扫描结果与连接信息是两次独立的安装。 */
+  wifi_scan_hook_ready?: boolean; wifi_connection_hook_ready?: boolean;
   telephony_output?: { availability: 'disabled' | 'ready' | 'missing_region' | 'outside_region'; groups: { cells: unknown[] }[] } | null;
 }
 export type Command = { op: 'status' | 'stop' | 'pause_route' | 'resume_route' } | { op: 'start'; config: Config } | { op: 'update'; position: Position }

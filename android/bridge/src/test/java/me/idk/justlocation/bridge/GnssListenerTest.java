@@ -56,7 +56,7 @@ public class GnssListenerTest {
         enable(); Sink sink = new Sink(); var handler = handler(sink, "selected", Status.class);
         Status listener = (Status) handler.proxy(); handler.tick();
         listener.onGnssStopped(); assertEquals(3, sink.events.size());
-        clock = 4000; handler.tick(); handler.tick();
+        clock = 25_000; handler.tick(); handler.tick();
         assertEquals(List.of("started", "fix:0", "synthetic", "stopped"), sink.events);
         listener.onSvStatusChanged("real"); assertEquals("real", sink.events.get(4));
     }

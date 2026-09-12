@@ -29,6 +29,96 @@ fn region() -> CellRegion {
 }
 
 #[test]
+fn real_cells_are_never_replaced_by_synthesized_ones() {
+    // 有真实数据时必须原样用它 —— 兜底只在"一条都没有"时生效。
+    let config = config();
+    let frame = config.frame(
+        Some(&region()),
+        justlocation_backend::cells::Coordinate {
+            latitude: 0.,
+            longitude: 0.,
+        },
+    );
+    assert!(!frame.synthesized, "读到真实小区时不该伪造");
+    let value = serde_json::to_value(&frame).unwrap();
+    assert_eq!(value["synthesized"], false);
+}
+
+#[test]
+fn an_area_without_any_real_cell_gets_synthesized_cells_that_pass_our_own_radius_filter() {
+    // 区域在远处、目标点附近一条小区都没有：这就是"南极"那种情况。
+    let config = config();
+    let empty = CellRegion {
+        cells: Vec::new(),
+        ..region()
+    };
+    let target = justlocation_backend::cells::Coordinate {
+        latitude: 0.02,
+        longitude: 0.02,
+    };
+    // 区域要覆盖目标点，否则会走成 `outside_region` 而不是兜底。
+    let empty = CellRegion {
+        center: target,
+        radius_m: 2000.0,
+        ..empty
+    };
+    let frame = config.frame(Some(&empty), target);
+    assert!(frame.synthesized, "没有真实数据时应当兜底并如实标记");
+    let value = serde_json::to_value(&frame).unwrap();
+    assert_eq!(value["synthesized"], true);
+    // 每个订阅都得有小区，而且都要落在 `radius_m`（500 米）之内：
+    // 造到半径外的话，会被装置自己的筛选丢掉，等于白造。
+    for group in value["groups"].as_array().unwrap() {
+        let cells = group["cells"].as_array().unwrap();
+        assert!(!cells.is_empty(), "每个订阅都该拿到兜底小区");
+        for cell in cells {
+            let latitude = cell["position"]["latitude"].as_f64().unwrap();
+            let longitude = cell["position"]["longitude"].as_f64().unwrap();
+            let distance = target.distance_to(justlocation_backend::cells::Coordinate {
+                latitude,
+                longitude,
+            });
+            assert!(distance <= 500.0, "兜底小区落在筛选半径之外（{distance} 米）");
+        }
+        // 至少有一个被标成"已注册"，否则应用会认为当前没有服务小区。
+        assert_eq!(cells[0]["registered"], true);
+    }
+}
+
+#[test]
+fn synthesized_identities_stay_stable_for_the_same_position() {
+    // 同一个位置反复查询时编号必须一致：编号在跳会立刻露馅。
+    let config = config();
+    let base = region();
+    let target = justlocation_backend::cells::Coordinate {
+        latitude: 0.02,
+        longitude: 0.02,
+    };
+    let empty = CellRegion {
+        center: target,
+        radius_m: 2000.0,
+        cells: Vec::new(),
+        ..base.clone()
+    };
+    let first = serde_json::to_value(config.frame(Some(&empty), target)).unwrap();
+    let second = serde_json::to_value(config.frame(Some(&empty), target)).unwrap();
+    assert_eq!(first["groups"], second["groups"]);
+    // 换个位置就该换一组编号，否则"移动"这件事在基站侧看不出来。
+    let elsewhere = justlocation_backend::cells::Coordinate {
+        latitude: 0.03,
+        longitude: 0.03,
+    };
+    let moved = CellRegion {
+        center: elsewhere,
+        radius_m: 2000.0,
+        cells: Vec::new(),
+        ..base
+    };
+    let third = serde_json::to_value(config.frame(Some(&moved), elsewhere)).unwrap();
+    assert_ne!(first["groups"], third["groups"]);
+}
+
+#[test]
 fn per_subscription_cells_keep_plmn_width_and_only_one_registered_cell() {
     let config = config();
     config.validate().unwrap();

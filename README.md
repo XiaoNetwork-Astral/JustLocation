@@ -17,24 +17,47 @@ JustLocation/
 ├── webui/               # React + TypeScript：KernelSU WebUI 控制面板
 ├── android/             # 共用一个 Gradle 工程
 │   ├── bridge/          # Java/Kotlin：系统服务适配，编译成模块内的 DEX
-│   └── companion/       # Kotlin：可选 App，提供悬浮摇杆等原生操作
+│   ├── joystick/        # Kotlin：摇杆 App，**随模块分发**（模块自带、无启动器、无页面）
+│   └── probe/           # Kotlin：逐通道自检 App，**不进模块包**，需要时自己装
 ├── module/              # 模块元数据、安装和启动脚本等打包输入
 ├── .deepseek/           # 本地协作资料，忽略提交
 │   ├── project/         # 备忘录与工作记录（界面复刻参考见 ui-reference.md）
 │   ├── references/      # 下载的参考仓库
 │   └── tools/           # 第三方工具与安装包，例如 LSPosed
 ├── build/               # 构建时生成：集中组装与临时产物，忽略提交
-└── dist/                # 构建时生成：最终模块 ZIP、可选 APK，忽略提交
+└── dist/                # 构建时生成：模块 ZIP、摇杆 APK、自检 APK，忽略提交
 ```
 
 `build/` 和 `dist/` 由构建过程按需创建。各语言工具自己的缓存与中间产物也忽略提交。
+
+**两个 App 的分工**（摇杆 App 属于模块的一部分，自检 App 只属于开发流程）：
+
+| | 摇杆 App（显示名 **JustLoystick**） | 自检 App（`me.idk.justlocation.probe`） |
+|---|---|---|
+| 包名 | `me.idk.justlocation.joystick` | `me.idk.justlocation.probe` |
+| 分发 | 打进模块 ZIP，安装脚本用 `pm install` 装上，`uninstall.sh` 负责删掉 | 单独一个 APK，由开发者自己装，不进模块包 |
+| 入口 | **没有启动器图标，也没有可以打开的页面**；悬浮摇杆与路线录制都是前台服务，只能由面板经 `am` 唤起 | 有启动器图标与自检页，也可以由 `tests/device/run-checks.mjs` 用 adb 启动 |
+| 权限 | 悬浮窗权限由安装脚本用 `appops set ... SYSTEM_ALERT_WINDOW allow` 授予；**root 权限必须由用户在 KernelSU 管理器里授权一次**（allowlist 归内核管，命令行加不了） | 由验收脚本 `adb install -g` 授予 |
+
+> 只改显示名、不改包名，是因为改包名会让 KernelSU 里的 root 授权失效——那是一次性、只能由用户操作的授权。
+
+> **唤起方式（2026-09-12 真机验证）**：面板用 `am start -n .../.CallActivity --ef speed <m/s>`
+> 唤起一个**透明、瞬间结束的空壳 Activity**，由它在前台状态下启动摇杆前台服务。
+> 不能直接用 `am start-foreground-service`：系统会拒绝
+> （`Background start not allowed: ... from pkg=com.android.shell startFg?=true`），
+> 而且这条限制**只认调用方**——把 `START_FOREGROUND` appop 授给目标应用或调用方、
+> 把待机桶设为 active、用 `su -c` 以 root 下发，四条路都试过，全被同一条规则拒掉。
+>
+> 另一个坑：`am` 的 `--ef` 放进去的是 **Float**，而 `Bundle.getDoubleExtra` 对 Float
+> **不做类型转换**，会静默返回默认值（extras 里明明有值却读成 -1）。参数一律按
+> 数值类型取，见 `android/joystick/.../Extras.kt`。
 
 ## 模块分工
 
 - `backend` 是运行状态的管理者。路线执行独立于面板和可选 App，控制端负责发出操作并展示状态。
 - `native` 负责进入目标进程及连接 Hook 库。普通应用只经过轻量入口判断并卸载；目标系统进程才初始化 Hook 和业务代码。
 - `android/bridge` 随模块打包，负责 Android 对象、服务接口和回调，不依赖安装 `android/companion`。
-- `webui` 构建出的静态资源装入模块的 `webroot/`，不在源码目录中维护第二份副本。
+- `webui`（`ui/`）是 KernelSU WebUI 控制面板的源码，**目前不随模块打包**——2026-09-12 起模块不带 Web UI（`pack()` 不拷 `webroot/`），控制入口是 `justlocationd request` 与 KernelSU 管理器的操作按钮（`action.sh`）。要把面板装回模块，恢复 `build.mjs` 里那一行拷贝即可。
 - `module` 保存安装包的源文件；组装出的完整模块目录放在 `build/`。
 
 ## 构建组织

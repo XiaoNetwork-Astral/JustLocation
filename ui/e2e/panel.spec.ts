@@ -16,7 +16,7 @@ test('feature switches fit small screens and stop color follows confirmed state'
     const host = window as any;
     let state = { requested_active: false, location_hook_ready: true, config: {
       position: { latitude: 31.2, longitude: 121.5, altitude: 12, accuracy: 5, speed: 0, bearing: 0 },
-      scope: { mode: 'apps', packages: ['me.idk.justlocation.companion'] },
+      scope: { mode: 'apps', packages: ['me.idk.justlocation.probe'] },
     } };
     host.commands = [];
     host.ksu = { exec: (command: string, _options: string, callback: string) => {
@@ -54,17 +54,20 @@ test('feature switches fit small screens and stop color follows confirmed state'
     }
     await page.screenshot({ path: `../build/webui-feature-switches-${theme}.png`, fullPage: true });
   }
-  // 摇杆开关：打开会真的发出 am start 命令，关掉后位置模拟继续。
+  // 摇杆开关：打开会真的发出唤起命令，关掉后位置模拟继续。
+  // 不能直接起前台服务（shell 从后台启动会被系统拒），所以先唤起透明空壳 Activity；
+  // 界面给 km/h，命令里要 m/s。
   const joystick = page.getByRole('checkbox', { name: '摇杆' });
   await toggleSwitch(page, joystick);
   await expect(page.getByText('摇杆已打开，拖动即可移动位置。')).toBeVisible();
-  expect(await page.evaluate(() => (window as any).commands.some((command: string) => command.includes('--es speed 5.4 --ez open true')))).toBe(true);
+  expect(await page.evaluate(() => (window as any).commands.some((command: string) =>
+    command.includes('am start') && command.includes('CallActivity') && command.includes('--ef speed 1.5')))).toBe(true);
   await page.getByLabel('最高速度（km/h）').fill('7.2');
   await toggleSwitch(page, joystick);
   await expect(page.getByText('摇杆已关闭，位置模拟会保持当前状态。')).toBeVisible();
   await toggleSwitch(page, joystick);
   await expect(page.getByText('摇杆已打开，拖动即可移动位置。')).toBeVisible();
-  expect(await page.evaluate(() => (window as any).commands.some((command: string) => command.includes('--es speed 7.2 --ez open true')))).toBe(true);
+  expect(await page.evaluate(() => (window as any).commands.some((command: string) => command.includes('--ef speed 2')))).toBe(true);
   await primary.click();
   await expect(primary).toHaveText('开始模拟');
   await expect(primary).not.toHaveClass(/stop/);
@@ -113,7 +116,7 @@ test('mobile route editor reorders points, validates input and restores a runnin
     const host = window as any;
     let state = JSON.parse(sessionStorage.getItem('test.route.state') || 'null') || { requested_active: false, config: {
       position: { latitude: 31.2, longitude: 121.5, altitude: 12, accuracy: 5, speed: 0, bearing: 0 },
-      scope: { mode: 'apps', packages: ['me.idk.justlocation.companion'] },
+      scope: { mode: 'apps', packages: ['me.idk.justlocation.probe'] },
     } };
     host.ksu = { exec: (command: string, _options: string, callback: string) => {
       const frame = JSON.parse(atob(command.split(' ').at(-1)!));
@@ -172,7 +175,7 @@ test('mobile app picker uses KernelSU metadata and submits selected packages', a
   await page.addInitScript(() => {
     const host = window as unknown as Record<string, any>;
     const apps = [
-      { packageName: 'me.idk.justlocation.companion', appLabel: 'JustLocation', isSystem: false },
+      { packageName: 'me.idk.justlocation.probe', appLabel: 'JustLocation', isSystem: false },
       { packageName: 'com.android.settings', appLabel: '设置', isSystem: true },
       ...Array.from({ length: 50 }, (_, index) => ({ packageName: `example.app${index}`, appLabel: `应用 ${index}`, isSystem: false })),
     ];
@@ -208,16 +211,16 @@ test('mobile app picker uses KernelSU metadata and submits selected packages', a
   await page.getByRole('button', { name: '返回', exact: true }).click();
   await expect(page.getByRole('heading', { name: '位置模拟', exact: true })).toBeVisible();
   // 选中的应用要写进本地草稿；「改为全部应用」在作用范围页里，只清限定、不动勾选。
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('justlocation.scope')!))).toEqual({ mode: 'apps', packages: ['me.idk.justlocation.companion'] });
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('justlocation.scope')!))).toEqual({ mode: 'apps', packages: ['me.idk.justlocation.probe'] });
   await page.getByRole('button', { name: '作用范围（已选 1 个）' }).click();
   await page.getByRole('button', { name: '改为全部应用' }).click();
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('justlocation.scope')!))).toEqual({ mode: 'all', packages: ['me.idk.justlocation.companion'] });
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('justlocation.scope')!))).toEqual({ mode: 'all', packages: ['me.idk.justlocation.probe'] });
   await page.getByRole('button', { name: '完成', exact: true }).click();
   await expect(page.getByRole('button', { name: '作用范围' })).toBeVisible();
   await page.reload();
   // 刷新后仍是"全部应用"，勾选也还在：选定状态不靠内存。
   await expect(page.getByRole('button', { name: '作用范围' })).toBeVisible();
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('justlocation.scope')!))).toEqual({ mode: 'all', packages: ['me.idk.justlocation.companion'] });
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('justlocation.scope')!))).toEqual({ mode: 'all', packages: ['me.idk.justlocation.probe'] });
   await page.getByRole('button', { name: '打开导航' }).click();
   // 侧栏里仍然没有“作用范围”入口：导航只有这四个页面。
   await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['位置模拟', '路线模拟', 'Wi-Fi 模拟', '设置']);
@@ -234,7 +237,7 @@ test('mobile app picker uses KernelSU metadata and submits selected packages', a
   await page.getByRole('button', { name: '完成', exact: true }).click();
   await page.getByRole('button', { name: '开始模拟' }).click();
   await expect(page.getByRole('button', { name: '停止模拟' })).toBeVisible();
-  expect(await page.evaluate(() => (window as any).startedScope)).toEqual({ mode: 'apps', packages: ['me.idk.justlocation.companion'] });
+  expect(await page.evaluate(() => (window as any).startedScope)).toEqual({ mode: 'apps', packages: ['me.idk.justlocation.probe'] });
   // 模拟进行中不能再改应用选择。
   await page.getByRole('button', { name: '作用范围（已选 1 个）' }).click();
   await expect(page.getByRole('checkbox', { name: /JustLocation/ })).toBeDisabled();
@@ -245,12 +248,12 @@ test('scope page drops the all/apps choice and follows the feature switch', asyn
   await page.addInitScript(() => {
     const host = window as unknown as Record<string, any>;
     const apps = [
-      { packageName: 'me.idk.justlocation.companion', appLabel: 'JustLocation', isSystem: false },
+      { packageName: 'me.idk.justlocation.probe', appLabel: 'JustLocation', isSystem: false },
       { packageName: 'com.example.maps', appLabel: '地图', isSystem: false },
     ];
     const state = { requested_active: false, location_hook_ready: true, config: {
       position: { latitude: 31.2, longitude: 121.5, altitude: 12, accuracy: 5, speed: 0, bearing: 0 },
-      scope: { mode: 'apps', packages: ['me.idk.justlocation.companion'] },
+      scope: { mode: 'apps', packages: ['me.idk.justlocation.probe'] },
     } };
     host.ksu = {
       listPackages: () => JSON.stringify(apps.map(app => app.packageName)),
@@ -278,7 +281,7 @@ test('scope page drops the all/apps choice and follows the feature switch', asyn
   // 重新进入，用页里的「改为全部应用」清掉限定：勾选仍然保留。
   await page.getByRole('button', { name: '作用范围（已选 1 个）' }).click();
   await page.getByRole('button', { name: '改为全部应用' }).click();
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('justlocation.scope')!))).toEqual({ mode: 'all', packages: ['me.idk.justlocation.companion'] });
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('justlocation.scope')!))).toEqual({ mode: 'all', packages: ['me.idk.justlocation.probe'] });
   await expect(page.getByText('所有应用都会使用模拟位置。之前勾选的应用已保留。')).toBeVisible();
   await page.getByRole('button', { name: '完成', exact: true }).click();
   await expect(page.getByRole('button', { name: '作用范围' })).toBeVisible();

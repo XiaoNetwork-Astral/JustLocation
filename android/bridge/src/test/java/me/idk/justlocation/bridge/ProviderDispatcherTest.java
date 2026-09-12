@@ -77,7 +77,8 @@ public class ProviderDispatcherTest {
         provider.registrations.add(selected);
         ProviderDispatcher dispatcher = dispatcher(); dispatcher.track(provider);
         dispatcher.dispatch(new SessionSnapshot(false, true, Set.of(), 1000), () -> 1500, name -> "stopped");
-        dispatcher.dispatch(selected(), () -> 4000, name -> "expired");
+        // 快照过期用的是 20 秒窗口（见 SessionSnapshot 的说明），所以这里要跨过 20 秒。
+        dispatcher.dispatch(selected(), () -> 25_000, name -> "expired");
         assertTrue(selected.received.isEmpty());
     }
 }

@@ -32,6 +32,9 @@ final class GnssFrame {
 
     List<Satellite> satellites() { return SATELLITES; }
 
+    /** 原始测量要拿速度填"距离变化率"，所以这里开一个只读口子。 */
+    double speed() { return speed; }
+
     List<String> nmea() {
         Instant instant = Instant.ofEpochMilli(timestampMs);
         String time = TIME.format(instant);
