@@ -3,18 +3,16 @@
 use crate::cells::{Cell, CellIdentity, CellRegion, Coordinate};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::{collections::HashSet, fs, io, path::Path};
+use std::collections::HashSet;
+
+mod cache;
+pub use cache::CellCache;
 
 const EARTH: f64 = 6_371_008.8;
 const MAX_REQUESTS: usize = 64;
-/// 一次查询返回的小区上限。**在线与离线两条路径共用**：面板与装置都不该被一次查询塞爆。
+/// Maximum cells returned by either online or offline queries.
 pub const MAX_CELLS: usize = 128;
-/// 单个查询格子允许的最大球面面积。
-///
-/// <p>OpenCellID 的 `getInArea` 拒绝超过 4,000,000 m² 的包围盒（实测：直接回
-/// `BBOX too big - Limit to 4,000,000 sq.mts.`），而我们的实现把这种回绝当成
-/// "无法连接基站供应商"，界面上根本看不出原因。这里先留 20% 余量，再由
-/// [`AreaQuery::boxes`] 收尾自检，保证发出去的每一格都在上限之内。
+/// Maximum spherical area per query box, with 20% headroom below the provider limit.
 const MAX_CELL_AREA_M2: f64 = 3_200_000.0;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -25,12 +23,7 @@ pub enum ProviderKind {
     Custom,
 }
 
-/// 读供应商名，并容忍已删除的旧名字。
-///
-/// <p>历史上这里有过一个指向 Fake Location 远程服务的候选项，它从未真正可用（一旦被选中就
-/// 直接返回 `NotReady`），已按用户要求删除。但用户存下的 `cell-providers.json` 里可能还写着
-/// 那个名字；直接反序列化会让整份设置读取失败（`deny_unknown_fields` + 枚举），
-/// 于是把"选了一个不存在的供应商"降级成默认值，而不是让面板失去全部配置。
+/// Map removed or unknown provider names to the default while preserving saved settings.
 pub fn lenient_kind<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<ProviderKind, D::Error> {
@@ -43,7 +36,7 @@ pub fn lenient_kind<'de, D: serde::Deserializer<'de>>(
     }
 }
 
-/// [`lenient_kind`] 的可选版本，给 `fallback` 用。
+/// Read an optional fallback provider, ignoring removed or unknown names.
 pub fn lenient_optional_kind<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Option<ProviderKind>, D::Error> {
@@ -61,13 +54,8 @@ pub fn lenient_optional_kind<'de, D: serde::Deserializer<'de>>(
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Provider {
-    OpenCellId {
-        key: String,
-    },
-    Custom {
-        endpoint: String,
-        token: Option<String>,
-    },
+    OpenCellId { key: String },
+    Custom { endpoint: String, token: Option<String> },
 }
 impl Default for Provider {
     fn default() -> Self {
@@ -121,9 +109,7 @@ impl BoundingBox {
 }
 impl AreaQuery {
     pub fn validate(self) -> Result<(), QueryError> {
-        self.target
-            .validate()
-            .map_err(|_| QueryError::InvalidQuery)?;
+        self.target.validate().map_err(|_| QueryError::InvalidQuery)?;
         if !self.radius_m.is_finite() || !(1.0..=200_000.0).contains(&self.radius_m) {
             return Err(QueryError::InvalidQuery);
         }
@@ -157,10 +143,8 @@ impl AreaQuery {
         } else {
             vec![(west, east)]
         };
-        // 切分的每格必须落在供应商的面积上限之内。**按球面面积反推**，不要按"边长"拍脑袋：
-        // 球面上一个小格的面积是 `R²·Δλ·(sin φ₂ − sin φ₁)`。
-        // 先切纬度带，再**逐格**算它自己的经度跨度——同一行里不同经度上的格宽度并不相同，
-        // 按"整行统一列数"算会让最靠极点的那一格超标（这正是自检要拦的情况）。
+        // Split latitude bands, then derive each longitude span from spherical area:
+        // R squared * longitude span * (sin(north) - sin(south)).
         let target = MAX_CELL_AREA_M2.sqrt();
         let rows = (((north - south).to_radians() * EARTH / target).ceil() as usize).max(1);
         let mut boxes = Vec::new();
@@ -169,10 +153,7 @@ impl AreaQuery {
             let n = south + (north - south) * (row + 1) as f64 / rows as f64;
             let band = (s.to_radians().sin() - n.to_radians().sin()).abs().max(1e-15);
             for &(w, e) in &spans {
-                // 该纬度带上，一格允许的最大经度跨度（弧度）。
-                // 以前这里用的是"离赤道最近"的纬度，格子在远离赤道的一侧被拉宽，
-                // 西安（34°N）这种中纬度就会超出供应商上限，表现是查询回
-                // "无法连接基站供应商"——其实是供应商回绝了（2026-09-12 实测）。
+                // Maximum longitude span in radians for this latitude band.
                 let column = (MAX_CELL_AREA_M2 / (EARTH.powi(2) * band)).min(std::f64::consts::PI);
                 let span = (e - w).abs().to_radians();
                 let cols = ((span / column).ceil() as usize).max(1);
@@ -189,8 +170,7 @@ impl AreaQuery {
         if boxes.len() > MAX_REQUESTS {
             return Err(QueryError::AreaTooLarge);
         }
-        // 最后一道自检：算出来的格子必须真的在上限之内，否则宁可报"范围太大"，
-        // 也不要发一个注定被供应商回绝的请求（那种失败在界面上看不出原因）。
+        // Reject oversized boxes before sending a request the provider cannot accept.
         if boxes.iter().any(|b| b.area_m2() > MAX_CELL_AREA_M2) {
             return Err(QueryError::AreaTooLarge);
         }
@@ -247,15 +227,14 @@ pub trait Http {
     fn send(&mut self, request: HttpRequest) -> Result<HttpResponse, QueryError>;
 }
 
-/// 流式下载一个**大文件**（国家数据集）。
-///
-/// <p>单独一个 trait 而不是给 [`Http`] 加方法：那条通道的契约是"小 JSON 整包读"，
-/// 而数据集是几十 MB 的 gz 流，两者的超时、体积与错误处理都不一样。给一个**默认实现**
-/// （直接报"暂时无法查询"）是为了让既有的测试替身不必跟着实现下载——下载那条路
-/// 另有自己的测试，不该把它拖进每个查询用例里。
+/// Stream country datasets separately from the small, buffered JSON query interface.
 pub trait Downloader {
-    /// 返回一个可读流。调用方负责解压与解析，**不要整包读进内存**。
-    fn download(&mut self, url: &str, accept: &str) -> Result<Box<dyn std::io::Read + Send>, QueryError> {
+    /// Return a readable stream; the caller handles decompression and parsing.
+    fn download(
+        &mut self,
+        url: &str,
+        accept: &str,
+    ) -> Result<Box<dyn std::io::Read + Send>, QueryError> {
         let _ = (url, accept);
         Err(QueryError::Unavailable)
     }
@@ -289,24 +268,14 @@ pub struct Dataset {
 }
 impl Dataset {
     pub fn validate(&self) -> Result<(), QueryError> {
-        self.region
-            .validate()
-            .map_err(|_| QueryError::InvalidResponse)?;
+        self.region.validate().map_err(|_| QueryError::InvalidResponse)?;
         if self.origin.is_empty()
             || self.origin.len() > 2048
             || self.attribution.text.trim().is_empty()
             || self.attribution.text.len() > 2048
             || self.attribution.source.len() > 2048
-            || self
-                .attribution
-                .license
-                .as_ref()
-                .is_some_and(|v| v.len() > 2048)
-            || self
-                .attribution
-                .changes
-                .as_ref()
-                .is_some_and(|v| v.len() > 2048)
+            || self.attribution.license.as_ref().is_some_and(|v| v.len() > 2048)
+            || self.attribution.changes.as_ref().is_some_and(|v| v.len() > 2048)
         {
             return Err(QueryError::InvalidResponse);
         }
@@ -315,11 +284,9 @@ impl Dataset {
 }
 
 fn body(response: HttpResponse) -> Result<Value, QueryError> {
-    // **先读响应体，再按状态码兜底**：OpenCellID 的"额度用完"是 `HTTP 400` 加
-    // `{"code":7}`，只按状态码判会把它当成"查询参数无效"，界面上再被包装成
-    // "无法连接基站供应商"——2026-09-12 就是这句话把人带偏了整整一轮。
+    // Inspect the body first: OpenCellID reports exhausted quotas as HTTP 400 with code 7.
     let parsed = serde_json::from_str::<Value>(&response.body).ok();
-    // 报错体：不论 HTTP 状态是 2xx 还是 4xx，都以供应商的 `code` 为准。
+    // Provider error codes take precedence over HTTP status.
     if parsed.as_ref().is_some_and(|value| value.get("error").is_some()) {
         return Err(classify(parsed.as_ref()));
     }
@@ -333,7 +300,7 @@ fn body(response: HttpResponse) -> Result<Value, QueryError> {
     parsed.ok_or(QueryError::InvalidResponse)
 }
 
-/// 供应商的 `code` 字段：2 凭据无效、3 参数无效、7 额度用完。
+/// Provider codes: 2 means invalid credentials, 3 invalid parameters, 7 exhausted quota.
 fn classify(value: Option<&Value>) -> QueryError {
     match value.and_then(|v| v.get("code")).and_then(Value::as_u64) {
         Some(2) => QueryError::Unauthorized,
@@ -360,10 +327,7 @@ fn digits(value: &Value, name: &str, width: usize) -> Result<String, QueryError>
     Ok(format!("{:0width$}", integer(value, name)?))
 }
 fn open_cell(value: &Value) -> Result<Cell, QueryError> {
-    let radio = value
-        .get("radio")
-        .and_then(Value::as_str)
-        .ok_or(QueryError::InvalidResponse)?;
+    let radio = value.get("radio").and_then(Value::as_str).ok_or(QueryError::InvalidResponse)?;
     let identity = if radio == "CDMA" {
         CellIdentity::Cdma {
             sid: small(value, "mnc")?,
@@ -410,16 +374,12 @@ fn open_cell(value: &Value) -> Result<Cell, QueryError> {
             _ => return Err(QueryError::InvalidResponse),
         }
     };
-    identity
-        .validate()
-        .map_err(|_| QueryError::InvalidResponse)?;
+    identity.validate().map_err(|_| QueryError::InvalidResponse)?;
     let position = Coordinate {
         latitude: value["lat"].as_f64().ok_or(QueryError::InvalidResponse)?,
         longitude: value["lon"].as_f64().ok_or(QueryError::InvalidResponse)?,
     };
-    position
-        .validate()
-        .map_err(|_| QueryError::InvalidResponse)?;
+    position.validate().map_err(|_| QueryError::InvalidResponse)?;
     let range_m = match value.get("range") {
         None | Some(Value::Null) => 0.0,
         Some(v) => v.as_f64().ok_or(QueryError::InvalidResponse)?,
@@ -427,11 +387,7 @@ fn open_cell(value: &Value) -> Result<Cell, QueryError> {
     if !range_m.is_finite() || !(0.0..=200_000.0).contains(&range_m) {
         return Err(QueryError::InvalidResponse);
     }
-    Ok(Cell {
-        identity,
-        position,
-        range_m,
-    })
+    Ok(Cell { identity, position, range_m })
 }
 
 pub fn fetch(
@@ -526,9 +482,7 @@ pub fn fetch(
     };
     let mut cells = cells;
     cells.sort_by(|a, b| {
-        area.target
-            .distance_to(a.position)
-            .total_cmp(&area.target.distance_to(b.position))
+        area.target.distance_to(a.position).total_cmp(&area.target.distance_to(b.position))
     });
     let incomplete = incomplete || cells.len() > MAX_CELLS;
     cells.truncate(MAX_CELLS);
@@ -572,10 +526,7 @@ pub fn fetch_with_fallback(
                     && !matches!(error, QueryError::InvalidQuery | QueryError::AreaTooLarge) =>
             {
                 let mut data = fetch(http, second, area, now_ms)?;
-                data.failures.push(ProviderFailure {
-                    provider: primary.kind(),
-                    error,
-                });
+                data.failures.push(ProviderFailure { provider: primary.kind(), error });
                 Ok(data)
             }
             _ => Err(error),
@@ -583,126 +534,22 @@ pub fn fetch_with_fallback(
     }
 }
 
-#[derive(Default, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct CellCache {
-    entries: Vec<Dataset>,
-}
-impl CellCache {
-    pub fn insert(&mut self, data: Dataset) -> Result<(), QueryError> {
-        data.validate()?;
-        self.entries.retain(|e| {
-            e.origin != data.origin
-                || e.region.center != data.region.center
-                || e.region.radius_m != data.region.radius_m
-        });
-        self.entries.insert(0, data);
-        self.entries.truncate(32);
-        Ok(())
-    }
-    pub fn lookup(
-        &self,
-        provider: &Provider,
-        area: AreaQuery,
-        now_ms: u64,
-        max_age_ms: u64,
-    ) -> Option<Dataset> {
-        area.validate().ok()?;
-        self.entries
-            .iter()
-            .find(|data| {
-                data.provider == provider.kind()
-                    && data.origin == provider.origin()
-                    && now_ms
-                        .checked_sub(data.region.fetched_at_ms)
-                        .is_some_and(|age| age <= max_age_ms)
-                    && data.region.center.distance_to(area.target) + area.radius_m
-                        <= data.region.radius_m + 0.01
-            })
-            .map(|data| {
-                let mut found = data.clone();
-                found
-                    .region
-                    .cells
-                    .retain(|cell| area.target.distance_to(cell.position) <= area.radius_m);
-                found.region.center = area.target;
-                found.region.radius_m = area.radius_m;
-                found.region.cells.sort_by(|a, b| {
-                    area.target
-                        .distance_to(a.position)
-                        .total_cmp(&area.target.distance_to(b.position))
-                });
-                found
-            })
-    }
-    pub fn open(path: &Path) -> io::Result<Self> {
-        let data = match fs::read(path) {
-            Ok(data) => data,
-            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Self::default()),
-            Err(e) => return Err(e),
-        };
-        let cache: Self = serde_json::from_slice(&data).map_err(io::Error::other)?;
-        if cache.entries.len() > 32 || cache.entries.iter().any(|d| d.validate().is_err()) {
-            return Err(io::Error::other("invalid cell cache"));
-        }
-        Ok(cache)
-    }
-    pub fn save(&self, path: &Path) -> io::Result<()> {
-        atomic_save(path, &serde_json::to_vec(self).map_err(io::Error::other)?)
-    }
-}
-
-pub fn atomic_save(path: &Path, bytes: &[u8]) -> io::Result<()> {    use std::{
-        io::Write,
-        sync::atomic::{AtomicU64, Ordering},
-    };
-    static NEXT: AtomicU64 = AtomicU64::new(0);
-    let temp = path.with_extension(format!(
-        "{}.{}.tmp",
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::Relaxed)
-    ));
-    let mut options = fs::OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let result = (|| {
-        let mut file = options.open(&temp)?;
-        file.write_all(bytes)?;
-        file.sync_all()?;
-        drop(file);
-        fs::rename(&temp, path)
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(&temp);
-    }
-    result
-}
-
 #[cfg(test)]
 mod area_tests {
     use super::*;
 
     fn target(latitude: f64, longitude: f64, radius_m: f64) -> AreaQuery {
-        AreaQuery {
-            target: Coordinate { latitude, longitude },
-            radius_m,
-        }
+        AreaQuery { target: Coordinate { latitude, longitude }, radius_m }
     }
 
-    /// 每一格都必须落在供应商的 4,000,000 m² 上限之内，否则请求会被直接回绝，
-    /// 而界面上只会看到"无法连接基站供应商"（2026-09-12 实测踩过）。
     #[test]
     fn every_box_stays_under_the_provider_area_limit() {
         for &(latitude, longitude, radius) in &[
-            (34.3546, 108.9360, 3000.0), // 西安未央区：中纬度，改造前会超标
-            (31.2304, 121.4737, 2000.0), // 上海：低纬度
-            (45.0, 126.6, 5000.0),       // 哈尔滨：改造前必然超标
-            (0.0, 0.0, 5000.0),          // 赤道
-            (-69.3733, 76.3767, 2000.0), // 南极：高纬度，格子会变窄
+            (34.3546, 108.9360, 3000.0), // Xi'an
+            (31.2304, 121.4737, 2000.0), // Shanghai
+            (45.0, 126.6, 5000.0),       // Harbin
+            (0.0, 0.0, 5000.0),          // Equator
+            (-69.3733, 76.3767, 2000.0), // Antarctic latitude
         ] {
             let boxes = target(latitude, longitude, radius).boxes().unwrap();
             assert!(!boxes.is_empty(), "({latitude},{longitude}) should produce at least one box");
@@ -716,7 +563,6 @@ mod area_tests {
         }
     }
 
-    /// 覆盖整个请求圆的性质不能被"只求不超标"牺牲掉。
     #[test]
     fn every_box_keeps_the_requested_circle_covered() {
         let query = target(34.3546, 108.9360, 3000.0);
@@ -724,7 +570,8 @@ mod area_tests {
         for bearing in (0..360).step_by(15) {
             let radians = (bearing as f64).to_radians();
             let point = Coordinate {
-                latitude: query.target.latitude + (query.radius_m / EARTH).to_degrees() * radians.cos(),
+                latitude: query.target.latitude
+                    + (query.radius_m / EARTH).to_degrees() * radians.cos(),
                 longitude: query.target.longitude
                     + (query.radius_m / EARTH).to_degrees() * radians.sin()
                         / query.target.latitude.to_radians().cos(),

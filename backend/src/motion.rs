@@ -21,10 +21,7 @@ impl Motion {
         if speed > 1000.0 {
             return Err("speed must not exceed 1000 m/s");
         }
-        Ok(Self {
-            origin: position,
-            started: now,
-        })
+        Ok(Self { origin: position, started: now })
     }
 
     pub fn advance(&mut self, now: Instant) -> Position {
@@ -80,13 +77,9 @@ mod tests {
 
     #[test]
     fn rejects_invalid_motion() {
-        for (speed, bearing) in [
-            (-1.0, 0.0),
-            (1001.0, 0.0),
-            (f64::NAN, 0.0),
-            (1.0, 360.0),
-            (1.0, -1.0),
-        ] {
+        for (speed, bearing) in
+            [(-1.0, 0.0), (1001.0, 0.0), (f64::NAN, 0.0), (1.0, 360.0), (1.0, -1.0)]
+        {
             assert!(Motion::new(Position::new(0.0, 0.0), speed, bearing, Instant::now()).is_err());
         }
     }

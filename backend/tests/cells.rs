@@ -16,16 +16,7 @@ fn region() -> Value {
 fn nearby_query_uses_target_and_handles_the_date_line_without_a_device_position() {
     let data: CellRegion = serde_json::from_value(region()).unwrap();
     data.validate().unwrap();
-    let found = data
-        .nearby(
-            Coordinate {
-                latitude: 0.0,
-                longitude: 179.999,
-            },
-            500.0,
-            8,
-        )
-        .unwrap();
+    let found = data.nearby(Coordinate { latitude: 0.0, longitude: 179.999 }, 500.0, 8).unwrap();
     assert_eq!(found.len(), 2);
     assert!(found[0].distance_m < 60.0);
     assert!(found[1].distance_m > 220.0 && found[1].distance_m < 225.0);
@@ -41,17 +32,7 @@ fn stale_region_is_distinct_from_a_successful_empty_query() {
     value["cells"] = json!([]);
     let data: CellRegion = serde_json::from_value(value).unwrap();
     assert!(data.nearby(data.center, 100.0, 8).unwrap().is_empty());
-    assert!(
-        data.nearby(
-            Coordinate {
-                latitude: 10.0,
-                longitude: 20.0
-            },
-            100.0,
-            8
-        )
-        .is_err()
-    );
+    assert!(data.nearby(Coordinate { latitude: 10.0, longitude: 20.0 }, 100.0, 8).is_err());
     // A query that extends beyond the acquired region must not claim full coverage.
     assert!(data.nearby(data.center, 5001.0, 8).is_err());
 }
@@ -75,12 +56,7 @@ fn invalid_identities_and_duplicate_cells_are_rejected_before_replacing_a_region
     let mut input = region();
     let duplicate = input["cells"][0].clone();
     input["cells"].as_array_mut().unwrap().push(duplicate);
-    assert!(
-        serde_json::from_value::<CellRegion>(input)
-            .unwrap()
-            .validate()
-            .is_err()
-    );
+    assert!(serde_json::from_value::<CellRegion>(input).unwrap().validate().is_err());
     let mut input = region();
     input["cells"][0]["identity"]["radio"] = json!("future");
     assert!(serde_json::from_value::<CellRegion>(input).is_err());
@@ -121,24 +97,15 @@ fn control_queries_acquired_data_without_starting_simulation_and_keeps_it_on_inv
     assert!(!control.handle(&invalid.to_string()).ok);
     assert!(control.handle(&query.to_string()).ok);
     let status = serde_json::to_value(control.handle(r#"{"version":1,"op":"status"}"#)).unwrap();
-    assert!(
-        status["cells"].is_null(),
-        "a prior query must not leak into another response"
-    );
-    assert!(
-        control
-            .handle(r#"{"version":1,"op":"set_cell_region","region":null}"#)
-            .ok
-    );
+    assert!(status["cells"].is_null(), "a prior query must not leak into another response");
+    assert!(control.handle(r#"{"version":1,"op":"set_cell_region","region":null}"#).ok);
     assert!(!control.handle(&query.to_string()).ok);
 }
 
 #[test]
 fn region_save_is_atomic_and_legacy_position_config_still_opens() {
-    let path = std::env::temp_dir().join(format!(
-        "justlocation-{}-cell-region.json",
-        std::process::id()
-    ));
+    let path =
+        std::env::temp_dir().join(format!("justlocation-{}-cell-region.json", std::process::id()));
     let legacy = json!({"position":justlocation_backend::Position::new(0.0,179.999),"scope":{"mode":"apps","packages":["example.selected"]}});
     std::fs::write(&path, legacy.to_string()).unwrap();
     let set = json!({"version":1,"op":"set_cell_region","region":region()}).to_string();
@@ -148,17 +115,8 @@ fn region_save_is_atomic_and_legacy_position_config_still_opens() {
     let mut restored = Control::open(&path).unwrap();
     let response = serde_json::to_value(restored.handle(r#"{"version":1,"op":"status"}"#)).unwrap();
     assert_eq!(response["state"]["requested_active"], false);
-    assert_eq!(
-        response["state"]["config"]["position"]["longitude"],
-        179.999
-    );
-    assert_eq!(
-        response["state"]["cell_region"]["cells"]
-            .as_array()
-            .unwrap()
-            .len(),
-        2
-    );
+    assert_eq!(response["state"]["config"]["position"]["longitude"], 179.999);
+    assert_eq!(response["state"]["cell_region"]["cells"].as_array().unwrap().len(), 2);
     std::fs::remove_file(&path).unwrap();
     let mut missing = Control::open(path.join("missing/config.json")).unwrap();
     assert!(!missing.handle(&set).ok);

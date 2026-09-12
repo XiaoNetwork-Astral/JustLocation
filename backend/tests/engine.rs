@@ -1,10 +1,7 @@
 use justlocation_backend::{Config, Engine, Position, Scope};
 
 fn config(latitude: f64, longitude: f64, scope: Scope) -> Config {
-    Config {
-        position: Position::new(latitude, longitude),
-        scope,
-    }
+    Config { position: Position::new(latitude, longitude), scope }
 }
 
 #[test]
@@ -17,9 +14,7 @@ fn zero_coordinates_are_valid_and_are_not_missing_data() {
 #[test]
 fn selected_apps_receive_output_and_other_apps_do_not() {
     let mut engine = Engine::default();
-    engine
-        .start(config(31.2, 121.5, Scope::apps(["example.selected"])))
-        .unwrap();
+    engine.start(config(31.2, 121.5, Scope::apps(["example.selected"]))).unwrap();
     assert!(engine.output_for("example.selected").is_some());
     assert!(engine.output_for("example.other").is_none());
 }
@@ -42,11 +37,7 @@ fn invalid_coordinates_are_rejected_before_starting() {
         (0.0, f64::INFINITY),
     ] {
         let mut engine = Engine::default();
-        assert!(
-            engine
-                .start(config(latitude, longitude, Scope::All))
-                .is_err()
-        );
+        assert!(engine.start(config(latitude, longitude, Scope::All)).is_err());
         assert!(!engine.is_running());
     }
 }
@@ -55,13 +46,8 @@ fn invalid_coordinates_are_rejected_before_starting() {
 fn poles_and_date_line_are_valid_coordinates() {
     for (latitude, longitude) in [(90.0, 180.0), (-90.0, -180.0)] {
         let mut engine = Engine::default();
-        engine
-            .start(config(latitude, longitude, Scope::All))
-            .unwrap();
-        assert_eq!(
-            engine.output_for("example.app").unwrap().longitude,
-            longitude
-        );
+        engine.start(config(latitude, longitude, Scope::All)).unwrap();
+        assert_eq!(engine.output_for("example.app").unwrap().longitude, longitude);
     }
 }
 
@@ -70,25 +56,16 @@ fn rejected_update_preserves_the_previous_output() {
     let mut engine = Engine::default();
     engine.start(config(31.2, 121.5, Scope::All)).unwrap();
     let before = engine.output_for("example.app").cloned();
-    assert!(
-        engine
-            .update_position(Position::new(f64::NAN, 42.0))
-            .is_err()
-    );
+    assert!(engine.update_position(Position::new(f64::NAN, 42.0)).is_err());
     assert_eq!(engine.output_for("example.app").cloned(), before);
 }
 
 #[test]
 fn update_changes_position_without_expanding_scope() {
     let mut engine = Engine::default();
-    engine
-        .start(config(31.2, 121.5, Scope::apps(["example.selected"])))
-        .unwrap();
+    engine.start(config(31.2, 121.5, Scope::apps(["example.selected"]))).unwrap();
     engine.update_position(Position::new(30.0, 120.0)).unwrap();
-    assert_eq!(
-        engine.output_for("example.selected").unwrap().latitude,
-        30.0
-    );
+    assert_eq!(engine.output_for("example.selected").unwrap().latitude, 30.0);
     assert!(engine.output_for("example.other").is_none());
 }
 
@@ -106,14 +83,9 @@ fn stop_is_idempotent_and_editing_does_not_restart_output() {
 #[test]
 fn starting_an_active_session_does_not_replace_it() {
     let mut engine = Engine::default();
-    engine
-        .start(config(31.2, 121.5, Scope::apps(["example.selected"])))
-        .unwrap();
+    engine.start(config(31.2, 121.5, Scope::apps(["example.selected"]))).unwrap();
     assert!(engine.start(config(0.0, 0.0, Scope::All)).is_err());
-    assert_eq!(
-        engine.output_for("example.selected").unwrap().latitude,
-        31.2
-    );
+    assert_eq!(engine.output_for("example.selected").unwrap().latitude, 31.2);
     assert!(engine.output_for("example.other").is_none());
 }
 

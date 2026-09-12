@@ -69,3 +69,52 @@ fn route_save_failure_rolls_back_and_restart_does_not_resume_movement() {
     assert_eq!(reply.state.config.unwrap().position.longitude, 0.0);
     std::fs::remove_file(path).unwrap();
 }
+
+#[test]
+fn failed_publication_restores_an_active_session_and_channel_settings() {
+    let directory = file("active-rollback");
+    std::fs::create_dir(&directory).unwrap();
+    let path = directory.join("config.json");
+    let mut control = Control::open(&path).unwrap();
+    assert!(control.handle(&start()).ok);
+    let saved = directory.join("saved.json");
+    std::fs::rename(&path, &saved).unwrap();
+    std::fs::create_dir(&path).unwrap();
+
+    let reply = control.handle(
+        &json!({"version":1,"op":"update","position":justlocation_backend::Position::new(1.0,2.0)})
+            .to_string(),
+    );
+    assert!(!reply.ok);
+    assert!(reply.state.requested_active);
+    assert_eq!(reply.state.config.unwrap().position.latitude, 0.0);
+    let reply = control.handle(r#"{"version":1,"op":"set_wifi","config":{"enabled":true}}"#);
+    assert!(!reply.ok);
+    assert!(reply.error.unwrap().starts_with("cannot save configuration:"));
+    assert!(!reply.state.wifi.enabled);
+    assert!(reply.state.requested_active);
+    assert_eq!(std::fs::read_dir(&directory).unwrap().count(), 2);
+
+    std::fs::remove_dir(path).unwrap();
+    std::fs::remove_file(saved).unwrap();
+    std::fs::remove_dir(directory).unwrap();
+}
+
+#[test]
+fn version_two_loads_with_defaults_and_unknown_versions_preserve_the_file() {
+    let path = file("versioned");
+    let config = serde_json::from_str::<serde_json::Value>(&start()).unwrap()["config"].clone();
+    let mut stored = json!({"version":2,"config":config,"cell_region":null});
+    std::fs::write(&path, stored.to_string()).unwrap();
+    let mut control = Control::open(&path).unwrap();
+    let reply = control.handle(r#"{"version":1,"op":"status"}"#);
+    assert!(!reply.state.requested_active);
+    assert_eq!(reply.state.config.unwrap().position.latitude, 0.0);
+    assert!(!reply.state.wifi.enabled);
+    stored["version"] = json!(99);
+    let text = stored.to_string();
+    std::fs::write(&path, &text).unwrap();
+    assert!(Control::open(&path).is_err());
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
+    std::fs::remove_file(path).unwrap();
+}

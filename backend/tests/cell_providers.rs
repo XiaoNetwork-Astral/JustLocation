@@ -11,30 +11,17 @@ struct MockHttp {
 impl Http for MockHttp {
     fn send(&mut self, request: HttpRequest) -> Result<HttpResponse, QueryError> {
         self.requests.push(request);
-        self.replies
-            .pop_front()
-            .expect("unexpected network request")
+        self.replies.pop_front().expect("unexpected network request")
     }
 }
 fn reply(value: serde_json::Value) -> Result<HttpResponse, QueryError> {
-    Ok(HttpResponse {
-        status: 200,
-        body: value.to_string(),
-    })
+    Ok(HttpResponse { status: 200, body: value.to_string() })
 }
 fn query() -> AreaQuery {
-    AreaQuery {
-        target: Coordinate {
-            latitude: 0.0,
-            longitude: 0.0,
-        },
-        radius_m: 500.0,
-    }
+    AreaQuery { target: Coordinate { latitude: 0.0, longitude: 0.0 }, radius_m: 500.0 }
 }
 fn source() -> Provider {
-    Provider::OpenCellId {
-        key: "private&key".into(),
-    }
+    Provider::OpenCellId { key: "private&key".into() }
 }
 fn row(id: u64, radio: &str) -> serde_json::Value {
     json!({"lat":0.001,"lon":0.0,"mcc":460,"mnc":1,"lac":12,"cellid":id,"range":800,"radio":radio})
@@ -52,21 +39,13 @@ fn opencellid_normalizes_radio_ids_without_truncating_nr_or_inventing_signal() {
     let data = fetch(&mut http, &source(), query(), 1000).unwrap();
     assert_eq!(data.region.cells.len(), 3);
     let value = serde_json::to_value(&data).unwrap();
-    assert_eq!(
-        value["region"]["cells"][0]["identity"]["nci"],
-        68719476735_u64
-    );
+    assert_eq!(value["region"]["cells"][0]["identity"]["nci"], 68719476735_u64);
     assert_eq!(value["region"]["cells"][0]["identity"]["mnc"], "01");
     assert!(value["region"]["cells"][1]["identity"].get("pci").is_none());
     assert!(!data.incomplete);
     assert!(data.attribution.source.contains("opencellid.org"));
     assert_eq!(
-        http.requests[0]
-            .query
-            .iter()
-            .find(|(key, _)| key == "key")
-            .unwrap()
-            .1,
+        http.requests[0].query.iter().find(|(key, _)| key == "key").unwrap().1,
         "private&key"
     );
 }
@@ -77,10 +56,8 @@ fn empty_success_does_not_fallback_but_service_failure_does_without_leaking_keys
         endpoint: "https://cells.example/query".into(),
         token: Some("my-token".into()),
     };
-    let mut http = MockHttp {
-        replies: [reply(json!({"count":0,"cells":[]}))].into(),
-        ..Default::default()
-    };
+    let mut http =
+        MockHttp { replies: [reply(json!({"count":0,"cells":[]}))].into(), ..Default::default() };
     let result = fetch_with_fallback(&mut http, &source(), Some(&custom), query(), 1000).unwrap();
     assert!(result.region.cells.is_empty());
     assert_eq!(http.requests.len(), 1);
@@ -88,21 +65,13 @@ fn empty_success_does_not_fallback_but_service_failure_does_without_leaking_keys
     let result = fetch_with_fallback(&mut http, &source(), Some(&custom), query(), 1000).unwrap();
     assert_eq!(result.provider, ProviderKind::Custom);
     assert_eq!(result.failures[0].error, QueryError::Unauthorized);
-    assert!(
-        !serde_json::to_string(&result)
-            .unwrap()
-            .contains("private&key")
-    );
-    assert_eq!(
-        http.requests.last().unwrap().body.as_ref().unwrap()["target"]["latitude"],
-        0.0
-    );
+    assert!(!serde_json::to_string(&result).unwrap().contains("private&key"));
+    assert_eq!(http.requests.last().unwrap().body.as_ref().unwrap()["target"]["latitude"], 0.0);
 }
 
 #[test]
 fn a_quota_error_is_reported_as_a_quota_error_even_though_it_arrives_as_http_400() {
-    // OpenCellID 的额度用完是 `HTTP 400` + `{"code":7}`。以前只按状态码判，于是被当成
-    // "查询参数无效"，界面再包装成"无法连接基站供应商"——排查时被这句话带偏了一整轮。
+    // OpenCellID reports exhausted quotas as HTTP 400 with code 7.
     let mut http = MockHttp {
         replies: [Ok(HttpResponse {
             status: 400,
@@ -113,7 +82,6 @@ fn a_quota_error_is_reported_as_a_quota_error_even_though_it_arrives_as_http_400
     };
     assert_eq!(fetch(&mut http, &source(), query(), 0).unwrap_err(), QueryError::RateLimited);
 
-    // 参数类错误仍要如实报成参数问题。
     let mut http = MockHttp {
         replies: [Ok(HttpResponse {
             status: 400,
@@ -143,15 +111,7 @@ fn pagination_filters_box_corners_and_marks_unsupported_rows_without_claiming_em
     assert_eq!(data.region.cells.len(), 49);
     assert_eq!(data.skipped, 1);
     assert!(data.incomplete);
-    assert_eq!(
-        http.requests[1]
-            .query
-            .iter()
-            .find(|(k, _)| k == "offset")
-            .unwrap()
-            .1,
-        "50"
-    );
+    assert_eq!(http.requests[1].query.iter().find(|(k, _)| k == "offset").unwrap().1, "50");
     let mut http = MockHttp {
         replies: [reply(json!({"code":1,"error":"temporarily unavailable"}))].into(),
         ..Default::default()
@@ -161,19 +121,11 @@ fn pagination_filters_box_corners_and_marks_unsupported_rows_without_claiming_em
 
 #[test]
 fn boxes_cover_date_line_poles_and_respect_provider_area_limit() {
-    for (lat, lon, radius) in [
-        (0.0, 179.999, 500.0),
-        (89.999, 20.0, 500.0),
-        (-90.0, 0.0, 500.0),
-        (30.0, 120.0, 5000.0),
-    ] {
-        let area = AreaQuery {
-            target: Coordinate {
-                latitude: lat,
-                longitude: lon,
-            },
-            radius_m: radius,
-        };
+    for (lat, lon, radius) in
+        [(0.0, 179.999, 500.0), (89.999, 20.0, 500.0), (-90.0, 0.0, 500.0), (30.0, 120.0, 5000.0)]
+    {
+        let area =
+            AreaQuery { target: Coordinate { latitude: lat, longitude: lon }, radius_m: radius };
         let boxes = area.boxes().unwrap();
         assert!(!boxes.is_empty());
         for bbox in &boxes {
@@ -190,7 +142,7 @@ fn boxes_cover_date_line_poles_and_respect_provider_area_limit() {
 
 #[test]
 fn provider_kind_serialises_to_the_names_the_panel_sends() {
-    // 接口上的名字：改这里等于改协议，面板的 `ProviderKind` 要一起改。
+    // Provider names are part of the client protocol.
     assert_eq!(json!(ProviderKind::OpenCellId), json!("open_cell_id"));
     assert_eq!(json!(ProviderKind::Custom), json!("custom"));
 }
@@ -209,10 +161,7 @@ fn local_cache_preserves_attribution_and_requires_matching_provider_area_and_age
     assert!(
         cache
             .lookup(
-                &Provider::Custom {
-                    endpoint: "https://other.example/query".into(),
-                    token: None
-                },
+                &Provider::Custom { endpoint: "https://other.example/query".into(), token: None },
                 query(),
                 1500,
                 1000
@@ -220,24 +169,13 @@ fn local_cache_preserves_attribution_and_requires_matching_provider_area_and_age
             .is_none()
     );
     assert!(cache.lookup(&source(), query(), 3000, 1000).is_none());
-    let elsewhere = AreaQuery {
-        target: Coordinate {
-            latitude: 1.0,
-            longitude: 1.0,
-        },
-        ..query()
-    };
+    let elsewhere = AreaQuery { target: Coordinate { latitude: 1.0, longitude: 1.0 }, ..query() };
     assert!(cache.lookup(&source(), elsewhere, 1500, 1000).is_none());
     let dir = std::env::temp_dir().join(format!("justlocation-cells-cache-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("cache.json");
     cache.save(&path).unwrap();
-    assert!(
-        CellCache::open(&path)
-            .unwrap()
-            .lookup(&source(), query(), 1500, 1000)
-            .is_some()
-    );
+    assert!(CellCache::open(&path).unwrap().lookup(&source(), query(), 1500, 1000).is_some());
     std::fs::remove_file(path).unwrap();
     std::fs::remove_dir(dir).unwrap();
 }

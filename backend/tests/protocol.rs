@@ -24,11 +24,7 @@ fn exchange(lines: &[String]) -> Vec<Value> {
     }
     drop(input);
     let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     String::from_utf8(output.stdout)
         .unwrap()
         .lines()
@@ -46,10 +42,7 @@ fn process_shares_state_between_requests_and_stop_disables_it() {
     assert_eq!(replies.len(), 3);
     assert_eq!(replies[0]["ok"], true);
     assert_eq!(replies[1]["state"]["requested_active"], true);
-    assert_eq!(
-        replies[1]["state"]["config"]["scope"]["packages"][0],
-        "example.selected"
-    );
+    assert_eq!(replies[1]["state"]["config"]["scope"]["packages"][0], "example.selected");
     assert_eq!(replies[2]["state"]["requested_active"], false);
 }
 
@@ -87,19 +80,13 @@ fn empty_or_unknown_scope_is_not_treated_as_all_applications() {
     unknown["config"]["scope"]["mode"] = json!("unknown");
     let replies = exchange(&[empty.to_string(), unknown.to_string()]);
     assert!(replies.iter().all(|reply| reply["ok"] == false));
-    assert!(
-        replies
-            .iter()
-            .all(|reply| reply["state"]["requested_active"] == false)
-    );
+    assert!(replies.iter().all(|reply| reply["state"]["requested_active"] == false));
 }
 
 #[test]
 fn shutdown_stops_output_and_closes_the_control_process() {
-    let replies = exchange(&[
-        start().to_string(),
-        json!({"version":1,"op":"shutdown"}).to_string(),
-    ]);
+    let replies =
+        exchange(&[start().to_string(), json!({"version":1,"op":"shutdown"}).to_string()]);
     assert_eq!(replies[1]["ok"], true);
     assert_eq!(replies[1]["state"]["requested_active"], false);
 }

@@ -38,21 +38,16 @@ mod platform {
         // This toolchain's std::fs file locks return Unsupported on Android.
         // SAFETY: the borrowed File keeps its descriptor open throughout flock.
         let result = unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
-        if result == 0 {
-            Ok(())
-        } else {
-            Err(io::Error::last_os_error())
-        }
+        if result == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
     }
 
     #[cfg(not(target_os = "android"))]
     fn acquire_lock(lock: &File) -> io::Result<()> {
         lock.try_lock().map_err(|error| match error {
             std::fs::TryLockError::Error(error) => error,
-            std::fs::TryLockError::WouldBlock => io::Error::new(
-                io::ErrorKind::WouldBlock,
-                "another JustLocation service is running",
-            ),
+            std::fs::TryLockError::WouldBlock => {
+                io::Error::new(io::ErrorKind::WouldBlock, "another JustLocation service is running")
+            }
         })
     }
 
@@ -64,21 +59,14 @@ mod platform {
         fn service_lock_excludes_second_owner_and_releases_on_close() {
             let path =
                 std::env::temp_dir().join(format!("justlocation-lock-{}", std::process::id()));
-            let first = File::options()
-                .create_new(true)
-                .write(true)
-                .open(&path)
-                .unwrap();
+            let first = File::options().create_new(true).write(true).open(&path).unwrap();
             let second = File::options().write(true).open(&path).unwrap();
             let result = acquire_lock(&first);
             if let Err(error) = result {
                 fs::remove_file(&path).unwrap();
                 panic!("first service must acquire the lock: {error:?}");
             }
-            assert_eq!(
-                acquire_lock(&second).unwrap_err().kind(),
-                io::ErrorKind::WouldBlock
-            );
+            assert_eq!(acquire_lock(&second).unwrap_err().kind(), io::ErrorKind::WouldBlock);
             drop(first);
             acquire_lock(&second).unwrap();
             drop(second);
@@ -140,9 +128,7 @@ mod platform {
         stream.set_write_timeout(Some(Duration::from_secs(4)))?;
         writeln!(stream, "{request}")?;
         let mut response = String::new();
-        BufReader::new(stream)
-            .take(MAX_FRAME * 2)
-            .read_line(&mut response)?;
+        BufReader::new(stream).take(MAX_FRAME * 2).read_line(&mut response)?;
         if response.is_empty() || !response.ends_with('\n') {
             return Err(io::Error::other("incomplete response"));
         }
@@ -157,9 +143,7 @@ pub fn serve() -> io::Result<()> {
     }
     #[cfg(not(unix))]
     {
-        Err(io::Error::other(
-            "Unix sockets require Android/Linux; use stdio for host testing",
-        ))
+        Err(io::Error::other("Unix sockets require Android/Linux; use stdio for host testing"))
     }
 }
 

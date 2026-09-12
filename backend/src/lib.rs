@@ -1,3 +1,5 @@
+mod storage;
+
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
@@ -30,14 +32,7 @@ pub struct Position {
 
 impl Position {
     pub fn new(latitude: f64, longitude: f64) -> Self {
-        Self {
-            latitude,
-            longitude,
-            altitude: 0.0,
-            accuracy: 5.0,
-            speed: 0.0,
-            bearing: 0.0,
-        }
+        Self { latitude, longitude, altitude: 0.0, accuracy: 5.0, speed: 0.0, bearing: 0.0 }
     }
 
     pub fn validate(&self) -> Result<(), &'static str> {
@@ -62,12 +57,7 @@ impl Position {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(
-    tag = "mode",
-    content = "packages",
-    rename_all = "snake_case",
-    deny_unknown_fields
-)]
+#[serde(tag = "mode", content = "packages", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Scope {
     All,
     Apps(BTreeSet<String>),

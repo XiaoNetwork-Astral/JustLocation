@@ -22,14 +22,8 @@ fn configuration_is_inactive_until_start_and_stop_removes_the_entire_output() {
     assert_eq!(saved["ok"], true);
     assert!(saved["state"]["telephony_output"].is_null());
     let started = call(&mut control, start());
-    assert_eq!(
-        started["state"]["telephony_output"]["availability"],
-        "missing_region"
-    );
-    assert_eq!(
-        started["state"]["telephony_output"]["subscriptions"][0]["id"],
-        7
-    );
+    assert_eq!(started["state"]["telephony_output"]["availability"], "missing_region");
+    assert_eq!(started["state"]["telephony_output"]["subscriptions"][0]["id"], 7);
     let mut bad = configure();
     bad["config"]["subscriptions"][0]["mnc"] = json!("1");
     let rejected = call(&mut control, bad);
@@ -57,12 +51,12 @@ fn separate_phone_heartbeat_does_not_erase_location_readiness() {
     assert_eq!(phone["state"]["cell_callback_hook_ready"], false);
     assert_eq!(phone["state"]["cell_hook_ready"], false);
     assert_eq!(phone["state"]["sim_hook_ready"], false);
-    let callbacks = call(&mut control, json!({"version":1,"op":"hook_status","installed":true,"cell_callbacks":true}));
-    assert_eq!(callbacks["state"]["cell_hook_ready"], true);
-    let location = call(
+    let callbacks = call(
         &mut control,
-        json!({"version":1,"op":"hook_status","installed":false}),
+        json!({"version":1,"op":"hook_status","installed":true,"cell_callbacks":true}),
     );
+    assert_eq!(callbacks["state"]["cell_hook_ready"], true);
+    let location = call(&mut control, json!({"version":1,"op":"hook_status","installed":false}));
     assert_eq!(location["state"]["cell_hook_ready"], false);
     assert_eq!(location["state"]["cell_query_hook_ready"], true);
     assert_eq!(location["state"]["location_hook_ready"], false);
@@ -70,10 +64,8 @@ fn separate_phone_heartbeat_does_not_erase_location_readiness() {
 
 #[test]
 fn saved_telephony_reopens_stopped_and_failed_writes_roll_back() {
-    let path = std::env::temp_dir().join(format!(
-        "justlocation-telephony-{}.json",
-        std::process::id()
-    ));
+    let path =
+        std::env::temp_dir().join(format!("justlocation-telephony-{}.json", std::process::id()));
     let _ = std::fs::remove_file(&path);
     let mut control = Control::open(&path).unwrap();
     assert_eq!(call(&mut control, configure())["ok"], true);
@@ -105,11 +97,17 @@ fn phone_reports_current_cards_without_persisting_or_accepting_private_identifie
     invalid["subscriptions"][0]["slot"] = json!(2);
     assert_eq!(call(&mut control, invalid)["ok"], false);
     let mut duplicate = report.clone();
-    duplicate["subscriptions"] = json!([cards[0],cards[0]]);
+    duplicate["subscriptions"] = json!([cards[0], cards[0]]);
     assert_eq!(call(&mut control, duplicate)["ok"], false);
     // A transient read failure is different from a phone with no inserted cards.
-    let no_read = call(&mut control, json!({"version":1,"op":"telephony_hook_status","cells":true,"sim":true,"subscriptions":null}));
+    let no_read = call(
+        &mut control,
+        json!({"version":1,"op":"telephony_hook_status","cells":true,"sim":true,"subscriptions":null}),
+    );
     assert!(no_read["state"]["detected_subscriptions"].is_null());
-    let empty = call(&mut control, json!({"version":1,"op":"telephony_hook_status","cells":true,"sim":true,"subscriptions":[]}));
+    let empty = call(
+        &mut control,
+        json!({"version":1,"op":"telephony_hook_status","cells":true,"sim":true,"subscriptions":[]}),
+    );
     assert_eq!(empty["state"]["detected_subscriptions"], json!([]));
 }

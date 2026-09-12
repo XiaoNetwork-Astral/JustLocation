@@ -86,10 +86,7 @@ pub enum CellIdentity {
 fn plmn(mcc: &str, mnc: &str) -> bool {
     mcc.len() == 3
         && (2..=3).contains(&mnc.len())
-        && mcc
-            .bytes()
-            .chain(mnc.bytes())
-            .all(|byte| byte.is_ascii_digit())
+        && mcc.bytes().chain(mnc.bytes()).all(|byte| byte.is_ascii_digit())
 }
 fn optional(value: Option<u32>, maximum: u32) -> bool {
     value.is_none_or(|value| value <= maximum)
@@ -99,56 +96,28 @@ impl CellIdentity {
     pub fn validate(&self) -> Result<(), &'static str> {
         // Android 15 CellIdentity constructors' ranges. A missing field maps to UNAVAILABLE later.
         let valid = match self {
-            Self::Gsm {
-                mcc,
-                mnc,
-                lac,
-                cid,
-                arfcn,
-                bsic,
-            } => {
+            Self::Gsm { mcc, mnc, lac, cid, arfcn, bsic } => {
                 plmn(mcc, mnc)
                     && *lac <= 65535
                     && *cid <= 65535
                     && optional(*arfcn, 65535)
                     && optional(*bsic, 63)
             }
-            Self::Wcdma {
-                mcc,
-                mnc,
-                lac,
-                cid,
-                psc,
-                uarfcn,
-            } => {
+            Self::Wcdma { mcc, mnc, lac, cid, psc, uarfcn } => {
                 plmn(mcc, mnc)
                     && *lac <= 65535
                     && *cid <= 268435455
                     && optional(*psc, 511)
                     && optional(*uarfcn, 16383)
             }
-            Self::Lte {
-                mcc,
-                mnc,
-                tac,
-                ci,
-                pci,
-                earfcn,
-            } => {
+            Self::Lte { mcc, mnc, tac, ci, pci, earfcn } => {
                 plmn(mcc, mnc)
                     && *tac <= 65535
                     && *ci <= 268435455
                     && optional(*pci, 503)
                     && optional(*earfcn, 262143)
             }
-            Self::Nr {
-                mcc,
-                mnc,
-                tac,
-                nci,
-                pci,
-                nrarfcn,
-            } => {
+            Self::Nr { mcc, mnc, tac, nci, pci, nrarfcn } => {
                 plmn(mcc, mnc)
                     && *tac <= 16777215
                     && *nci <= 68719476735
@@ -157,29 +126,17 @@ impl CellIdentity {
             }
             Self::Cdma { sid, nid, bid } => *sid <= 32767 && *nid <= 65535 && *bid <= 65535,
         };
-        if valid {
-            Ok(())
-        } else {
-            Err("invalid cell identity")
-        }
+        if valid { Ok(()) } else { Err("invalid cell identity") }
     }
 
     pub(crate) fn key(&self) -> String {
         // Identity excludes optional channel/physical codes, so two observations cannot create
         // duplicate logical cells just because one of them has more metadata.
         match self {
-            Self::Gsm {
-                mcc, mnc, lac, cid, ..
-            } => format!("gsm:{mcc}:{mnc}:{lac}:{cid}"),
-            Self::Wcdma {
-                mcc, mnc, lac, cid, ..
-            } => format!("wcdma:{mcc}:{mnc}:{lac}:{cid}"),
-            Self::Lte {
-                mcc, mnc, tac, ci, ..
-            } => format!("lte:{mcc}:{mnc}:{tac}:{ci}"),
-            Self::Nr {
-                mcc, mnc, tac, nci, ..
-            } => format!("nr:{mcc}:{mnc}:{tac}:{nci}"),
+            Self::Gsm { mcc, mnc, lac, cid, .. } => format!("gsm:{mcc}:{mnc}:{lac}:{cid}"),
+            Self::Wcdma { mcc, mnc, lac, cid, .. } => format!("wcdma:{mcc}:{mnc}:{lac}:{cid}"),
+            Self::Lte { mcc, mnc, tac, ci, .. } => format!("lte:{mcc}:{mnc}:{tac}:{ci}"),
+            Self::Nr { mcc, mnc, tac, nci, .. } => format!("nr:{mcc}:{mnc}:{tac}:{nci}"),
             Self::Cdma { sid, nid, bid } => format!("cdma:{sid}:{nid}:{bid}"),
         }
     }
@@ -258,10 +215,7 @@ impl CellRegion {
             .iter()
             .filter_map(|cell| {
                 let distance_m = target.distance_to(cell.position);
-                (distance_m <= radius_m).then(|| NearbyCell {
-                    cell: cell.clone(),
-                    distance_m,
-                })
+                (distance_m <= radius_m).then(|| NearbyCell { cell: cell.clone(), distance_m })
             })
             .collect();
         found.sort_by(|a, b| a.distance_m.total_cmp(&b.distance_m));

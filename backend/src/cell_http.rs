@@ -18,9 +18,7 @@ pub struct Network {
 }
 impl Default for Network {
     fn default() -> Self {
-        Self {
-            deadline: Instant::now() + Duration::from_secs(30),
-        }
+        Self { deadline: Instant::now() + Duration::from_secs(30) }
     }
 }
 impl Http for Network {
@@ -68,11 +66,7 @@ impl Http for Network {
     }
 }
 
-/// 下载地址的校验：**允许带查询串**。
-///
-/// <p>不要复用 [`validate_endpoint`]：那个函数是给"地址与查询参数分开传"的在线查询用的，
-/// 它明确拒绝含 `?` 的地址。数据集下载的 URL 必须自己带 `token` 与 `file`，
-/// 于是会被它判成"参数无效"——请求还没发出去就失败了（2026-09-12 踩过，报错信息还会误导成上游的问题）。
+/// Download URLs include their own query parameters, unlike provider endpoints.
 fn validate_download(url: &str) -> Result<(), QueryError> {
     let uri: ureq::http::Uri = url.parse().map_err(|_| QueryError::InvalidQuery)?;
     if url.len() > 2048
@@ -86,20 +80,21 @@ fn validate_download(url: &str) -> Result<(), QueryError> {
 }
 
 impl Downloader for Network {
-    fn download(&mut self, url: &str, accept: &str) -> Result<Box<dyn std::io::Read + Send>, QueryError> {
+    fn download(
+        &mut self,
+        url: &str,
+        accept: &str,
+    ) -> Result<Box<dyn std::io::Read + Send>, QueryError> {
         validate_download(url)?;
         let agent: ureq::Agent = ureq::Agent::config_builder()
-            // 大文件不能按查询那条 6 秒的预算走；给足时间，但仍要有上限，避免永久挂住。
+            // Country downloads need a longer timeout than individual queries.
             .timeout_global(Some(Duration::from_secs(600)))
             .http_status_as_error(false)
             .max_redirects(0)
             .build()
             .into();
-        let response = agent
-            .get(url)
-            .header("Accept", accept)
-            .call()
-            .map_err(|_| QueryError::Network)?;
+        let response =
+            agent.get(url).header("Accept", accept).call().map_err(|_| QueryError::Network)?;
         match response.status().as_u16() {
             200..=299 => {}
             401 | 403 => return Err(QueryError::Unauthorized),
@@ -107,7 +102,7 @@ impl Downloader for Network {
             400 => return Err(QueryError::InvalidQuery),
             _ => return Err(QueryError::Unavailable),
         }
-        // 这里**不加 `.limit(..)`**：默认上限是给"整包读进内存"用的，而我们要的是流。
+        // Read as a stream without the buffered response size limit.
         Ok(Box::new(response.into_body().into_reader()))
     }
 }

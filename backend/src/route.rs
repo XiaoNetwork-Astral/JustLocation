@@ -77,11 +77,8 @@ impl Playback {
         for point in &plan.points {
             point.validate()?;
         }
-        let lengths: Vec<_> = plan
-            .points
-            .windows(2)
-            .map(|pair| arc(&pair[0], &pair[1]) * EARTH_RADIUS)
-            .collect();
+        let lengths: Vec<_> =
+            plan.points.windows(2).map(|pair| arc(&pair[0], &pair[1]) * EARTH_RADIUS).collect();
         if lengths
             .iter()
             .any(|length| *length < 0.01 || *length > EARTH_RADIUS * (std::f64::consts::PI - 1e-6))

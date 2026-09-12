@@ -15,8 +15,7 @@ strip = "debuginfo"
 
 [dependencies]
 base64 = "0.23.1"
-# OpenCellID 的国家数据集是 `.csv.gz`，必须自己解压。用 flate2 的纯 Rust 后端：
-# 交叉编译到 aarch64-linux-android 时不需要额外的 C 工具链。
+# Use the Rust decompressor to avoid a C dependency in Android cross-builds.
 flate2 = { version = "1.1.5", default-features = false, features = ["rust_backend"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
