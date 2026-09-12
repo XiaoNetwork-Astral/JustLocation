@@ -4,6 +4,29 @@
 
 用于 Android 定位模拟的 Zygisk 模块，支持路线回放和悬浮摇杆。
 
+## CLI
+
+安装模块并重启后，在手机终端或 `adb shell` 中使用。CLI 是模块目录内的 `justlocationd`，未加入 `PATH`。先进入 Root shell，再设置快捷别名：
+
+```sh
+su
+alias justlocation='/data/adb/modules/justlocation/bin/justlocationd'
+justlocation --help
+```
+
+别名仅对当前终端会话有效。常用命令：
+
+```sh
+justlocation start --lat 39.907333 --lon 116.391083 --all  # 为全部应用开启模拟
+justlocation status                                    # 查看当前状态
+justlocation joystick open                             # 打开悬浮摇杆
+justlocation joystick close                            # 关闭摇杆
+justlocation stop                                      # 停止模拟
+justlocation route --help                              # 查看路线命令
+```
+
+坐标默认为 WGS84。将 `--all` 换成 `--app 包名` 可指定生效应用。摇杆需要在 KernelSU → 超级用户中给 JustLoystick 开启 Root 授权。其他参数通过 `命令 --help` 查看。
+
 ## 构建
 
 - Node.js 22.12+

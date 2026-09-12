@@ -4,6 +4,29 @@ English | [中文](README.zh.md)
 
 A Zygisk module for Android location simulation, with route playback and a floating joystick.
 
+## CLI
+
+After installing the module and rebooting, open a terminal on the phone (or `adb shell`). The CLI is `justlocationd` inside the module directory; it is not on `PATH`. Enter a root shell and create a shortcut:
+
+```sh
+su
+alias justlocation='/data/adb/modules/justlocation/bin/justlocationd'
+justlocation --help
+```
+
+The alias lasts for the current shell session. Common commands:
+
+```sh
+justlocation start --lat 39.907333 --lon 116.391083 --all  # Start for all apps
+justlocation status                                    # Show current state
+justlocation joystick open                             # Open the floating joystick
+justlocation joystick close                            # Close the joystick
+justlocation stop                                      # Stop simulation
+justlocation route --help                              # Show route commands
+```
+
+Coordinates default to WGS84. Replace `--all` with `--app PACKAGE` to select an app. The joystick needs Root access in KernelSU → Superuser → JustLoystick. Use `COMMAND --help` for more options.
+
 ## Build
 
 - Node.js 22.12+
