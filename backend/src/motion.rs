@@ -9,6 +9,17 @@ pub struct Motion {
 }
 
 impl Motion {
+    pub fn moving_seconds(&self, from: Instant, to: Instant) -> f64 {
+        let elapsed = |time: Instant| {
+            time.saturating_duration_since(self.started).min(Duration::from_secs(2)).as_secs_f64()
+        };
+        (elapsed(to) - elapsed(from)).max(0.0)
+    }
+
+    pub fn speed(&self) -> f64 {
+        self.origin.speed
+    }
+
     pub fn new(
         mut position: Position,
         speed: f64,

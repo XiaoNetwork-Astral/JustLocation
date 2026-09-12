@@ -61,6 +61,15 @@ fn bearing(a: &Position, b: &Position) -> f64 {
 }
 
 impl Playback {
+    pub fn travelled(&self) -> f64 {
+        let (lap, distance, _) = self.progress();
+        (lap - 1) as f64 * self.total + distance
+    }
+
+    pub fn speed(&self) -> f64 {
+        self.plan.speed
+    }
+
     pub fn new(plan: Route, now: Instant) -> Result<Self, &'static str> {
         if !(2..=128).contains(&plan.points.len()) {
             return Err("a route needs 2 to 128 points");

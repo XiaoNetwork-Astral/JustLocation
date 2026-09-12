@@ -62,6 +62,13 @@ export interface WifiConfig {
   enabled: boolean;
   targets: WifiTarget[];
 }
+export interface StepConfig {
+  enabled: boolean;
+  cadence: number;
+  movement_linked: boolean;
+  stride_m: number;
+  daily_reset: boolean;
+}
 export interface State {
   requested_active: boolean;
   config: Config | null;
@@ -75,6 +82,11 @@ export interface State {
   sim_hook_ready?: boolean;
   gnss?: GnssConfig;
   wifi?: WifiConfig;
+  steps?: StepConfig;
+  step_count?: { total: number; today: number; day: number; fraction: number; epoch: number };
+  step_rate?: number;
+  step_hook_ready?: boolean;
+  step_events?: number;
 
   gnss_hook_ready?: boolean;
   nmea_hook_ready?: boolean;
@@ -98,6 +110,8 @@ export type Command =
   | { op: 'set_telephony'; config: TelephonyConfig }
   | { op: 'set_gnss'; config: GnssConfig }
   | { op: 'set_wifi'; config: WifiConfig }
+  | { op: 'set_steps'; config: StepConfig }
+  | { op: 'set_step_count'; total: number }
   | { op: 'set_cell_region'; region: CellRegion | null };
 
 export type ProviderKind = 'open_cell_id' | 'custom';

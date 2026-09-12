@@ -6,6 +6,7 @@
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
     <!-- Developer self-check app, excluded from the module package. -->
     <application
         android:allowBackup="false"

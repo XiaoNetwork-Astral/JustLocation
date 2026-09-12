@@ -6,6 +6,7 @@ use crate::{
     operators::Operators,
     record::Recording,
     route::Playback,
+    steps::{StepConfig, StepCount},
     telephony::{DetectedSubscription, TelephonyConfig, validate_detected},
     wifi::WifiConfig,
 };
@@ -35,6 +36,7 @@ struct Session {
     telephony: TelephonyConfig,
     gnss: GnssConfig,
     wifi: WifiConfig,
+    steps: StepConfig,
 }
 
 #[derive(Default)]
@@ -64,22 +66,51 @@ pub struct Control {
     live_operators: Option<crate::operators::Live>,
     live_operators_seen_at: Option<Instant>,
     detected_subscriptions: Option<Vec<DetectedSubscription>>,
+    step_count: StepCount,
+    step_updated: Option<Instant>,
+    step_seen: Option<Instant>,
+    step_installed: bool,
+    step_events: u64,
 }
 
 impl Control {
     fn handle_at(&mut self, line: &str, now: Instant) -> Response {
         self.cell_query = None;
+        let from = self.step_updated.unwrap_or(now);
+        let elapsed = now.saturating_duration_since(from).as_secs_f64();
+        let mut moving_seconds = 0.0;
+        let mut speed = 0.0;
         if let Some(motion) = &mut self.session.motion {
+            moving_seconds = motion.moving_seconds(from, now);
+            speed = motion.speed();
             self.session
                 .engine
                 .update_position(motion.advance(now))
                 .expect("validated movement position");
         }
         if let Some(route) = &mut self.session.route {
+            let travelled = route.travelled();
             self.session
                 .engine
                 .update_position(route.advance(now))
                 .expect("validated route position");
+            speed = route.speed();
+            moving_seconds = (route.travelled() - travelled).max(0.0) / speed;
+        }
+        self.step_updated = Some(now);
+        let config = self.session.steps;
+        let amount = config.rate(self.session.engine.is_running(), speed)
+            * if config.movement_linked { moving_seconds } else { elapsed };
+        let previous = self.step_count.clone();
+        if amount > 0.0 || (config.daily_reset && self.step_count.total > 0) {
+            self.step_count.advance(amount, crate::steps::local_day(), config.daily_reset);
+        }
+        let mut step_error = None;
+        if self.step_count != previous {
+            if let Err(error) = self.save_steps() {
+                self.step_count = previous;
+                step_error = Some(format!("cannot save step counters: {error}"));
+            }
         }
         let result = self.apply(line, now);
         // Apply properties before reporting readiness. Original values share the phone heartbeat TTL.
@@ -94,7 +125,7 @@ impl Control {
         ) {
             eprintln!("operator properties: {error}");
         }
-        self.response(result.err())
+        self.response(result.err().or(step_error))
     }
     pub fn open(path: impl AsRef<Path>) -> io::Result<Self> {
         Self::open_with(path, None)
@@ -108,6 +139,13 @@ impl Control {
         let path = path.as_ref();
         let mut engine = Engine::default();
         let stored = Stored::load(path)?;
+        let step_path = path.with_extension("steps.json");
+        let step_count: StepCount = match std::fs::read(step_path) {
+            Ok(bytes) => serde_json::from_slice(&bytes)?,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => StepCount::default(),
+            Err(error) => return Err(error),
+        };
+        step_count.validate().map_err(io::Error::other)?;
         if let Some(config) = stored.config {
             engine.start(config).map_err(io::Error::other)?;
             engine.stop();
@@ -119,9 +157,11 @@ impl Control {
                 telephony: stored.telephony,
                 gnss: stored.gnss,
                 wifi: stored.wifi,
+                steps: stored.steps,
                 ..Session::default()
             },
             storage: Some(path.to_owned()),
+            step_count,
             operators: {
                 let data = path.parent().unwrap_or_else(|| Path::new("."));
                 let mut operators = match properties {
@@ -157,10 +197,38 @@ impl Control {
                 | Command::SetTelephony { .. }
                 | Command::SetGnss { .. }
                 | Command::SetWifi { .. }
+                | Command::SetSteps { .. }
         );
         let previous = mutates_config.then(|| self.session.clone());
         let result = match request.command {
             Command::Status => Ok(()),
+            Command::SetSteps { config } => {
+                config.validate().map_err(str::to_owned)?;
+                self.session.steps = config;
+                Ok(())
+            }
+            Command::SetStepCount { total } => {
+                if total < self.step_count.total || total > 9_007_199_254_740_991 {
+                    return Err(
+                        "step total must not decrease or exceed the JSON integer range".into()
+                    );
+                }
+                let previous = self.step_count.clone();
+                self.step_count.total = total;
+                self.step_count.fraction = 0.0;
+                self.step_count.epoch = self.step_count.epoch.wrapping_add(1);
+                if let Err(error) = self.save_steps() {
+                    self.step_count = previous;
+                    return Err(format!("cannot save step counters: {error}"));
+                }
+                Ok(())
+            }
+            Command::StepHookStatus { installed, events } => {
+                self.step_seen = Some(Instant::now());
+                self.step_installed = installed;
+                self.step_events = events;
+                Ok(())
+            }
             Command::SetWifi { config } => {
                 config.validate().map_err(str::to_owned)?;
                 self.session.wifi = config;
@@ -373,6 +441,7 @@ impl Control {
             telephony: self.session.telephony.clone(),
             gnss: self.session.gnss,
             wifi: self.session.wifi.clone(),
+            steps: self.session.steps,
         }
         .save(path)
     }
@@ -417,6 +486,19 @@ impl Control {
                 cells_synthesized,
                 gnss: self.session.gnss,
                 wifi: self.session.wifi.clone(),
+                steps: self.session.steps,
+                step_count: self.step_count.clone(),
+                step_rate: self.session.steps.rate(
+                    self.session.engine.is_running(),
+                    if self.session.route.is_some() || self.session.motion.is_some() {
+                        self.session.engine.config().map_or(0.0, |c| c.position.speed)
+                    } else {
+                        0.0
+                    },
+                ),
+                step_hook_ready: self.step_installed
+                    && self.step_seen.is_some_and(|time| time.elapsed() < Duration::from_secs(3)),
+                step_events: self.step_events,
                 recording: self.recording.as_ref().map(|recording| RecordProgress {
                     points: recording.points().len(),
                     seconds: recording.seconds(),
@@ -453,6 +535,16 @@ impl Control {
 
     pub fn is_shutdown(&self) -> bool {
         self.shutdown
+    }
+
+    fn save_steps(&self) -> io::Result<()> {
+        if let Some(path) = &self.storage {
+            crate::storage::atomic_save(
+                &path.with_extension("steps.json"),
+                &serde_json::to_vec(&self.step_count)?,
+            )?;
+        }
+        Ok(())
     }
 
     pub fn serve(&mut self, mut input: impl BufRead, mut output: impl Write) -> io::Result<()> {

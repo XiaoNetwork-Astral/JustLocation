@@ -46,7 +46,7 @@ target_link_options(shadowhook PRIVATE -Wl,--undefined-version)
 target_link_options(shadowhook PRIVATE "-Wl,-rpath,$ORIGIN")
 
 # Kept separate from the tiny Zygisk entry: ordinary applications never load this library.
-add_library(justlocation_runtime SHARED src/hook_engine.cpp src/art_symbols.cpp src/runtime.cpp src/bridge_jni.cpp)
+add_library(justlocation_runtime SHARED src/hook_engine.cpp src/art_symbols.cpp src/runtime.cpp src/bridge_jni.cpp src/step_hooks.cpp)
 target_compile_features(justlocation_runtime PRIVATE cxx_std_23)
 target_include_directories(justlocation_runtime PRIVATE
     ${shadowhook_SOURCE_DIR}/shadowhook/src/main/cpp/include)

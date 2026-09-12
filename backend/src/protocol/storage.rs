@@ -18,6 +18,8 @@ pub(super) struct Stored {
     /// Older files default to disabled Wi-Fi output.
     #[serde(default)]
     pub(super) wifi: WifiConfig,
+    #[serde(default)]
+    pub(super) steps: crate::steps::StepConfig,
 }
 
 impl Default for Stored {
@@ -29,6 +31,7 @@ impl Default for Stored {
             telephony: TelephonyConfig::default(),
             gnss: GnssConfig::default(),
             wifi: WifiConfig::default(),
+            steps: crate::steps::StepConfig::default(),
         }
     }
 }
@@ -54,6 +57,7 @@ impl Stored {
         stored.telephony.validate().map_err(io::Error::other)?;
         stored.gnss.validate().map_err(io::Error::other)?;
         stored.wifi.validate().map_err(io::Error::other)?;
+        stored.steps.validate().map_err(io::Error::other)?;
         Ok(stored)
     }
 

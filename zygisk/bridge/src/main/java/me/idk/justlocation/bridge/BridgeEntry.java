@@ -18,11 +18,15 @@ public final class BridgeEntry {
     private static volatile WifiServiceImplHooks wifiHooks;
     private static volatile boolean cellsSynthesized;
     private static long lastDispatchError;
+    private static final StepChannel steps = new StepChannel();
 
     private BridgeEntry() {}
 
     private static native String readState(int installed, int wifiCalls, String gnssRawDetail);
     private static native Method hook(Method target, Object callback, Method method);
+    static native boolean installSteps();
+    static native void updateSteps(boolean active, boolean all, String[] packages, long total,
+            long epoch, int[] handles, int[] types);
 
     public static void start(ClassLoader systemServerLoader) throws Exception {
         location.install(systemServerLoader);
@@ -50,6 +54,7 @@ public final class BridgeEntry {
                 fix = null;
                 telephony = null;
                 wifi = null;
+                steps.stop();
             }
             dispatch();
             try {
@@ -61,6 +66,7 @@ public final class BridgeEntry {
     }
 
     private static void updateState(String response) throws Exception {
+        steps.update(response);
         fix = !location.ready ? null : LocationSnapshot.parse(response);
         try {
             telephony = TelephonySnapshot.parse(response, SystemClock.elapsedRealtime());
@@ -87,6 +93,7 @@ public final class BridgeEntry {
     }
 
     private static void dispatch() {
+        steps.tick();
         LocationSnapshot current = fix;
         gnss.update(current);
         if (current != null) {

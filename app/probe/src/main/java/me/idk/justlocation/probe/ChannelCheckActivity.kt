@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
 import android.graphics.Typeface
+import android.hardware.SensorManager
 import android.location.LocationManager
 import android.os.Bundle
 import android.os.Handler
@@ -73,11 +74,12 @@ class ChannelCheckActivity : Activity() {
 
     private fun run() {
         if (running || isDestroyed) return
-        if (
-            checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) !=
-                PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1)
+        val stepsOnly = intent?.getBooleanExtra("steps_only", false) == true
+        val permission =
+            if (stepsOnly) Manifest.permission.ACTIVITY_RECOGNITION
+            else Manifest.permission.ACCESS_FINE_LOCATION
+        if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(permission), 1)
             return
         }
         running = true
@@ -92,9 +94,14 @@ class ChannelCheckActivity : Activity() {
                 report.line(
                     "location_permission ${context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED}"
                 )
-                LocationChecks(context.getSystemService(LocationManager::class.java), handler)
-                    .collect(report)
-                NetworkChecks(context).collect(report)
+                if (stepsOnly) {
+                    StepChecks(context.getSystemService(SensorManager::class.java), handler)
+                        .collect(report)
+                } else {
+                    LocationChecks(context.getSystemService(LocationManager::class.java), handler)
+                        .collect(report)
+                    NetworkChecks(context).collect(report)
+                }
             } catch (_: InterruptedException) {
                 Thread.currentThread().interrupt()
                 return@execute

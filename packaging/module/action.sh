@@ -36,6 +36,7 @@ ui_print "sim_hook_ready=$(flag sim_hook_ready)"
 ui_print "operator_hook_ready=$(flag operator_hook_ready)"
 ui_print "gnss_hook_ready=$(flag gnss_hook_ready)"
 ui_print "nmea_hook_ready=$(flag nmea_hook_ready)"
+ui_print "step_hook_ready=$(flag step_hook_ready)"
 
 ui_print "wifi_scan_hook_ready=$(flag wifi_scan_hook_ready)"
 ui_print "wifi_connection_hook_ready=$(flag wifi_connection_hook_ready)"

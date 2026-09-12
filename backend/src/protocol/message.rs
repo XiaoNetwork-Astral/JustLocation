@@ -3,6 +3,7 @@ use crate::{
     cells::{CellRegion, Coordinate, NearbyCell},
     gnss::GnssConfig,
     route::{Route, RouteState},
+    steps::{StepConfig, StepCount},
     telephony::{DetectedSubscription, TelephonyConfig, TelephonyFrame},
     wifi::WifiConfig,
 };
@@ -71,6 +72,17 @@ pub(super) enum Command {
     },
     SetWifi {
         config: WifiConfig,
+    },
+    SetSteps {
+        config: StepConfig,
+    },
+    /// Increasing the sensor baseline never fabricates historical detector events.
+    SetStepCount {
+        total: u64,
+    },
+    StepHookStatus {
+        installed: bool,
+        events: u64,
     },
     /// Collect real positions without producing simulated output.
     RecordStart,
@@ -149,6 +161,12 @@ pub struct State {
     pub cells_synthesized: bool,
     pub gnss: GnssConfig,
     pub wifi: WifiConfig,
+    pub steps: StepConfig,
+    pub step_count: StepCount,
+    pub step_rate: f64,
+    pub step_hook_ready: bool,
+    /// Events submitted to SensorService, not proof of permission approval or app delivery.
+    pub step_events: u64,
     /// Active recording progress, cleared when stopped or discarded.
     pub recording: Option<RecordProgress>,
     /// Last recording, retained until acknowledged or discarded.

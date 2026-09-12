@@ -22,6 +22,101 @@ fn send(control: &mut Control, line: String) -> Response {
     control.handle(&line)
 }
 
+fn set_steps(linked: bool) -> String {
+    json!({"version":1,"op":"set_steps","config":{"enabled":true,
+        "cadence":2.0,"movement_linked":linked,"stride_m":0.75,"daily_reset":true}})
+    .to_string()
+}
+
+#[test]
+fn steps_start_stop_and_rate_changes_charge_only_the_previous_interval() {
+    let now = Instant::now();
+    let mut control = Control::default();
+    assert!(control.handle_at(&static_start(), now).ok);
+    assert!(control.handle_at(&set_steps(false), now).ok);
+    let status = r#"{"version":1,"op":"status"}"#;
+    assert_eq!(control.handle_at(status, now + Duration::from_secs(5)).state.step_count.total, 10);
+    let stopped = control.handle_at(r#"{"version":1,"op":"stop"}"#, now + Duration::from_secs(6));
+    assert_eq!(stopped.state.step_count.total, 12);
+    assert_eq!(stopped.state.step_rate, 0.0);
+    assert_eq!(control.handle_at(status, now + Duration::from_secs(30)).state.step_count.total, 12);
+}
+
+#[test]
+fn linked_steps_respect_joystick_lease_and_do_not_count_static_speed_metadata() {
+    let now = Instant::now();
+    let mut control = Control::default();
+    control.handle_at(&static_start(), now);
+    control.handle_at(&set_steps(true), now);
+    let drive = r#"{"version":1,"op":"drive","speed":0.75,"bearing":90}"#;
+    control.handle_at(drive, now);
+    let status = r#"{"version":1,"op":"status"}"#;
+    let expired = control.handle_at(status, now + Duration::from_secs(60));
+    assert_eq!(expired.state.step_count.total, 2);
+    assert_eq!(expired.state.step_rate, 0.0);
+    assert_eq!(control.handle_at(status, now + Duration::from_secs(90)).state.step_count.total, 2);
+}
+
+#[test]
+fn linked_route_steps_exclude_repeat_waits_pauses_and_time_after_arrival() {
+    let now = Instant::now();
+    let mut control = Control::default();
+    control.handle_at(&set_steps(true), now);
+    let mut request: serde_json::Value =
+        serde_json::from_str(&route_start(&[(0.0, 0.0), (0.0, 0.00001)], 0.75)).unwrap();
+    request["route"]["repeat_count"] = json!(2);
+    request["route"]["repeat_delay"] = json!(10);
+    assert!(control.handle_at(&request.to_string(), now).ok);
+    let paused =
+        control.handle_at(r#"{"version":1,"op":"pause_route"}"#, now + Duration::from_secs(1));
+    assert_eq!(paused.state.step_count.total, 1);
+    assert_eq!(paused.state.step_rate, 0.0);
+    control.handle_at(r#"{"version":1,"op":"resume_route"}"#, now + Duration::from_secs(100));
+    let final_state =
+        control.handle_at(r#"{"version":1,"op":"status"}"#, now + Duration::from_secs(200)).state;
+    assert_eq!(final_state.step_count.total, 2);
+    assert_eq!(final_state.step_rate, 0.0);
+}
+
+#[test]
+fn manual_step_baseline_cannot_decrease_and_does_not_change_daily_statistics() {
+    let mut control = Control::default();
+    let reply = control.handle(r#"{"version":1,"op":"set_step_count","total":1000}"#);
+    assert!(reply.ok);
+    assert_eq!(reply.state.step_count.total, 1000);
+    assert_eq!(reply.state.step_count.today, 0);
+    assert_eq!(reply.state.step_count.epoch, 1);
+    assert!(!control.handle(r#"{"version":1,"op":"set_step_count","total":999}"#).ok);
+}
+
+#[test]
+fn step_counters_survive_restart_and_disk_failure_cannot_prevent_stop() {
+    let directory = std::env::temp_dir().join(format!("justlocation-steps-{}", std::process::id()));
+    std::fs::create_dir(&directory).unwrap();
+    let path = directory.join("config.json");
+    let counter_path = path.with_extension("steps.json");
+    let now = Instant::now();
+    let mut control = Control::open(&path).unwrap();
+    assert!(control.handle_at(&static_start(), now).ok);
+    assert!(control.handle_at(&set_steps(false), now).ok);
+    assert!(control.handle_at(r#"{"version":1,"op":"status"}"#, now + Duration::from_secs(5)).ok);
+    let mut restored = Control::open(&path).unwrap();
+    let state = restored.handle(r#"{"version":1,"op":"status"}"#).state;
+    assert_eq!(state.step_count.total, 10);
+    assert!(!state.requested_active);
+    assert_eq!(state.step_rate, 0.0);
+    std::fs::remove_file(&counter_path).unwrap();
+    std::fs::create_dir(&counter_path).unwrap();
+    let reply = control.handle_at(r#"{"version":1,"op":"stop"}"#, now + Duration::from_secs(6));
+    assert!(!reply.ok);
+    assert!(!reply.state.requested_active);
+    assert_eq!(reply.state.step_count.total, 10);
+    assert_eq!(reply.state.step_rate, 0.0);
+    std::fs::remove_dir(counter_path).unwrap();
+    std::fs::remove_file(path).unwrap();
+    std::fs::remove_dir(directory).unwrap();
+}
+
 #[test]
 fn recording_collects_points_and_hands_them_over_for_replay() {
     let mut control = Control::default();

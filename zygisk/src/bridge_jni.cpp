@@ -8,12 +8,13 @@
 #include <string>
 
 #include "io.hpp"
+#include "step_hooks.hpp"
 
 namespace {
 int companion_fd = -1;
 
 jstring exchange_state(JNIEnv* env, jint installed, jint wifi_calls,
-                       const std::string* subscriptions, const std::string& extra) {
+                       const std::string* subscriptions, const std::string& extra, char op = 'S') {
     if (companion_fd < 0)
         return nullptr;
     uint32_t length = 0;
@@ -22,7 +23,7 @@ jstring exchange_state(JNIEnv* env, jint installed, jint wifi_calls,
     unsigned calls = wifi_calls < 0
                              ? 0u
                              : (wifi_calls > 0xFFFF ? 0xFFFFu : static_cast<unsigned>(wifi_calls));
-    const char request[]{subscriptions ? 'P' : 'S', static_cast<char>(installed & 255),
+    const char request[]{subscriptions ? 'P' : op, static_cast<char>(installed & 255),
                          static_cast<char>((calls >> 8) & 255), static_cast<char>(calls & 255)};
     uint32_t size = subscriptions ? htonl(subscriptions->size()) : 0;
     // Always write the extra-field length, including zero. The companion reads it before any
@@ -82,7 +83,20 @@ std::string read_extra(JNIEnv* env, jstring extra) {
 }
 
 jstring read_state(JNIEnv* env, jclass, jint installed, jint wifi_calls, jstring extra) {
+    auto report = exchange_state(env, step_hooks_ready() ? 1 : 0, 0, nullptr,
+                                 std::to_string(step_event_count()), 'T');
+    if (report)
+        env->DeleteLocalRef(report);
     return exchange_state(env, installed, wifi_calls, nullptr, read_extra(env, extra));
+}
+
+jboolean install_steps(JNIEnv*, jclass) {
+    return install_step_hooks();
+}
+
+void update_steps(JNIEnv* env, jclass, jboolean active, jboolean all, jobjectArray packages,
+                  jlong total, jlong epoch, jintArray handles, jintArray types) {
+    update_step_state(env, active, all, packages, total, epoch, handles, types);
 }
 jstring read_phone_state(JNIEnv* env, jclass, jint installed, jint wifi_calls, jbyteArray metadata,
                          jstring extra) {
@@ -132,5 +146,17 @@ bool register_bridge_natives(JNIEnv* env, jclass entry, int companion, bool phon
             {const_cast<char*>("deoptimize"), const_cast<char*>("(Ljava/lang/reflect/Method;)Z"),
              reinterpret_cast<void*>(deoptimize_method)},
     };
-    return env->RegisterNatives(entry, natives, phone ? 3 : 2) == JNI_OK;
+    if (env->RegisterNatives(entry, natives, phone ? 3 : 2) != JNI_OK)
+        return false;
+    if (!phone) {
+        JNINativeMethod steps[] = {
+                {const_cast<char*>("installSteps"), const_cast<char*>("()Z"),
+                 reinterpret_cast<void*>(install_steps)},
+                {const_cast<char*>("updateSteps"),
+                 const_cast<char*>("(ZZ[Ljava/lang/String;JJ[I[I)V"),
+                 reinterpret_cast<void*>(update_steps)},
+        };
+        return env->RegisterNatives(entry, steps, 2) == JNI_OK;
+    }
+    return true;
 }

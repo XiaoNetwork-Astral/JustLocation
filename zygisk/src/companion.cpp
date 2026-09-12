@@ -14,7 +14,7 @@
 
 namespace {
 std::string status(unsigned char installed, unsigned wifi_calls, const std::string& subscriptions,
-                   const std::string& gnss_raw) {
+                   const std::string& gnss_raw, char operation) {
     if (access("/data/adb/modules/justlocation/disable", F_OK) == 0 ||
         access("/data/adb/modules/justlocation/remove", F_OK) == 0)
         return {};
@@ -47,7 +47,14 @@ std::string status(unsigned char installed, unsigned wifi_calls, const std::stri
             // comma-separated values.
             + ",\"gnss_raw_detail\":" + (gnss_raw.empty() ? "null" : ("\"" + gnss_raw + "\"")) +
             "}\n";
-    if (installed & 128) {
+    if (operation == 'T') {
+        if (gnss_raw.empty() || gnss_raw.find_first_not_of("0123456789") != std::string::npos) {
+            close(fd);
+            return {};
+        }
+        request = std::string("{\"version\":1,\"op\":\"step_hook_status\",\"installed\":") +
+                  ((installed & 1) ? "true" : "false") + ",\"events\":" + gnss_raw + "}\n";
+    } else if (installed & 128) {
         // Phone operator fields use a pipe separator. Literal newlines would invalidate the JSON
         // request.
         std::vector<std::string> operators{"", "", "", ""};
@@ -110,7 +117,7 @@ void companion(int control) {
                                 operation);
             frames++;
         }
-        if (operation != 'S' && operation != 'P')
+        if (operation != 'S' && operation != 'P' && operation != 'T')
             break;
         char header[3];
         if (!receive_all(client, header, sizeof(header)))
@@ -154,7 +161,7 @@ void companion(int control) {
                                 "phone frame: installed=%u extra=%zu subs=%zu", installed,
                                 gnss_raw.size(), subscriptions.size());
         }
-        auto response = status(installed, wifi_calls, subscriptions, gnss_raw);
+        auto response = status(installed, wifi_calls, subscriptions, gnss_raw, operation);
         uint32_t length = htonl(response.size());
         if (!send_all(client, &length, sizeof(length)) ||
             !send_all(client, response.data(), response.size()))
