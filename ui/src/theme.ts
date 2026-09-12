@@ -1,10 +1,3 @@
-// 主题分两层，互相独立：
-//   style = 'material' | 'miuix'  外观语言（圆角、层级、控件形态）
-//   mode  = 'system' | 'light' | 'dark'  明暗
-// 两者都写到 <html> 的 data 属性上，具体取值全部由 CSS 令牌承担。
-// 变量命名沿用 KernelSU 管理器的 Miuix→CSS 桥接（MonetColorsProvider.kt），
-// 这样 Miuix 一侧的语义与真实实现一致，Material 一侧只换值不换名字。
-
 export type StyleFamily = 'material' | 'miuix';
 export type ColorMode = 'system' | 'light' | 'dark';
 
@@ -30,7 +23,6 @@ export function isColorMode(value: unknown): value is ColorMode {
   return value === 'system' || value === 'light' || value === 'dark';
 }
 
-/** 读取已保存的外观语言。旧版本没有这个键，按 Material 处理。 */
 export function readStyle(storage: Pick<Storage, 'getItem'> = localStorage): StyleFamily {
   try {
     const saved = storage.getItem(STYLE_STORAGE_KEY);
@@ -40,7 +32,6 @@ export function readStyle(storage: Pick<Storage, 'getItem'> = localStorage): Sty
   }
 }
 
-/** 读取已保存的明暗模式。旧版本用 'system' | 'light' | 'dark'，语义一致。 */
 export function readColorMode(storage: Pick<Storage, 'getItem'> = localStorage): ColorMode {
   try {
     const saved = storage.getItem(MODE_STORAGE_KEY);
@@ -50,17 +41,24 @@ export function readColorMode(storage: Pick<Storage, 'getItem'> = localStorage):
   }
 }
 
-/** 把两层主题写到根元素上，并返回清理函数。 */
-export function applyTheme(style: StyleFamily, mode: ColorMode, root: HTMLElement = document.documentElement) {
+export function applyTheme(
+  style: StyleFamily,
+  mode: ColorMode,
+  root: HTMLElement = document.documentElement,
+) {
   root.dataset.style = style;
   root.dataset.theme = mode;
 }
 
-export function saveTheme(style: StyleFamily, mode: ColorMode, storage: Pick<Storage, 'setItem'> = localStorage) {
+export function saveTheme(
+  style: StyleFamily,
+  mode: ColorMode,
+  storage: Pick<Storage, 'setItem'> = localStorage,
+) {
   try {
     storage.setItem(STYLE_STORAGE_KEY, style);
     storage.setItem(MODE_STORAGE_KEY, mode);
   } catch {
-    /* 存储不可用时仅本次会话生效。 */
+    /* Keep the current session usable when browser storage is unavailable. */
   }
 }

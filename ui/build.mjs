@@ -8,7 +8,9 @@ export function npm(args) {
   else run('npm', [...args, ...cache], join(root, 'ui'));
 }
 
-export function build() { npm(['run', 'build']); }
+export function build() {
+  npm(['run', 'build']);
+}
 export function test() {
   npm(['run', 'check']);
   npm(['test']);

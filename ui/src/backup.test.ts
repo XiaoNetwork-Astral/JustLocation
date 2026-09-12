@@ -2,14 +2,35 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { createBackup, importBackup, parseBackup } from './backup';
 
-const position = { latitude: 31.2, longitude: 121.5, altitude: -3, accuracy: 8, speed: 2, bearing: 90 };
+const position = {
+  latitude: 31.2,
+  longitude: 121.5,
+  altitude: -3,
+  accuracy: 8,
+  speed: 2,
+  bearing: 90,
+};
 const places = [{ id: 'p', name: '家 🏠', position, pinned: true }];
-const routes = [{ id: 'r', name: '散步', plan: { points: [position, { ...position, latitude: 31.3 }], speed: 1.5, repeat_count: 3, repeat_delay: 8 } }];
+const routes = [
+  {
+    id: 'r',
+    name: '散步',
+    plan: {
+      points: [position, { ...position, latitude: 31.3 }],
+      speed: 1.5,
+      repeat_count: 3,
+      repeat_delay: 8,
+    },
+  },
+];
 function seed() {
   localStorage.setItem('justlocation.places', JSON.stringify(places));
   localStorage.setItem('justlocation.routes', JSON.stringify(routes));
 }
-afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); });
+afterEach(() => {
+  localStorage.clear();
+  vi.restoreAllMocks();
+});
 
 it('round trips Unicode, all position fields, pins and route playback settings', () => {
   seed();
@@ -37,14 +58,15 @@ it('rejects invalid files as a whole without touching the saved data', () => {
   seed();
   const good = createBackup(localStorage);
   for (const mutate of [
-    (b: any) => b.version = 99,
-    (b: any) => b.places[0].position.latitude = 91,
-    (b: any) => b.places[0].position.accuracy = -1,
-    (b: any) => b.routes[0].plan.repeat_count = 0,
-    (b: any) => b.routes[0].plan.speed = '2',
-    (b: any) => b.routes[0].plan.points[1] = b.routes[0].plan.points[0],
+    (b: any) => (b.version = 99),
+    (b: any) => (b.places[0].position.latitude = 91),
+    (b: any) => (b.places[0].position.accuracy = -1),
+    (b: any) => (b.routes[0].plan.repeat_count = 0),
+    (b: any) => (b.routes[0].plan.speed = '2'),
+    (b: any) => (b.routes[0].plan.points[1] = b.routes[0].plan.points[0]),
   ]) {
-    const broken = JSON.parse(good); mutate(broken);
+    const broken = JSON.parse(good);
+    mutate(broken);
     expect(() => parseBackup(JSON.stringify(broken))).toThrow();
   }
   expect(createBackup(localStorage)).toBe(good);
@@ -54,7 +76,8 @@ it('rejects invalid files as a whole without touching the saved data', () => {
 it('restores the first collection when the second storage write fails', () => {
   seed();
   const backup = parseBackup(createBackup(localStorage));
-  backup.places[0].name = '新位置'; backup.routes[0].name = '新路线';
+  backup.places[0].name = '新位置';
+  backup.routes[0].name = '新路线';
   const before = createBackup(localStorage);
   const original = Storage.prototype.setItem;
   vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {

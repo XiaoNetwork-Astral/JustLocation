@@ -15,7 +15,14 @@ it('searches labels and packages, hides unselected system apps, and keeps hidden
   const user = userEvent.setup();
   function Harness() {
     const [selected, setSelected] = useState(['example.missing']);
-    return <AppPicker selected={selected} onChange={setSelected} disabled={false} loadApps={async () => apps} />;
+    return (
+      <AppPicker
+        selected={selected}
+        onChange={setSelected}
+        disabled={false}
+        loadApps={async () => apps}
+      />
+    );
   }
   render(<Harness />);
   expect(await screen.findByRole('checkbox', { name: /地图/ })).toHaveProperty('checked', false);
@@ -33,7 +40,14 @@ it('searches labels and packages, hides unselected system apps, and keeps hidden
 
 it('shows selected system apps and blocks changes while a session is active', async () => {
   const changed = vi.fn();
-  render(<AppPicker selected={['example.settings']} onChange={changed} disabled loadApps={async () => apps} />);
+  render(
+    <AppPicker
+      selected={['example.settings']}
+      onChange={changed}
+      disabled
+      loadApps={async () => apps}
+    />,
+  );
   const selected = await screen.findByRole('checkbox', { name: /^设置/ });
   expect(selected).toHaveProperty('checked', true);
   expect(selected).toHaveProperty('disabled', true);
@@ -43,8 +57,18 @@ it('shows selected system apps and blocks changes while a session is active', as
 
 it('keeps saved selections on load failure and allows a retry', async () => {
   const loadApps = vi.fn().mockRejectedValueOnce(new Error('读取失败')).mockResolvedValueOnce(apps);
-  render(<AppPicker selected={['example.maps']} onChange={vi.fn()} disabled={false} loadApps={loadApps} />);
-  expect(await screen.findByRole('alert')).toHaveProperty('textContent', expect.stringContaining('读取失败'));
+  render(
+    <AppPicker
+      selected={['example.maps']}
+      onChange={vi.fn()}
+      disabled={false}
+      loadApps={loadApps}
+    />,
+  );
+  expect(await screen.findByRole('alert')).toHaveProperty(
+    'textContent',
+    expect.stringContaining('读取失败'),
+  );
   expect(screen.getByRole('checkbox', { name: /example.maps/ })).toHaveProperty('checked', true);
   await userEvent.click(screen.getByRole('button', { name: '重试' }));
   expect(await screen.findByRole('checkbox', { name: /地图/ })).toHaveProperty('checked', true);

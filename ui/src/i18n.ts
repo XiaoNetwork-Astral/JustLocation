@@ -1,15 +1,3 @@
-// 面板的多语言支持。
-//
-// 取舍：不引入 i18next 这类框架。面板只有一个人用、字符串量有限，一个字典加一个
-// 取值函数就够了；引入框架会带来额外的依赖、构建配置和升级负担。
-//
-// 中文是默认语言，英文可选：现有测试与浏览器用例都按中文查找元素，把中文设为默认
-// 就不会因为接入多语言而一次性打碎它们。语言选择保存在面板本地，与主题同一套做法。
-//
-// 命名约定：键用 `区域.用途` 的点分写法（`nav.location`、`action.save`），
-// 顺序与界面出现顺序无关，方便新增。缺失的键回退到中文，再缺失就显示键本身——
-// 让漏翻一眼可见，而不是显示空白。
-
 export type Locale = 'zh' | 'en';
 export const LOCALE_KEY = 'justlocation.locale';
 
@@ -140,7 +128,8 @@ export const zh = {
 
   'scope.title': '作用范围',
   'scope.limitedHint': '只有勾选的应用会使用模拟位置，其他应用保持真实定位。',
-  'scope.allHint': '当前是所有应用都使用模拟位置，回到位置模拟页打开“作用范围”开关即可改为只对指定应用生效。',
+  'scope.allHint':
+    '当前是所有应用都使用模拟位置，回到位置模拟页打开“作用范围”开关即可改为只对指定应用生效。',
   'scope.locked': '模拟中，停止后可修改',
   'scope.autosave': '选择自动保存，下次开始模拟时生效',
   'scope.allNote': '所有应用都会使用模拟位置。之前勾选的应用已保留。',
@@ -157,8 +146,9 @@ export const zh = {
   'wifi.title': 'Wi-Fi 模拟',
   'wifi.enabled': '应用会读到保存的网络信息',
   'wifi.disabled': '关闭时应用读到系统原样结果',
-  'wifi.hint': '按名称与接入点地址模拟应用读到的无线网络。附近列表需要系统扫描结果，目前还没接入，先用手工添加。',
-  'wifi.notWired': '真正的输出尚未实现：这些网络已经写入后台配置，但还不会改变应用读到的 Wi-Fi 信息。',
+  'wifi.hint':
+    '按名称与接入点地址模拟应用读到的无线网络。附近列表需要系统扫描结果，目前还没接入，先用手工添加。',
+  'wifi.channelStatus': '连接信息与扫描结果是否就绪，可以在设置的系统通道中查看。',
   'wifi.add': '添加网络',
   'wifi.ssid': '网络名称（SSID）',
   'wifi.bssid': '接入点地址（BSSID，可留空）',
@@ -180,7 +170,7 @@ export const zh = {
   'wifi.reading': '读取当前状态中',
 } as const;
 
-/** 英文缺失时回退到中文，所以这里只需列出已经翻译的键。 */
+/* Missing English entries fall back to Chinese. */
 const en: Partial<Record<keyof typeof zh, string>> = {
   'app.subtitle': 'Location and route simulation',
   'app.connected': 'Backend connected',
@@ -214,7 +204,8 @@ const en: Partial<Record<keyof typeof zh, string>> = {
   'settings.appearance': 'Appearance',
   'settings.appearanceHint': 'Pick a look and a brightness separately, and switch any time.',
   'settings.channels': 'System channels',
-  'settings.channelsHint': 'These decide whether apps can read the simulated data the system returns.',
+  'settings.channelsHint':
+    'These decide whether apps can read the simulated data the system returns.',
   'settings.runtime': 'Environment',
   'settings.language': 'Language',
   'settings.languageHint': 'Language of the panel text; passwords and coordinates are unaffected.',
@@ -291,13 +282,16 @@ const en: Partial<Record<keyof typeof zh, string>> = {
   'satellite.gnss': 'GNSS status',
   'satellite.nmea': 'NMEA sentences',
   'satellite.gnssPurpose': 'Delivers the preset satellite status and first-fix callbacks',
-  'satellite.nmeaPurpose': 'Drops the system NMEA callbacks in scope instead of composing sentences',
+  'satellite.nmeaPurpose':
+    'Drops the system NMEA callbacks in scope instead of composing sentences',
   'satellite.enabledPending': 'Enabled; starts with the location simulation',
   'satellite.connected': 'Interface connected',
   'satellite.connecting': 'Waiting for the interface',
   'scope.title': 'Scope',
-  'scope.limitedHint': 'Only the checked apps use the simulated position; others keep the real one.',
-  'scope.allHint': 'Every app currently uses the simulated position. Turn on “Scope” on the location page to limit it.',
+  'scope.limitedHint':
+    'Only the checked apps use the simulated position; others keep the real one.',
+  'scope.allHint':
+    'Every app currently uses the simulated position. Turn on “Scope” on the location page to limit it.',
   'scope.locked': 'Simulation is running; stop it to change this',
   'scope.autosave': 'Saved automatically and used on the next start',
   'scope.allNote': 'Every app will use the simulated position. Your previous selection is kept.',
@@ -312,8 +306,10 @@ const en: Partial<Record<keyof typeof zh, string>> = {
   'wifi.title': 'Wi-Fi simulation',
   'wifi.enabled': 'Apps read the saved network information',
   'wifi.disabled': 'When off, apps read the system result unchanged',
-  'wifi.hint': 'Simulates the wireless networks an app reads, by name and access point address. The nearby list needs system scan results and is not wired up yet, so add them by hand.',
-  'wifi.notWired': 'The actual output is not implemented yet: these networks are stored in the backend configuration but do not change what an app reads.',
+  'wifi.hint':
+    'Simulates the wireless networks an app reads, by name and access point address. The nearby list needs system scan results and is not wired up yet, so add them by hand.',
+  'wifi.channelStatus':
+    'Check system channels in Settings for connection and scan output readiness.',
   'wifi.add': 'Add network',
   'wifi.ssid': 'Network name (SSID)',
   'wifi.bssid': 'Access point address (BSSID, optional)',
@@ -351,20 +347,28 @@ export function readLocale(storage: Pick<Storage, 'getItem'> = localStorage): Lo
   try {
     const saved = storage.getItem(LOCALE_KEY);
     return isLocale(saved) ? saved : 'zh';
-  } catch { return 'zh'; }
+  } catch {
+    return 'zh';
+  }
 }
 
 export function saveLocale(locale: Locale, storage: Pick<Storage, 'setItem'> = localStorage) {
-  try { storage.setItem(LOCALE_KEY, locale); }
-  catch { /* 存储不可用时只影响本次会话 */ }
+  try {
+    storage.setItem(LOCALE_KEY, locale);
+  } catch {
+    /* Keep the current session usable when browser storage is unavailable. */
+  }
 }
 
-/**
- * 取一条文案。`{name}` 形式的占位符用 `params` 替换。
- * 英文缺这条时回退中文，中文也缺就返回键名本身，方便一眼看出漏翻。
- */
-export function translate(locale: Locale, key: MessageKey, params?: Record<string, string | number>): string {
+/* Replace named placeholders, falling back to Chinese and then the key. */
+export function translate(
+  locale: Locale,
+  key: MessageKey,
+  params?: Record<string, string | number>,
+): string {
   const text = dictionaries[locale]?.[key] ?? zh[key] ?? key;
   if (!params) return text;
-  return text.replace(/\{(\w+)\}/g, (whole, name: string) => (name in params ? String(params[name]) : whole));
+  return text.replace(/\{(\w+)\}/g, (whole, name: string) =>
+    name in params ? String(params[name]) : whole,
+  );
 }
