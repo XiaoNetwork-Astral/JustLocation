@@ -33,6 +33,14 @@ pub(super) enum Command {
         route: Route,
         scope: Scope,
     },
+    StartRouteRef {
+        id: String,
+        scope: Scope,
+    },
+    RoutePage {
+        offset: usize,
+        limit: usize,
+    },
     PauseRoute,
     ResumeRoute,
     Update {
@@ -99,8 +107,18 @@ pub(super) enum Command {
     },
     /// Finish recording; an empty recording returns an error.
     RecordStop,
+    RecordPause,
+    RecordResume,
+    RecordPage {
+        id: String,
+        offset: usize,
+        limit: usize,
+    },
     /// Acknowledge the last recording and clear the stored result.
-    RecordTake,
+    RecordTake {
+        #[serde(default)]
+        id: Option<String>,
+    },
     RecordDiscard,
     TelephonyHookStatus {
         cells: bool,
@@ -138,6 +156,8 @@ pub struct CellQuery {
 #[derive(Serialize)]
 pub struct RecordProgress {
     pub points: usize,
+    pub id: String,
+    pub paused: bool,
     pub seconds: f64,
     pub full: bool,
     /// Samples rejected as duplicates or too close to the previous point.
@@ -148,6 +168,9 @@ pub struct RecordProgress {
 #[derive(Serialize)]
 pub struct RecordedTrack {
     pub points: Vec<Position>,
+    pub breaks: Vec<usize>,
+    pub point_count: usize,
+    pub id: String,
     pub seconds: f64,
 }
 
@@ -204,4 +227,6 @@ pub struct Response {
     pub error: Option<String>,
     pub state: State,
     pub cells: Option<CellQuery>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page: Option<crate::route_store::Page>,
 }

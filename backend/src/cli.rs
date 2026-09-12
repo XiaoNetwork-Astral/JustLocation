@@ -98,11 +98,13 @@ impl Runtime {
         .map_err(|e| e.to_string())?;
         write_output(None, &(text + "\n"))
     }
-    fn request(&self, mut request: Value) -> Result<Value> {
+    fn request(&self, request: Value) -> Result<Value> {
+        self.reply(request).map(|value| value["state"].clone())
+    }
+    fn reply(&self, mut request: Value) -> Result<Value> {
         request["version"] = json!(1);
         let reply = crate::transport::request_in(&self.directory, &request.to_string())?;
         check(serde_json::from_str(&reply).map_err(|e| format!("invalid service response: {e}"))?)
-            .map(|value| value["state"].clone())
     }
     fn status(&self) -> Result<Value> {
         self.request(json!({"op":"status"}))
@@ -158,18 +160,24 @@ fn check(value: Value) -> Result<Value> {
     }
 }
 fn read_input(path: &Path) -> Result<String> {
+    read_sized(path, crate::scode::MAX_SIZE)
+}
+fn read_large(path: &Path) -> Result<String> {
+    read_sized(path, crate::route_store::MAX_FILE)
+}
+fn read_large_json(path: &Path) -> Result<Value> {
+    serde_json::from_str(&read_large(path)?).map_err(|e| format!("invalid JSON: {e}"))
+}
+fn read_sized(path: &Path, limit: usize) -> Result<String> {
     let reader: Box<dyn Read> = if path == Path::new("-") {
         Box::new(io::stdin())
     } else {
         Box::new(std::fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?)
     };
     let mut text = String::new();
-    reader
-        .take(crate::scode::MAX_SIZE as u64 + 1)
-        .read_to_string(&mut text)
-        .map_err(|e| e.to_string())?;
-    if text.len() > crate::scode::MAX_SIZE {
-        return Err("input exceeds 2 MiB".into());
+    reader.take(limit as u64 + 1).read_to_string(&mut text).map_err(|e| e.to_string())?;
+    if text.len() > limit {
+        return Err(format!("input exceeds {} MiB", limit / 1024 / 1024));
     }
     Ok(text.trim_start_matches('\u{feff}').to_owned())
 }

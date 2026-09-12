@@ -16,7 +16,11 @@ class CallActivity : Activity() {
             try {
                 startForegroundService(
                     Intent(this, RouteRecordService::class.java)
-                        .setAction(RouteRecordService.ACTION_START)
+                        .setAction(
+                            if (intent?.getStringExtra("record_action") == "resume")
+                                RouteRecordService.ACTION_RESUME
+                            else RouteRecordService.ACTION_START
+                        )
                 )
             } catch (error: Exception) {
                 Log.w(TAG, "recording service start failed", error)

@@ -20,6 +20,8 @@ import org.json.JSONObject
 class RouteRecordService : Service() {
     companion object {
         const val ACTION_START = "me.idk.justlocation.joystick.RECORD_START"
+        const val ACTION_PAUSE = "me.idk.justlocation.joystick.RECORD_PAUSE"
+        const val ACTION_RESUME = "me.idk.justlocation.joystick.RECORD_RESUME"
         const val ACTION_STOP = "me.idk.justlocation.joystick.RECORD_STOP"
         const val ACTION_STATE = "me.idk.justlocation.joystick.RECORD_STATE"
         private const val CHANNEL = "route-record"
@@ -31,6 +33,7 @@ class RouteRecordService : Service() {
 
     // Worker-owned recording state.
     private var origin = 0L
+    private var recordingId = ""
     private var lastError = ""
     private var lastMessage = ""
     // Main-thread admission guards for commands and location callbacks.
@@ -61,8 +64,10 @@ class RouteRecordService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         try {
             when (intent?.action) {
-                ACTION_STOP -> stopRecording()
-                else -> beginRecording()
+                ACTION_STOP -> stopRecording(false)
+                ACTION_PAUSE -> stopRecording(true)
+                ACTION_RESUME -> beginRecording(true)
+                else -> beginRecording(false)
             }
         } catch (error: Exception) {
             finish(error)
@@ -70,7 +75,7 @@ class RouteRecordService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun beginRecording() {
+    private fun beginRecording(resume: Boolean) {
         if (started || stopping || closed) return
         started = true
         startForeground(
@@ -88,7 +93,8 @@ class RouteRecordService : Service() {
                 check(!state.optBoolean("requested_active")) {
                     "stop the location simulation before recording"
                 }
-                RootControl.request("record_start")
+                val started = RootControl.request(if (resume) "record_resume" else "record_start")
+                recordingId = started.getJSONObject("recording").getString("id")
                 origin = SystemClock.elapsedRealtime()
                 lastError = ""
                 lastMessage = "Recording. Run 'justlocationd record stop' when finished."
@@ -138,19 +144,23 @@ class RouteRecordService : Service() {
                 publish()
             } catch (error: Exception) {
                 lastError = error.message ?: "writing the location failed"
+                manager.removeUpdates(listener)
                 publish()
+                stopSelf()
             }
         }
     }
 
-    private fun stopRecording() {
+    private fun stopRecording(pause: Boolean) {
         if (stopping || closed) return
         stopping = true
         worker.execute {
             manager.removeUpdates(listener)
             try {
-                val state = RootControl.request("record_stop")
-                lastMessage = store(state.optJSONObject("recorded"))
+                val state = RootControl.request(if (pause) "record_pause" else "record_stop")
+                lastMessage =
+                    if (pause) "Recording paused. Run 'justlocationd record resume' to continue."
+                    else completedMessage(state.optJSONObject("recorded"))
                 lastError = ""
             } catch (error: Exception) {
                 lastError = error.message ?: "cannot finish recording"
@@ -169,12 +179,10 @@ class RouteRecordService : Service() {
         stopSelf()
     }
 
-    private fun store(recorded: JSONObject?): String {
+    private fun completedMessage(recorded: JSONObject?): String {
         if (recorded == null) return "No points recorded"
-        val points = recorded.optJSONArray("points")?.length() ?: 0
-        val file = File(getExternalFilesDir(null) ?: filesDir, "recorded-route.json")
-        file.writeText(recorded.toString())
-        return "Recorded $points points; saved to ${file.absolutePath}"
+        val points = recorded.optInt("point_count")
+        return "Recorded $points points. Run 'justlocationd record save NAME' to save the route."
     }
 
     private fun providers(): List<String> =
@@ -206,7 +214,21 @@ class RouteRecordService : Service() {
         closed = true
         manager.removeUpdates(listener)
         // Startup may still be registering providers on the worker when destruction begins.
-        worker.execute { manager.removeUpdates(listener) }
+        worker.execute {
+            manager.removeUpdates(listener)
+            if (recordingId.isNotEmpty()) {
+                try {
+                    val recording = RootControl.request("status").optJSONObject("recording")
+                    if (
+                        recording?.optString("id") == recordingId && !recording.optBoolean("paused")
+                    ) {
+                        RootControl.request("record_pause")
+                    }
+                } catch (error: Exception) {
+                    Log.w("JustLocationRecorder", "cannot pause the interrupted recording", error)
+                }
+            }
+        }
         worker.shutdown()
         super.onDestroy()
     }

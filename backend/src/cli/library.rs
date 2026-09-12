@@ -23,14 +23,24 @@ impl Default for Library {
 struct SavedRoute {
     id: String,
     name: String,
-    plan: Route,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    plan: Option<Route>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    file_id: Option<String>,
+    #[serde(default)]
+    point_count: usize,
 }
 
 impl Runtime {
     pub(super) fn backup(&self, command: BackupCommand) -> Result<()> {
         match command {
             BackupCommand::Export { file } => {
-                let mut value = json!(self.library()?);
+                let mut library = self.library()?;
+                for route in &mut library.routes {
+                    route.plan = Some(self.load_route(route)?);
+                    route.file_id = None;
+                }
+                let mut value = json!(library);
                 value["format"] = json!("justlocation-library");
                 write_output(
                     file.output.as_deref(),
@@ -38,7 +48,7 @@ impl Runtime {
                 )
             }
             BackupCommand::Import { file, replace } => {
-                let mut value = read_json(&file.input)?;
+                let mut value = read_large_json(&file.input)?;
                 match value["format"].as_str() {
                     Some("justlocation-library") => {}
                     Some("justlocation") => {
@@ -65,6 +75,9 @@ impl Runtime {
                 let mut imported: Library =
                     serde_json::from_value(value).map_err(|e| format!("invalid backup: {e}"))?;
                 validate(&imported)?;
+                if imported.routes.iter().any(|r| r.plan.is_none() || r.file_id.is_some()) {
+                    return Err("backup routes must contain their complete plans".into());
+                }
                 let counts = json!({"places":imported.places.len(),"routes":imported.routes.len(),"replaced":replace});
                 self.edit_library(|library| {
                     if replace {
@@ -167,13 +180,24 @@ impl Runtime {
         let value = match command {
             RouteCommand::List => json!(self.library()?.routes),
             RouteCommand::ImportGpx { file, speed } => {
-                let routes = gpx::parse(&read_input(&file.input)?, speed)?;
+                let routes = gpx::parse(&read_large(&file.input)?, speed)?;
                 self.edit_library(|library| {
                     let mut saved = Vec::new();
                     for (name, plan) in routes {
-                        saved.push(SavedRoute { id: crate::scode::new_id()?, name, plan });
+                        saved.push(SavedRoute {
+                            id: crate::scode::new_id()?,
+                            name,
+                            point_count: plan.points.len(),
+                            plan: Some(plan),
+                            file_id: None,
+                        });
                     }
-                    let result = json!(saved);
+                    let result = json!(
+                        saved
+                            .iter()
+                            .map(|r| json!({"id":r.id,"name":r.name,"point_count":r.point_count}))
+                            .collect::<Vec<_>>()
+                    );
                     library.routes.extend(saved);
                     Ok(result)
                 })?
@@ -183,28 +207,20 @@ impl Runtime {
                 let route = route(&library, &id)?;
                 return write_output(
                     file.output.as_deref(),
-                    &gpx::export(&route.name, &route.plan),
+                    &gpx::export(&route.name, &self.load_route(route)?),
                 );
             }
             RouteCommand::Import { name, file } => {
                 valid_name(&name)?;
-                let saved = SavedRoute {
-                    id: crate::scode::new_id()?,
-                    name,
-                    plan: validate_route(read_json(&file.input)?)?,
-                };
-                self.edit_library(|library| {
-                    let result = json!(saved);
-                    library.routes.push(saved);
-                    Ok(result)
-                })?
+                self.save_route(name, validate_route(read_large_json(&file.input)?)?)?
             }
+
             RouteCommand::Export { id, file } => {
                 let library = self.library()?;
                 let saved = route(&library, &id)?;
                 return write_output(
                     file.output.as_deref(),
-                    &(serde_json::to_string_pretty(&saved.plan).unwrap() + "\n"),
+                    &(serde_json::to_string_pretty(&self.load_route(saved)?).unwrap() + "\n"),
                 );
             }
             RouteCommand::Rename { id, name } => {
@@ -226,19 +242,97 @@ impl Runtime {
                 Ok(json!({"removed":id}))
             })?,
             RouteCommand::Start { input, id, scope } => {
-                let plan = if let Some(input) = input {
-                    validate_route(read_json(&input)?)?
+                let (file_id, temporary) = if let Some(input) = input {
+                    (
+                        crate::route_store::save(
+                            &self.directory,
+                            &validate_route(read_large_json(&input)?)?,
+                        )?,
+                        true,
+                    )
                 } else {
-                    route(&self.library()?, &id.ok_or("route ID or input required")?)?.plan.clone()
+                    let library = self.library()?;
+                    let saved = route(&library, &id.ok_or("route ID or input required")?)?;
+                    if let Some(file_id) = &saved.file_id {
+                        (file_id.clone(), false)
+                    } else {
+                        (crate::route_store::save(&self.directory, &self.load_route(saved)?)?, true)
+                    }
                 };
-                self.request(json!({"op":"start_route","route":plan,"scope":self.scope(scope)?}))?
+                let result = self.scope(scope).and_then(|scope| {
+                    self.request(json!({"op":"start_route_ref","id":file_id,"scope":scope}))
+                });
+                if temporary {
+                    crate::route_store::remove(&self.directory, &file_id)?;
+                }
+                result?
             }
+            RouteCommand::Page { id, offset, limit } => {
+                if let Some(id) = id {
+                    let library = self.library()?;
+                    let plan = self.load_route(route(&library, &id)?)?;
+                    json!(crate::route_store::page(&plan.points, &plan.breaks, offset, limit)?)
+                } else {
+                    self.reply(json!({"op":"route_page","offset":offset,"limit":limit}))?["page"]
+                        .clone()
+                }
+            }
+            RouteCommand::Upload { command } => match command {
+                UploadCommand::Begin { point_count, speed, repeat_count, repeat_delay } => {
+                    json!({"upload_id":crate::route_store::begin(&self.directory, crate::route_store::Upload {point_count,speed,repeat_count,repeat_delay})?,"chunk_size":crate::route_store::PAGE_SIZE})
+                }
+                UploadCommand::Append { id, file } => {
+                    let _lock = lock(&self.directory, "route-upload.lock")?;
+                    let page = serde_json::from_value(read_json(&file.input)?)
+                        .map_err(|e| format!("invalid chunk: {e}"))?;
+                    crate::route_store::append(&self.directory, &id, page)?;
+                    json!({"upload_id":id,"accepted":true})
+                }
+                UploadCommand::Finish { id, name } => {
+                    let _lock = lock(&self.directory, "route-upload.lock")?;
+                    let result =
+                        self.save_route(name, crate::route_store::finish(&self.directory, &id)?)?;
+                    crate::route_store::abort(&self.directory, &id)?;
+                    result
+                }
+                UploadCommand::Abort { id } => {
+                    let _lock = lock(&self.directory, "route-upload.lock")?;
+                    crate::route_store::abort(&self.directory, &id)?;
+                    json!({"aborted":id})
+                }
+            },
             RouteCommand::Pause => self.request(json!({"op":"pause_route"}))?,
             RouteCommand::Resume => self.request(json!({"op":"resume_route"}))?,
             RouteCommand::Stop => self.request(json!({"op":"stop"}))?,
             RouteCommand::Status => self.status()?["route"].clone(),
         };
         self.emit(&value)
+    }
+    pub(super) fn save_route(&self, name: String, plan: Route) -> Result<Value> {
+        valid_name(&name)?;
+        Playback::new(plan.clone(), Instant::now())?;
+        self.edit_library(|library| {
+            let saved = SavedRoute {
+                id: crate::scode::new_id()?,
+                name,
+                point_count: plan.points.len(),
+                plan: Some(plan),
+                file_id: None,
+            };
+            let result = json!({"id":saved.id,"name":saved.name,"point_count":saved.point_count});
+            library.routes.push(saved);
+            Ok(result)
+        })
+    }
+    fn load_route(&self, saved: &SavedRoute) -> Result<Route> {
+        if let Some(plan) = &saved.plan {
+            Ok(plan.clone())
+        } else {
+            crate::route_store::load(
+                &self.directory,
+                saved.file_id.as_deref().ok_or("missing route file ID")?,
+            )
+        }
     }
     fn library(&self) -> Result<Library> {
         let path = self.directory.join("library.json");
@@ -247,23 +341,50 @@ impl Runtime {
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Library::default()),
             Err(e) => return Err(format!("cannot read library: {e}")),
         };
-        let library: Library =
-            serde_json::from_reader(file.take(crate::scode::MAX_SIZE as u64 + 1))
-                .map_err(|e| format!("invalid library: {e}"))?;
+        let library: Library = serde_json::from_reader(
+            std::io::BufReader::new(file).take(crate::scode::MAX_SIZE as u64 + 1),
+        )
+        .map_err(|e| format!("invalid library: {e}"))?;
         validate(&library)?;
         Ok(library)
     }
     fn edit_library(&self, edit: impl FnOnce(&mut Library) -> Result<Value>) -> Result<Value> {
         let _lock = lock(&self.directory, "library.lock")?;
         let mut library = self.library()?;
+        let old_files: Vec<_> = library.routes.iter().filter_map(|r| r.file_id.clone()).collect();
         let result = edit(&mut library)?;
         validate(&library)?;
-        let bytes = serde_json::to_vec(&library).map_err(|e| e.to_string())?;
-        if bytes.len() > crate::scode::MAX_SIZE {
-            return Err("library exceeds 2 MiB; remove or export some entries".into());
+        let mut created = Vec::new();
+        let publish = (|| -> Result<()> {
+            for route in &mut library.routes {
+                if let Some(plan) = route.plan.take() {
+                    let id = crate::route_store::save(&self.directory, &plan)?;
+                    route.point_count = plan.points.len();
+                    created.push(id.clone());
+                    route.file_id = Some(id);
+                }
+            }
+            let bytes = serde_json::to_vec(&library).map_err(|e| e.to_string())?;
+            if bytes.len() > crate::scode::MAX_SIZE {
+                return Err("library exceeds 2 MiB; remove or export some entries".into());
+            }
+            crate::storage::atomic_save(&self.directory.join("library.json"), &bytes)
+                .map_err(|e| format!("cannot save library: {e}"))?;
+            Ok(())
+        })();
+        if let Err(error) = publish {
+            for id in created {
+                let _ = crate::route_store::remove(&self.directory, &id);
+            }
+            return Err(error);
         }
-        crate::storage::atomic_save(&self.directory.join("library.json"), &bytes)
-            .map_err(|e| format!("cannot save library: {e}"))?;
+        for id in old_files {
+            if !library.routes.iter().any(|r| r.file_id.as_ref() == Some(&id)) {
+                if let Err(error) = crate::route_store::remove(&self.directory, &id) {
+                    eprintln!("route cleanup: {error}");
+                }
+            }
+        }
         Ok(result)
     }
 }
@@ -301,7 +422,18 @@ fn validate(library: &Library) -> Result<()> {
             return Err("invalid or duplicate route ID".into());
         }
         valid_name(&route.name)?;
-        Playback::new(route.plan.clone(), Instant::now())?;
+        match (&route.plan, &route.file_id) {
+            (Some(plan), None) => {
+                Playback::new(plan.clone(), Instant::now())?;
+            }
+            (None, Some(id)) => {
+                crate::route_store::valid_id(id)?;
+                if !(2..=crate::route::MAX_POINTS).contains(&route.point_count) {
+                    return Err("invalid saved route point count".into());
+                }
+            }
+            _ => return Err("saved route must have either an inline plan or a file ID".into()),
+        }
     }
     Ok(())
 }

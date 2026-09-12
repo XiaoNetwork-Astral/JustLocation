@@ -214,7 +214,13 @@ fn recording_collects_points_and_hands_them_over_for_replay() {
     let again = control.handle(r#"{"version":1,"op":"record_take"}"#);
     assert!(!again.ok);
     assert!(again.error.unwrap().contains("no recorded route"));
-    let route = Route { points: track.points, speed: 5.0, repeat_count: 1, repeat_delay: 0.0 };
+    let route = Route {
+        points: track.points,
+        speed: 5.0,
+        repeat_count: 1,
+        repeat_delay: 0.0,
+        breaks: vec![],
+    };
     assert!(Playback::new(route, Instant::now()).is_ok());
 }
 
@@ -362,7 +368,7 @@ fn invalid_repeat_settings_leave_the_current_route_running() {
         let response = control.handle_at(&request.to_string(), now);
         assert!(!response.ok);
         assert!(response.state.requested_active);
-        assert_eq!(response.state.route.unwrap().plan.repeat_count, 1);
+        assert_eq!(response.state.route.unwrap().plan.as_ref().unwrap().repeat_count, 1);
     }
 }
 

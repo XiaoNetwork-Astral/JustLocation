@@ -14,7 +14,7 @@ internal object RootControl {
             when (error) {
                 "start location simulation first" -> "start the location simulation first"
                 "stop the route before using the joystick" -> "stop the route playback first"
-                else -> "move failed; check the module state"
+                else -> error.ifEmpty { "operation failed; check the module state" }
             }
         }
     }

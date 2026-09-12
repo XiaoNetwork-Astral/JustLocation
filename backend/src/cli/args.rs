@@ -267,7 +267,21 @@ pub enum PlaceCommand {
 #[derive(Subcommand)]
 pub enum RouteCommand {
     List,
-    /// Import every GPX route/track segment as a separate saved route.
+    /// Read at most 128 points from a saved route, or from current playback when --id is omitted.
+    Page {
+        #[arg(long)]
+        id: Option<String>,
+        #[arg(long, default_value_t = 0)]
+        offset: usize,
+        #[arg(long, default_value_t = 128)]
+        limit: usize,
+    },
+    /// Transfer routes in retryable chunks, without large command lines or control frames.
+    Upload {
+        #[command(subcommand)]
+        command: UploadCommand,
+    },
+    /// Import GPX routes and tracks; preserve track segments and all source points.
     ImportGpx {
         #[command(flatten)]
         file: FileInput,
@@ -310,11 +324,60 @@ pub enum RouteCommand {
     Status,
 }
 #[derive(Subcommand)]
+pub enum UploadCommand {
+    Begin {
+        #[arg(long)]
+        point_count: usize,
+        #[arg(long, default_value_t = 1.4)]
+        speed: f64,
+        #[arg(long, default_value_t = 1)]
+        repeat_count: u32,
+        #[arg(long, default_value_t = 0.0)]
+        repeat_delay: f64,
+    },
+    /// Supply a page object with absolute offset, total, next, points and breaks.
+    Append {
+        id: String,
+        #[command(flatten)]
+        file: FileInput,
+    },
+    Finish {
+        id: String,
+        name: String,
+    },
+    Abort {
+        id: String,
+    },
+}
+#[derive(Subcommand)]
 pub enum RecordCommand {
     /// Start Android GPS capture; --manual starts only the backend recorder.
     Start {
         #[arg(long)]
         manual: bool,
+    },
+    /// Pause capture and retain the track. Resume starts a separate segment.
+    Pause {
+        #[arg(long)]
+        manual: bool,
+    },
+    /// Continue a paused recording, including one recovered after a daemon restart.
+    Resume {
+        #[arg(long)]
+        manual: bool,
+    },
+    /// Save the completed recording in the route library, then acknowledge it.
+    Save {
+        name: String,
+        #[arg(long, default_value_t = 1.4)]
+        speed: f64,
+    },
+    /// Read a bounded page from the current or completed recording.
+    Page {
+        #[arg(long, default_value_t = 0)]
+        offset: usize,
+        #[arg(long, default_value_t = 128)]
+        limit: usize,
     },
     Point {
         #[command(flatten)]
@@ -330,6 +393,8 @@ pub enum RecordCommand {
     Export {
         #[command(flatten)]
         file: FileOutput,
+        #[arg(long)]
+        gpx: bool,
     },
     /// Clear the last recorded result after exporting it.
     Take,

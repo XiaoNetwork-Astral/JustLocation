@@ -43,7 +43,7 @@ export function RoutePanel({
   onCommand: (command: Command) => Promise<void>;
   onScope: () => void;
 }) {
-  const [draft, setDraft] = useState(() => readDraft(state?.route?.plan));
+  const [draft, setDraft] = useState(() => readDraft(state?.route?.plan ?? undefined));
   const [error, setError] = useState('');
   const [imports, setImports] = useState<ImportedRoute[]>([]);
   const [selectedImport, setSelectedImport] = useState(0);
@@ -59,7 +59,7 @@ export function RoutePanel({
   const locked = busy || !!state?.requested_active;
   const route = state?.route;
   useEffect(() => {
-    if (route) setDraft(readDraft(route.plan));
+    if (route?.plan) setDraft(readDraft(route.plan));
   }, [!!route]);
   function save(next: RouteDraft) {
     setDraft(next);
@@ -179,9 +179,9 @@ export function RoutePanel({
             <>
               <progress aria-label="路线进度" value={route.distance} max={route.total_distance} />
               <p>
-                {(route.plan.repeat_count ?? 1) > 1 && (
+                {(route.plan?.repeat_count ?? 1) > 1 && (
                   <>
-                    第 {route.lap ?? 1} / {route.plan.repeat_count} 次 ·{' '}
+                    第 {route.lap ?? 1} / {route.plan?.repeat_count} 次 ·{' '}
                   </>
                 )}
                 {Math.round(route.distance)} / {Math.round(route.total_distance)} m

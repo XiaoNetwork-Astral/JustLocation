@@ -3,20 +3,29 @@
 //! further samples are rejected and the collected track remains available to save.
 
 use crate::Position;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Match the playback route's point limit.
-pub const MAX_POINTS: usize = 128;
+pub const MAX_POINTS: usize = crate::route::MAX_POINTS;
 /// Minimum distance between accepted points, in meters.
 pub const DEFAULT_MIN_DISTANCE: f64 = 0.5;
 const EARTH_RADIUS: f64 = 6_371_008.8;
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Recording {
     points: Vec<Position>,
     /// Accumulated recording duration.
     duration: f64,
     full: bool,
+    pub id: String,
+    pub paused: bool,
+    pub breaks: Vec<usize>,
+    #[serde(default)]
+    origin: Option<f64>,
+    #[serde(default)]
+    base: f64,
+    #[serde(default)]
+    next_segment: bool,
 }
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -32,7 +41,7 @@ pub struct RecordState {
 
 impl Recording {
     pub fn new() -> Self {
-        Self::default()
+        Self { origin: Some(0.0), ..Self::default() }
     }
 
     pub fn is_full(&self) -> bool {
@@ -50,6 +59,9 @@ impl Recording {
     /// Add a real position and report whether it was accepted.
     /// The caller supplies monotonic seconds since recording began.
     pub fn add(&mut self, position: Position, seconds: f64) -> Result<bool, &'static str> {
+        if self.paused {
+            return Err("recording is paused; resume before adding points");
+        }
         if self.full {
             return Ok(false);
         }
@@ -58,14 +70,19 @@ impl Recording {
         }
         position.validate()?;
         // A timestamp regression contributes zero elapsed time.
-        self.duration = self.duration.max(seconds);
+        let origin = *self.origin.get_or_insert(seconds);
+        self.duration = self.duration.max(self.base + (seconds - origin).max(0.0));
         if let Some(previous) = self.points.last() {
             let moved = distance(previous, &position);
             // Reject stationary samples regardless of the time between callbacks.
-            if moved < DEFAULT_MIN_DISTANCE {
+            if !self.next_segment && moved < DEFAULT_MIN_DISTANCE {
                 return Ok(false);
             }
         }
+        if self.next_segment && !self.points.is_empty() {
+            self.breaks.push(self.points.len());
+        }
+        self.next_segment = false;
         self.points.push(position);
         if self.points.len() >= MAX_POINTS {
             self.full = true;
@@ -73,6 +90,15 @@ impl Recording {
         Ok(true)
     }
 
+    pub fn pause(&mut self) {
+        self.paused = true;
+    }
+    pub fn resume(&mut self) {
+        self.paused = false;
+        self.base = self.duration;
+        self.origin = None;
+        self.next_segment = true;
+    }
     pub fn state(&self, skipped: u64) -> RecordState {
         RecordState {
             points: self.points.clone(),
@@ -180,6 +206,7 @@ mod tests {
             speed: 5.0,
             repeat_count: 1,
             repeat_delay: 0.0,
+            breaks: vec![],
         };
         assert!(crate::route::Playback::new(route, std::time::Instant::now()).is_ok());
     }

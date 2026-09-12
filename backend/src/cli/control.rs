@@ -158,20 +158,35 @@ impl Runtime {
         let request = match command {
             RecordCommand::Start { manual: true } => json!({"op":"record_start"}),
             RecordCommand::Stop { manual: true } => json!({"op":"record_stop"}),
+            RecordCommand::Pause { manual: true } => json!({"op":"record_pause"}),
+            RecordCommand::Resume { manual: true } => json!({"op":"record_resume"}),
+            RecordCommand::Pause { manual: false } => {
+                let report = platform::record("pause")?;
+                return self.wait_recording("pause", &report);
+            }
+            RecordCommand::Resume { manual: false } => {
+                if self.status()?["recording"]["paused"] != true {
+                    return Err("no paused recording; use record start for a new track".into());
+                }
+                let report = platform::record("resume")?;
+                return self.wait_recording("resume", &report);
+            }
             RecordCommand::Start { manual: false } => {
                 let state = self.status()?;
                 if state["requested_active"] == true {
                     return Err("stop simulation before recording".into());
                 }
-                if !state["recording"].is_null() {
-                    return Err("a recording is already active".into());
+                if !state["recording"].is_null() || !state["recorded"].is_null() {
+                    return Err(
+                        "save or discard the existing recording before starting another".into()
+                    );
                 }
-                let report = platform::record(true)?;
-                return self.wait_recording(true, &report);
+                let report = platform::record("start")?;
+                return self.wait_recording("start", &report);
             }
             RecordCommand::Stop { manual: false } => {
-                let report = platform::record(false)?;
-                return self.wait_recording(false, &report);
+                let report = platform::record("stop")?;
+                return self.wait_recording("stop", &report);
             }
             RecordCommand::Point { position, seconds } => {
                 if !seconds.is_finite() || seconds < 0.0 {
@@ -184,17 +199,33 @@ impl Runtime {
                 return self
                     .emit(&json!({"recording":state["recording"],"recorded":state["recorded"]}));
             }
-            RecordCommand::Export { file } => {
+            RecordCommand::Export { file, gpx } => {
+                let (_, route) = self.recorded_route(1.4)?;
+                let text = if gpx {
+                    super::gpx::export("Recorded route", &route)
+                } else {
+                    serde_json::to_string_pretty(&route).unwrap() + "\n"
+                };
+                return write_output(file.output.as_deref(), &text);
+            }
+            RecordCommand::Save { name, speed } => {
+                let (id, route) = self.recorded_route(speed)?;
+                let saved = self.save_route(name, route)?;
+                self.request(json!({"op":"record_take","id":id}))?;
+                return self.emit(&saved);
+            }
+            RecordCommand::Page { offset, limit } => {
                 let state = self.status()?;
-                let points = &state["recorded"]["points"];
-                if points.is_null() {
-                    return Err("no completed recording".into());
-                }
-                let route = json!({"points":points,"speed":1.4,"repeat_count":1,"repeat_delay":0});
-                library::validate_route(route.clone())?;
-                return write_output(
-                    file.output.as_deref(),
-                    &(serde_json::to_string_pretty(&route).unwrap() + "\n"),
+                let track = if state["recorded"].is_null() {
+                    &state["recording"]
+                } else {
+                    &state["recorded"]
+                };
+                let id = track["id"].as_str().ok_or("no recording is available")?;
+                return self.emit(
+                    &self
+                        .reply(json!({"op":"record_page","id":id,"offset":offset,"limit":limit}))?
+                        ["page"],
                 );
             }
             RecordCommand::Take => json!({"op":"record_take"}),
@@ -207,7 +238,36 @@ impl Runtime {
         };
         self.emit(&self.request(request)?)
     }
-    fn wait_recording(&self, active: bool, report: &Path) -> Result<()> {
+    fn recorded_route(&self, speed: f64) -> Result<(String, crate::route::Route)> {
+        let state = self.status()?;
+        let track = &state["recorded"];
+        let id =
+            track["id"].as_str().ok_or("no completed recording; stop capture first")?.to_owned();
+        let count = track["point_count"].as_u64().ok_or("invalid recording summary")? as usize;
+        let mut route = crate::route::Route {
+            points: Vec::with_capacity(count),
+            breaks: vec![],
+            speed,
+            repeat_count: 1,
+            repeat_delay: 0.0,
+        };
+        for offset in (0..count).step_by(crate::route_store::PAGE_SIZE) {
+            let reply = self.reply(json!({"op":"record_page","id":id,"offset":offset,"limit":crate::route_store::PAGE_SIZE}))?;
+            let page: crate::route_store::Page =
+                serde_json::from_value(reply["page"].clone()).map_err(|e| e.to_string())?;
+            if page.total != count
+                || page.offset != offset
+                || page.points.len() != crate::route_store::PAGE_SIZE.min(count - offset)
+            {
+                return Err("recording changed during export".into());
+            }
+            route.points.extend(page.points);
+            route.breaks.extend(page.breaks);
+        }
+        crate::route::Playback::new(route.clone(), Instant::now())?;
+        Ok((id, route))
+    }
+    fn wait_recording(&self, action: &str, report: &Path) -> Result<()> {
         for _ in 0..30 {
             let mut reported = false;
             if let Ok(bytes) = std::fs::read(report) {
@@ -219,7 +279,12 @@ impl Runtime {
                 }
             }
             let state = self.status()?;
-            if reported && !state["recording"].is_null() == active {
+            let active = action != "stop";
+            let paused = action == "pause";
+            if reported
+                && !state["recording"].is_null() == active
+                && (!active || state["recording"]["paused"] == paused)
+            {
                 if !active && state["recorded"].is_null() {
                     return Err("recording stopped without a saved track".into());
                 }

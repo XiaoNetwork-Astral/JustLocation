@@ -210,9 +210,16 @@ try {
     restore(() => request({ op: 'update', position: before.config.position }));
     restore(() => request({ op: 'set_scope', scope: before.config.scope }));
   }
+  restore(() => {
+    for (const route of cli(['--data-dir', temporary, 'route', 'list'])) {
+      run(['--data-dir', temporary, 'route', 'remove', route.id]);
+    }
+  });
   const cleanup = shell(
     'su -c ' +
-      quote(`rm -f ${temporary}/library.json ${temporary}/library.lock && rmdir ${temporary}`),
+      quote(
+        `rm -f ${temporary}/library.json ${temporary}/library.lock && rmdir ${temporary}/routes && rmdir ${temporary}`,
+      ),
   );
   assert.equal(cleanup.code, 0, cleanup.err);
   assert.equal(cli(['module', 'status']).enabled_next_boot, true);

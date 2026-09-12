@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod long_route_tests;
 mod storage;
 
 use serde::{Deserialize, Serialize};
@@ -18,7 +20,9 @@ pub mod operators;
 pub mod protocol;
 pub mod realism;
 pub mod record;
+mod record_journal;
 pub mod route;
+pub mod route_store;
 pub mod scode;
 pub mod smoothing;
 pub mod steps;

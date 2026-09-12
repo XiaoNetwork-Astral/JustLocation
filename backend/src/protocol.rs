@@ -5,7 +5,7 @@ use crate::{
     motion::Motion,
     operators::Operators,
     realism::Realism,
-    record::Recording,
+    record_journal::{Book, Event as RecordEvent},
     route::Playback,
     steps::{StepConfig, StepCount},
     telephony::{DetectedSubscription, TelephonyConfig, validate_detected},
@@ -51,9 +51,8 @@ pub struct Control {
     gnss_installed: bool,
     nmea_installed: bool,
     cell_query: Option<CellQuery>,
-    recording: Option<Recording>,
-    recording_skipped: u64,
-    recorded: Option<RecordedTrack>,
+    records: Book,
+    page: Option<crate::route_store::Page>,
     phone_seen_at: Option<Instant>,
     cells_installed: bool,
     cell_callbacks_installed: bool,
@@ -179,6 +178,7 @@ impl Control {
             },
             storage: Some(path.to_owned()),
             step_count,
+            records: Book::open(&path.with_extension("recording.jsonl"))?,
             operators: {
                 let data = path.parent().unwrap_or_else(|| Path::new("."));
                 let mut operators = match properties {
@@ -201,9 +201,19 @@ impl Control {
     }
 
     fn apply(&mut self, line: &str, now: Instant) -> Result<(), String> {
-        let request: Request = serde_json::from_str(line).map_err(|error| error.to_string())?;
+        self.page = None;
+        let mut request: Request = serde_json::from_str(line).map_err(|error| error.to_string())?;
         if request.version != VERSION {
             return Err("unsupported protocol version".into());
+        }
+        if let Command::StartRouteRef { id, scope } = request.command {
+            let directory = self
+                .storage
+                .as_ref()
+                .and_then(|p| p.parent())
+                .ok_or("route files require a persistent service")?;
+            let route = crate::route_store::load(directory, &id)?;
+            request.command = Command::StartRoute { route, scope };
         }
         let mutates_config = matches!(
             request.command,
@@ -221,6 +231,13 @@ impl Control {
         let previous = mutates_config.then(|| self.session.clone());
         let result = match request.command {
             Command::Status => Ok(()),
+            Command::StartRouteRef { .. } => unreachable!(),
+            Command::RoutePage { offset, limit } => {
+                let plan = self.session.route.as_ref().ok_or("no route is running")?.plan();
+                self.page =
+                    Some(crate::route_store::page(&plan.points, &plan.breaks, offset, limit)?);
+                Ok(())
+            }
             Command::SetScope { scope } => {
                 self.session.engine.set_scope(scope).map_err(str::to_owned)
             }
@@ -311,45 +328,45 @@ impl Control {
                 Ok(())
             }
             Command::RecordStart => {
-                // Recording simulated callbacks would feed the session's own output back into a route.
                 if self.session.engine.is_running() {
                     return Err("stop the simulation before recording a route".into());
                 }
-                self.recording = Some(Recording::new());
-                self.recording_skipped = 0;
-                self.recorded = None;
-                Ok(())
+                self.record_event(RecordEvent::Start { id: crate::scode::new_id()? })
             }
             Command::RecordPoint { position, seconds } => {
-                let recording =
-                    self.recording.as_mut().ok_or("no route recording is in progress")?;
-                if !recording.add(position, seconds).map_err(str::to_owned)? {
-                    self.recording_skipped += 1;
-                }
-                Ok(())
+                self.record_event(RecordEvent::Point { position, seconds })
             }
+            Command::RecordPause => self.record_event(RecordEvent::Pause),
+            Command::RecordResume => self.record_event(RecordEvent::Resume),
             Command::RecordStop => {
-                let recording = self.recording.take().ok_or("no route recording is in progress")?;
-                if recording.points().is_empty() {
-                    self.recorded = None;
-                    return Err("nothing was recorded".into());
+                self.record_event(RecordEvent::Stop)?;
+                if self.records.finished.is_none() {
+                    Err("nothing was recorded".into())
+                } else {
+                    Ok(())
                 }
-                self.recorded = Some(RecordedTrack {
-                    points: recording.points().to_vec(),
-                    seconds: recording.seconds(),
-                });
-                Ok(())
             }
-            Command::RecordTake => {
-                if self.recorded.take().is_none() {
-                    return Err("no recorded route is waiting".into());
+            Command::RecordTake { id } => {
+                let finished =
+                    self.records.finished.as_ref().ok_or("no recorded route is waiting")?;
+                if id.as_ref().is_some_and(|id| id != &finished.id) {
+                    return Err("recording changed; refresh status".into());
                 }
-                Ok(())
+                self.record_event(RecordEvent::Discard)
             }
-            Command::RecordDiscard => {
-                self.recording = None;
-                self.recording_skipped = 0;
-                self.recorded = None;
+            Command::RecordDiscard => self.record_event(RecordEvent::Discard),
+            Command::RecordPage { id, offset, limit } => {
+                let track = self
+                    .records
+                    .finished
+                    .as_ref()
+                    .or(self.records.active.as_ref())
+                    .ok_or("no recording is available")?;
+                if id != track.id {
+                    return Err("recording changed; refresh status".into());
+                }
+                self.page =
+                    Some(crate::route_store::page(track.points(), &track.breaks, offset, limit)?);
                 Ok(())
             }
             Command::QueryCells { target, radius_m, limit } => {
@@ -389,7 +406,7 @@ impl Control {
                 Ok(())
             }
             Command::Start { config } => {
-                if self.recording.is_some() {
+                if self.records.active.is_some() {
                     return Err("stop recording before starting the simulation".into());
                 }
                 self.session.engine.start(config).map_err(str::to_owned)?;
@@ -397,6 +414,9 @@ impl Control {
                 Ok(())
             }
             Command::StartRoute { route, scope } => {
+                if self.records.active.is_some() {
+                    return Err("stop recording before starting the simulation".into());
+                }
                 let config = self.session.realism.config;
                 let route = Playback::smoothed(
                     route,
@@ -457,7 +477,9 @@ impl Control {
                 self.session.engine.stop();
                 self.session.route = None;
                 self.session.motion = None;
-                self.recording = None;
+                if self.records.active.as_ref().is_some_and(|r| !r.paused) {
+                    self.record_event(RecordEvent::Pause)?;
+                }
                 Ok(())
             }
             Command::Stop => {
@@ -493,6 +515,10 @@ impl Control {
         .save(path)
     }
 
+    fn record_event(&mut self, event: RecordEvent) -> Result<(), String> {
+        let path = self.storage.as_ref().map(|p| p.with_extension("recording.jsonl"));
+        self.records.execute(path.as_deref(), event)
+    }
     fn response(&self, error: Option<String>) -> Response {
         let now = self.step_updated.unwrap_or_else(Instant::now);
         let mut output = self.session.engine.config().cloned();
@@ -523,6 +549,7 @@ impl Control {
         let cells_synthesized = telephony_output.as_ref().is_some_and(|frame| frame.synthesized);
         Response {
             version: VERSION,
+            page: if error.is_none() { self.page.clone() } else { None },
             ok: error.is_none(),
             cells: if error.is_none() { self.cell_query.clone() } else { None },
             error,
@@ -554,15 +581,28 @@ impl Control {
                 step_hook_ready: self.step_installed
                     && self.step_seen.is_some_and(|time| time.elapsed() < Duration::from_secs(3)),
                 step_events: self.step_events,
-                recording: self.recording.as_ref().map(|recording| RecordProgress {
+                recording: self.records.active.as_ref().map(|recording| RecordProgress {
                     points: recording.points().len(),
+                    id: recording.id.clone(),
+                    paused: recording.paused,
                     seconds: recording.seconds(),
                     full: recording.is_full(),
-                    skipped: self.recording_skipped,
+                    skipped: self.records.skipped,
                 }),
-                recorded: self.recorded.as_ref().map(|track| RecordedTrack {
-                    points: track.points.clone(),
-                    seconds: track.seconds,
+                recorded: self.records.finished.as_ref().map(|track| RecordedTrack {
+                    points: if track.points().len() <= crate::route::INLINE_POINTS {
+                        track.points().to_vec()
+                    } else {
+                        vec![]
+                    },
+                    breaks: if track.points().len() <= crate::route::INLINE_POINTS {
+                        track.breaks.clone()
+                    } else {
+                        vec![]
+                    },
+                    point_count: track.points().len(),
+                    id: track.id.clone(),
+                    seconds: track.seconds(),
                 }),
                 cell_hook_ready: phone_connected
                     && self.cells_installed

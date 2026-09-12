@@ -25,14 +25,25 @@ pub(super) fn parse(text: &str, speed: f64) -> Result<Vec<(String, Route)>> {
             "trk" => {
                 let segments: Vec<_> =
                     element.children().filter(|n| n.has_tag_name("trkseg")).collect();
-                for (i, segment) in segments.iter().enumerate() {
-                    let name = if segments.len() > 1 {
-                        format!("{name} ({})", i + 1)
-                    } else {
-                        name.to_owned()
-                    };
-                    routes.push((name, plan(*segment, "trkpt", speed)?));
+                let mut track = Route {
+                    points: vec![],
+                    breaks: vec![],
+                    speed,
+                    repeat_count: 1,
+                    repeat_delay: 0.0,
+                };
+                for segment in segments {
+                    let points = points(segment, "trkpt")?;
+                    if points.is_empty() {
+                        continue;
+                    }
+                    if !track.points.is_empty() {
+                        track.breaks.push(track.points.len());
+                    }
+                    track.points.extend(points);
                 }
+                Playback::new(track.clone(), std::time::Instant::now())?;
+                routes.push((name.to_owned(), track));
             }
             _ => {}
         }
@@ -43,6 +54,17 @@ pub(super) fn parse(text: &str, speed: f64) -> Result<Vec<(String, Route)>> {
     Ok(routes)
 }
 fn plan(element: roxmltree::Node<'_, '_>, tag: &str, speed: f64) -> Result<Route> {
+    let route = Route {
+        points: points(element, tag)?,
+        breaks: vec![],
+        speed,
+        repeat_count: 1,
+        repeat_delay: 0.0,
+    };
+    Playback::new(route.clone(), std::time::Instant::now())?;
+    Ok(route)
+}
+fn points(element: roxmltree::Node<'_, '_>, tag: &str) -> Result<Vec<Position>> {
     let mut points: Vec<Position> = Vec::new();
     for node in element.children().filter(|n| n.has_tag_name(tag)) {
         let number = |value: Option<&str>| {
@@ -58,29 +80,29 @@ fn plan(element: roxmltree::Node<'_, '_>, tag: &str, speed: f64) -> Result<Route
             node.children().find(|n| n.has_tag_name("ele")).and_then(|n| n.text()).or(Some("0")),
         )?;
         point.validate()?;
-        if points
-            .last()
-            .is_none_or(|p| p.latitude != point.latitude || p.longitude != point.longitude)
-        {
-            points.push(point);
+        points.push(point);
+        if points.len() > crate::route::MAX_POINTS {
+            return Err("a route needs at most 100000 points".into());
         }
     }
-    let route = Route { points, speed, repeat_count: 1, repeat_delay: 0.0 };
-    Playback::new(route.clone(), std::time::Instant::now())?;
-    Ok(route)
+    Ok(points)
 }
+
 pub(super) fn export(name: &str, plan: &Route) -> String {
     let name = name.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
     let mut text = format!(
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<gpx version=\"1.1\" creator=\"JustLocation\" xmlns=\"http://www.topografix.com/GPX/1/1\"><rte><name>{name}</name>\n"
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<gpx version=\"1.1\" creator=\"JustLocation\" xmlns=\"http://www.topografix.com/GPX/1/1\"><trk><name>{name}</name><trkseg>\n"
     );
-    for p in &plan.points {
+    for (i, p) in plan.points.iter().enumerate() {
+        if plan.breaks.binary_search(&i).is_ok() {
+            text.push_str("</trkseg><trkseg>\n");
+        }
         text.push_str(&format!(
-            "<rtept lat=\"{}\" lon=\"{}\"><ele>{}</ele></rtept>\n",
+            "<trkpt lat=\"{}\" lon=\"{}\"><ele>{}</ele></trkpt>\n",
             p.latitude, p.longitude, p.altitude
         ));
     }
-    text.push_str("</rte></gpx>\n");
+    text.push_str("</trkseg></trk></gpx>\n");
     text
 }
 #[cfg(test)]
@@ -90,10 +112,13 @@ mod tests {
     fn namespaces_segments_precision_and_duplicate_points() {
         let text = r#"<g:gpx xmlns:g="http://www.topografix.com/GPX/1/1"><g:trk><g:name>A &amp; B</g:name><g:trkseg><g:trkpt lat="31.123456789" lon="121"/><g:trkpt lat="31.123456789" lon="121"/><g:trkpt lat="31.2" lon="121"><g:ele>-5</g:ele></g:trkpt></g:trkseg><g:trkseg><g:trkpt lat="32" lon="122"/><g:trkpt lat="32.1" lon="122"/></g:trkseg></g:trk></g:gpx>"#;
         let routes = parse(text, 2.0).unwrap();
-        assert_eq!(routes.len(), 2);
-        assert_eq!(routes[0].0, "A & B (1)");
+        assert_eq!(routes.len(), 1);
+        assert_eq!(routes[0].1.points.len(), 5);
+        assert_eq!(routes[0].1.breaks, vec![3]);
+        assert_eq!(routes[0].0, "A & B");
         let roundtrip = parse(&export(&routes[0].0, &routes[0].1), 2.0).unwrap();
         assert_eq!(roundtrip[0].1.points, routes[0].1.points);
-        assert!(parse("<gpx><rte><rtept lat='NaN' lon='0'/></rte></gpx>", 2.0).is_err());
+        assert_eq!(roundtrip[0].1.breaks, routes[0].1.breaks);
+        assert!(parse("<gpx><rte><trkpt lat='NaN' lon='0'/></rte></gpx>", 2.0).is_err());
     }
 }

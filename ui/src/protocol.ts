@@ -23,12 +23,14 @@ export interface Config {
 }
 export interface RoutePlan {
   points: Position[];
+  breaks?: number[];
   speed: number;
   repeat_count?: number;
   repeat_delay?: number;
 }
 export interface RouteState {
-  plan: RoutePlan;
+  plan: RoutePlan | null;
+  point_count?: number;
   distance: number;
   total_distance: number;
   paused: boolean;

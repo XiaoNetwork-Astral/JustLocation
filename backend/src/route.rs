@@ -1,6 +1,9 @@
 use crate::Position;
 use serde::{Deserialize, Serialize};
-use std::time::Instant;
+use std::{sync::Arc, time::Instant};
+
+pub const MAX_POINTS: usize = 100_000;
+pub const INLINE_POINTS: usize = 128;
 
 const EARTH_RADIUS: f64 = 6_371_008.8;
 
@@ -8,6 +11,9 @@ const EARTH_RADIUS: f64 = 6_371_008.8;
 #[serde(deny_unknown_fields)]
 pub struct Route {
     pub points: Vec<Position>,
+    /// Indices of segment starts; no movement is interpolated across a break.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub breaks: Vec<usize>,
     /// Metres per second.
     pub speed: f64,
     /// Total number of plays, including the first.
@@ -24,7 +30,8 @@ fn once() -> u32 {
 
 #[derive(Serialize)]
 pub struct RouteState {
-    pub plan: Route,
+    pub plan: Option<Route>,
+    pub point_count: usize,
     pub distance: f64,
     pub total_distance: f64,
     pub paused: bool,
@@ -35,15 +42,27 @@ pub struct RouteState {
 
 #[derive(Clone)]
 pub struct Playback {
-    plan: Route,
-    path: Vec<Position>,
-    lengths: Vec<f64>,
+    plan: Arc<Route>,
+    path: Arc<Vec<Position>>,
+    lengths: Arc<Vec<f64>>,
+    cumulative: Arc<Vec<f64>>,
     total: f64,
     elapsed: f64,
     paused: bool,
     updated: Instant,
     factor: f64,
     moving_seconds: f64,
+}
+
+fn cumulative(lengths: &[f64]) -> Vec<f64> {
+    let mut sum = 0.0;
+    lengths
+        .iter()
+        .map(|length| {
+            sum += length;
+            sum
+        })
+        .collect()
 }
 
 fn arc(a: &Position, b: &Position) -> f64 {
@@ -85,8 +104,8 @@ impl Playback {
     }
 
     pub fn new(plan: Route, now: Instant) -> Result<Self, &'static str> {
-        if !(2..=128).contains(&plan.points.len()) {
-            return Err("a route needs 2 to 128 points");
+        if !(2..=MAX_POINTS).contains(&plan.points.len()) {
+            return Err("a route needs 2 to 100000 points");
         }
         if !plan.speed.is_finite() || plan.speed <= 0.0 || plan.speed > 1000.0 {
             return Err("route speed must be greater than 0 and at most 1000 m/s");
@@ -100,19 +119,36 @@ impl Playback {
         for point in &plan.points {
             point.validate()?;
         }
-        let lengths: Vec<_> =
-            plan.points.windows(2).map(|pair| arc(&pair[0], &pair[1]) * EARTH_RADIUS).collect();
-        if lengths
-            .iter()
-            .any(|length| *length < 0.01 || *length > EARTH_RADIUS * (std::f64::consts::PI - 1e-6))
+        if plan.breaks.iter().any(|&i| i == 0 || i >= plan.points.len())
+            || plan.breaks.windows(2).any(|p| p[0] >= p[1])
         {
-            return Err("adjacent route points must be distinct and not antipodal");
+            return Err("route breaks must be increasing segment-start indices inside the route");
+        }
+        let lengths: Vec<_> = plan
+            .points
+            .windows(2)
+            .enumerate()
+            .map(|(i, pair)| {
+                if plan.breaks.binary_search(&(i + 1)).is_ok() {
+                    0.0
+                } else {
+                    distance(&pair[0], &pair[1])
+                }
+            })
+            .collect();
+        if lengths.iter().any(|length| *length > EARTH_RADIUS * (std::f64::consts::PI - 1e-6)) {
+            return Err("adjacent route points must not be antipodal");
+        }
+        let cumulative = cumulative(&lengths);
+        if *cumulative.last().unwrap() <= 0.0 {
+            return Err("route must contain at least one moving segment");
         }
         Ok(Self {
             total: lengths.iter().sum(),
-            path: plan.points.clone(),
-            plan,
-            lengths,
+            path: Arc::new(plan.points.clone()),
+            plan: Arc::new(plan),
+            lengths: Arc::new(lengths),
+            cumulative: Arc::new(cumulative),
             elapsed: 0.0,
             paused: false,
             updated: now,
@@ -124,10 +160,22 @@ impl Playback {
     pub fn smoothed(plan: Route, now: Instant, radius: f64) -> Result<Self, &'static str> {
         let mut playback = Self::new(plan, now)?;
         if radius > 0.0 {
-            playback.path = crate::smoothing::corners(&playback.plan.points, radius);
-            playback.lengths =
-                playback.path.windows(2).map(|pair| distance(&pair[0], &pair[1])).collect();
-            playback.total = playback.lengths.iter().sum();
+            let mut path = Vec::new();
+            let mut lengths = Vec::new();
+            let mut start = 0;
+            for end in playback.plan.breaks.iter().copied().chain([playback.plan.points.len()]) {
+                let segment = crate::smoothing::corners(&playback.plan.points[start..end], radius);
+                if !path.is_empty() {
+                    lengths.push(0.0);
+                }
+                lengths.extend(segment.windows(2).map(|p| distance(&p[0], &p[1])));
+                path.extend(segment);
+                start = end;
+            }
+            playback.total = lengths.iter().sum();
+            playback.cumulative = Arc::new(cumulative(&lengths));
+            playback.lengths = Arc::new(lengths);
+            playback.path = Arc::new(path);
         }
         Ok(playback)
     }
@@ -212,10 +260,15 @@ impl Playback {
         Ok(())
     }
 
+    pub fn plan(&self) -> &Route {
+        &self.plan
+    }
+
     pub fn state(&self) -> RouteState {
         let (lap, distance, waiting_seconds) = self.progress();
         RouteState {
-            plan: self.plan.clone(),
+            plan: (self.plan.points.len() <= INLINE_POINTS).then(|| (*self.plan).clone()),
+            point_count: self.plan.points.len(),
             distance,
             total_distance: self.total,
             paused: self.paused,
@@ -254,12 +307,8 @@ impl Playback {
             end.speed = 0.0;
             return end;
         }
-        let mut remaining = distance;
-        let mut index = 0;
-        while index < self.lengths.len() - 1 && remaining >= self.lengths[index] {
-            remaining -= self.lengths[index];
-            index += 1;
-        }
+        let index = self.cumulative.partition_point(|&end| end <= distance);
+        let remaining = distance - if index == 0 { 0.0 } else { self.cumulative[index - 1] };
         let a = &self.path[index];
         let b = &self.path[index + 1];
         let fraction = remaining / self.lengths[index];
@@ -299,6 +348,7 @@ mod tests {
                 speed: 10.0,
                 repeat_count: 2,
                 repeat_delay: 5.0,
+                breaks: vec![],
             },
             now,
         )
@@ -327,6 +377,7 @@ mod tests {
                 speed: 10.0,
                 repeat_count: 1,
                 repeat_delay: 0.0,
+                breaks: vec![],
             },
             now,
         )
@@ -348,6 +399,7 @@ mod tests {
                 speed: 10.0,
                 repeat_count: 1,
                 repeat_delay: 0.0,
+                breaks: vec![],
             },
             now,
         )

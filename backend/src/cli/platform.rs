@@ -95,7 +95,7 @@ pub(super) fn joystick(command: JoystickCommand) -> Result<Value> {
     };
     Ok(json!({"requested":true,"android":result.trim()}))
 }
-pub(super) fn record(start: bool) -> Result<PathBuf> {
+pub(super) fn record(action: &str) -> Result<PathBuf> {
     let user = am(&["get-current-user"])?;
     let user = user
         .trim()
@@ -108,7 +108,7 @@ pub(super) fn record(start: bool) -> Result<PathBuf> {
         Err(e) if e.kind() == io::ErrorKind::NotFound => {}
         Err(e) => return Err(e.to_string()),
     }
-    if start {
+    if matches!(action, "start" | "resume") {
         android()?;
         // A root CLI recording request explicitly enables the companion's location access.
         for permission in
@@ -125,14 +125,29 @@ pub(super) fn record(start: bool) -> Result<PathBuf> {
                 ));
             }
         }
-        am(&["start", "-W", "-n", &format!("{PACKAGE}/.CallActivity"), "--ez", "record", "true"])?;
+        am(&[
+            "start",
+            "-W",
+            "-n",
+            &format!("{PACKAGE}/.CallActivity"),
+            "--ez",
+            "record",
+            "true",
+            "--es",
+            "record_action",
+            action,
+        ])?;
     } else {
         am(&[
             "startservice",
             "-n",
             &format!("{PACKAGE}/.RouteRecordService"),
             "-a",
-            "me.idk.justlocation.joystick.RECORD_STOP",
+            if action == "pause" {
+                "me.idk.justlocation.joystick.RECORD_PAUSE"
+            } else {
+                "me.idk.justlocation.joystick.RECORD_STOP"
+            },
         ])?;
     }
     Ok(report)
