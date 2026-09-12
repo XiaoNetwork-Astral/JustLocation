@@ -6,10 +6,10 @@
 
 ## 构建
 
-- Node.js
+- Node.js 22.12+
 - Rust 1.89+（通过 rustup 安装）
 - JDK 21
-- Android SDK — 设置 `ANDROID_HOME`，或在 `tool/gradle/local.properties` 中配置 `sdk.dir`
+- Android SDK（Platform 36）— 设置 `ANDROID_HOME`，或在 `tool/gradle/local.properties` 中配置 `sdk.dir`
 
 工具链版本：[project-config.json](project-config.json)。
 
@@ -38,3 +38,5 @@ node build.mjs help         # 全部构建与测试命令
 - [LSPlant](https://github.com/LSPosed/LSPlant)
 - [ShadowHook](https://github.com/bytedance/android-inline-hook)
 - [KernelSU JavaScript SDK](https://github.com/tiann/KernelSU/tree/main/js)
+- [coordtransform](https://github.com/wandergis/coordtransform)
+- [leaflet.ChineseCRS](https://github.com/gumblex/leaflet.ChineseCRS)

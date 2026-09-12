@@ -8,5 +8,9 @@ export function testDevice(serial) {
   backend();
   backend(true);
   probe();
-  run(process.execPath, [join(root, 'integration/device/run.mjs'), join(sdk(), 'platform-tools', `adb${exe}`), serial]);
+  run(process.execPath, [
+    join(root, 'integration/device/run.mjs'),
+    join(sdk(), 'platform-tools', `adb${exe}`),
+    serial,
+  ]);
 }

@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, Crosshair, MapPin, Plus, RotateCcw, Search, Undo2 } from 'lucide-react';
 import * as L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { parsePosition, convertCoordinates } from './coordinates';
 import type { Position } from './protocol';
+import { mapCrs, mapTiles } from './mapProjection';
 
 import {
   findMapProvider,
@@ -60,27 +61,6 @@ const clampLatitude = (latitude: number) => Math.max(-85, Math.min(85, latitude)
 /* Round map coordinates to seven decimal places. */
 const tidy = (value: number) => Math.round(value * 1e7) / 1e7;
 
-function baiduProject(latitude: number, longitude: number): L.Point {
-  const scale = 2 ** 18;
-  return L.point(longitude * scale, latitude * scale);
-}
-function baiduUnproject(point: L.Point): L.LatLng {
-  const scale = 2 ** 18;
-  return L.latLng(point.y / scale, point.x / scale);
-}
-
-/* Recreate the map when its projection changes. */
-function buildCrs(provider: MapProvider): L.CRS {
-  if (provider.crs !== 'bd09') return L.CRS.EPSG3857;
-  // This provider requires a Leaflet projection extension.
-  const Proj = (L as unknown as { Proj: { CRS: new (code: string, options: unknown) => L.CRS } })
-    .Proj;
-  return new Proj.CRS('BD09', {
-    project: (latlng: L.LatLng) => baiduProject(latlng.lat, latlng.lng),
-    unproject: (point: L.Point) => baiduUnproject(point),
-  });
-}
-
 /* Convert stored WGS84 positions to the tile provider coordinate system. */
 function toProvider(position: Position, provider: MapProvider): Position {
   return provider.coordinateSystem === 'wgs84'
@@ -127,7 +107,7 @@ export function MapPicker({
   const baseRef = useRef(initial || parsePosition('35', '105', '0'));
   baseRef.current = initial || baseRef.current;
   const showPosition = useRef<Position>(initial || parsePosition('35', '105', '0'));
-  const crs = useMemo(() => buildCrs(provider), [provider.id]);
+  const crs = mapCrs(provider);
 
   function applySelected(next: Position) {
     showPosition.current = next;
@@ -165,12 +145,7 @@ export function MapPicker({
     }).setView([clampLatitude(start.latitude), wrapLongitude(start.longitude)], initial ? 16 : 4);
     mapRef.current = map;
     routeLayer.current = L.layerGroup().addTo(map);
-    const tiles = L.tileLayer(tileUrl, {
-      maxZoom: current.maxZoom,
-      subdomains: current.subdomains.length ? current.subdomains : 'abc',
-      attribution: current.attribution,
-      referrerPolicy: 'strict-origin-when-cross-origin',
-    }).addTo(map);
+    const tiles = mapTiles(current, tileUrl).addTo(map);
     tilesRef.current = tiles;
     tiles.on('loading', () => setFailed(false));
     tiles.on('tileerror', () => setFailed(true));
@@ -235,13 +210,13 @@ export function MapPicker({
   }
   function centerOn(position: Position) {
     const native = toProvider(position, provider);
+    mapRef.current?.setView([clampLatitude(native.latitude), wrapLongitude(native.longitude)], 16, {
+      animate: false,
+    });
+    // Preserve explicit WGS84 input after moveend converts the displayed map center back.
     applySelected(position);
-    mapRef.current?.setView([clampLatitude(native.latitude), wrapLongitude(native.longitude)], 16);
   }
 
-  function centerOnWgs84(position: Position) {
-    centerOn(fromProvider(position, provider));
-  }
   async function search() {
     const text = query.trim();
     if (!text) return;
@@ -253,7 +228,7 @@ export function MapPicker({
       // Coordinate input does not need a network request.
       const direct = text.match(/^\s*(-?\d+(?:\.\d+)?)\s*[,，\s]\s*(-?\d+(?:\.\d+)?)\s*$/);
       if (direct) {
-        centerOnWgs84(parsePosition(direct[1], direct[2], String(selected.altitude)));
+        centerOn(parsePosition(direct[1], direct[2], String(selected.altitude)));
         return;
       }
       const response = await fetch(

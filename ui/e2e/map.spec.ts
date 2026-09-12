@@ -78,6 +78,54 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/');
 });
 
+for (const provider of ['amap', 'baidu']) {
+  test(`keeps WGS84 coordinate input stable on the ${provider} map`, async ({ page }) => {
+    const errors: string[] = [];
+    const tileRequests: URL[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.route(
+      /https:\/\/(?:webrd.*\.is\.autonavi\.com|maponline.*\.bdimg\.com)\//,
+      (route) => {
+        tileRequests.push(new URL(route.request().url()));
+        return route.fulfill({
+          contentType: 'image/svg+xml',
+          body: '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"/>',
+        });
+      },
+    );
+    await page.getByRole('button', { name: '添加位置', exact: true }).click();
+    await page.getByLabel('纬度', { exact: true }).fill('39.915');
+    await page.getByLabel('经度', { exact: true }).fill('116.404');
+    await page.getByRole('button', { name: '地图选点', exact: true }).click();
+    await page.getByLabel('地图图源').selectOption(provider);
+    await page.getByLabel('搜索地点').fill('31.2497, 121.4553');
+    await page.getByRole('button', { name: '搜索', exact: true }).click();
+    await expect
+      .poll(async () => {
+        const value = await page.getByLabel('所选坐标').textContent();
+        return value!.split(',').map(Number);
+      })
+      .toEqual([31.2497, 121.4553]);
+    await expect.poll(() => tileRequests.length).toBeGreaterThan(0);
+    if (provider === 'baidu') {
+      expect(tileRequests.some((url) => Number(url.searchParams.get('y')) > 0)).toBe(true);
+      expect(tileRequests.every((url) => Number.isFinite(Number(url.searchParams.get('x'))))).toBe(
+        true,
+      );
+    }
+    await page.getByRole('button', { name: '使用此位置' }).click();
+    expect(Number(await page.getByLabel('纬度', { exact: true }).inputValue())).toBeCloseTo(
+      31.2497,
+      6,
+    );
+    expect(Number(await page.getByLabel('经度', { exact: true }).inputValue())).toBeCloseTo(
+      121.4553,
+      6,
+    );
+    expect(errors).toEqual([]);
+  });
+}
+
 test('selects a map point, returns without losing form fields, and saves WGS84 only once', async ({
   page,
 }) => {

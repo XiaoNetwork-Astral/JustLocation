@@ -16,7 +16,11 @@ assert.equal(run(['shell', 'getprop sys.boot_completed']), '1');
 const remote = run(['shell', 'mktemp -d /data/local/tmp/justlocation-transport.XXXXXX']);
 assert.match(remote, /^\/data\/local\/tmp\/justlocation-transport\.[A-Za-z0-9]{6}$/);
 try {
-  run(['push', fileURLToPath(new URL('../../build/native/justlocation_transport_probe', import.meta.url)), `${remote}/probe`]);
+  run([
+    'push',
+    fileURLToPath(new URL('../../build/native/justlocation_transport_probe', import.meta.url)),
+    `${remote}/probe`,
+  ]);
   run(['shell', `chmod 500 ${remote}/probe`]);
   // Only this native child changes UID / SELinux domain; no policy or real service is changed.
   console.log(run(['shell', `su -c 'timeout 15 ${remote}/probe'`]));

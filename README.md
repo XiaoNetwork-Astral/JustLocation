@@ -6,10 +6,10 @@ A Zygisk module for Android location simulation, with route playback and a float
 
 ## Build
 
-- Node.js
+- Node.js 22.12+
 - Rust 1.89+ with rustup
 - JDK 21
-- Android SDK — set `ANDROID_HOME` or `sdk.dir` in `tool/gradle/local.properties`
+- Android SDK (Platform 36) — set `ANDROID_HOME` or `sdk.dir` in `tool/gradle/local.properties`
 
 Toolchain versions: [project-config.json](project-config.json).
 
@@ -38,3 +38,5 @@ Built with the following projects:
 - [LSPlant](https://github.com/LSPosed/LSPlant)
 - [ShadowHook](https://github.com/bytedance/android-inline-hook)
 - [KernelSU JavaScript SDK](https://github.com/tiann/KernelSU/tree/main/js)
+- [coordtransform](https://github.com/wandergis/coordtransform)
+- [leaflet.ChineseCRS](https://github.com/gumblex/leaflet.ChineseCRS)

@@ -10,7 +10,8 @@ const view = vi.hoisted(() => ({
   center: { lat: 31.2, lng: 121.5 },
 }));
 
-vi.mock('leaflet', () => {
+vi.mock('leaflet', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('leaflet')>();
   const on = vi.fn();
   const map = {
     setView(at: number[], zoom: number) {
@@ -27,17 +28,7 @@ vi.mock('leaflet', () => {
   };
   const layerGroup = { addTo: () => layerGroup, clearLayers: vi.fn() };
   return {
-    CRS: { EPSG3857: { code: 'EPSG:3857' } },
-    Proj: {
-      CRS: class {
-        constructor(
-          public code: string,
-          public options: unknown,
-        ) {}
-      },
-    },
-    point: (x: number, y: number) => ({ x, y }),
-    latLng: (lat: number, lng: number) => ({ lat, lng }),
+    ...actual,
     latLngBounds: (points: number[][]) => points,
     map: () => map,
     layerGroup: () => layerGroup,

@@ -32,10 +32,15 @@ export function run(program, args, cwd = root, extraEnv = {}, capture = false) {
 export function sdk() {
   const properties = join(root, 'tool/gradle/local.properties');
   const localSdk = existsSync(properties)
-    ? readFileSync(properties, 'utf8').match(/^sdk\.dir=(.+)$/m)?.[1].trim().replaceAll('\\\\', '\\').replaceAll('\\:', ':')
+    ? readFileSync(properties, 'utf8')
+        .match(/^sdk\.dir=(.+)$/m)?.[1]
+        .trim()
+        .replaceAll('\\\\', '\\')
+        .replaceAll('\\:', ':')
     : undefined;
   const path = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT || localSdk;
-  if (!path || !existsSync(path)) throw new Error('Set ANDROID_HOME or sdk.dir in tool/gradle/local.properties.');
+  if (!path || !existsSync(path))
+    throw new Error('Set ANDROID_HOME or sdk.dir in tool/gradle/local.properties.');
   return resolve(path);
 }
 
@@ -44,9 +49,18 @@ export function java() {
 }
 
 export function gradle(tasks) {
-  run(java(), ['-classpath', join(root, 'tool/gradle/gradle/wrapper/gradle-wrapper.jar'),
-    'org.gradle.wrapper.GradleWrapperMain', '--console=plain', ...tasks], join(root, 'tool/gradle'),
-  { ANDROID_HOME: sdk() });
+  run(
+    java(),
+    [
+      '-classpath',
+      join(root, 'tool/gradle/gradle/wrapper/gradle-wrapper.jar'),
+      'org.gradle.wrapper.GradleWrapperMain',
+      '--console=plain',
+      ...tasks,
+    ],
+    join(root, 'tool/gradle'),
+    { ANDROID_HOME: sdk() },
+  );
 }
 
 export async function setupCmake() {

@@ -1,5 +1,5 @@
 // Formulae adapted from wandergis/coordtransform (MIT).
-// Copyright (c) 2015 记忆的残骸; see packaging/module/licenses/coordtransform.txt.
+// Copyright (c) 2015 记忆的残骸; see ui/licenses/coordtransform.txt.
 import type { Position } from './protocol';
 
 export type CoordinateSystem = 'wgs84' | 'gcj02' | 'bd09';
