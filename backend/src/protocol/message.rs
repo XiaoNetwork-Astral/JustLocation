@@ -20,6 +20,9 @@ pub(super) struct Request {
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub(super) enum Command {
     Status,
+    SetRealism {
+        config: crate::realism::RealismConfig,
+    },
     Start {
         config: Config,
     },
@@ -147,6 +150,7 @@ pub struct RecordedTrack {
 
 #[derive(Serialize)]
 pub struct State {
+    pub realism: crate::realism::RealismConfig,
     pub requested_active: bool,
     pub config: Option<Config>,
     pub hook_connected: bool,

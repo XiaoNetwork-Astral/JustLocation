@@ -36,11 +36,14 @@ pub struct RouteState {
 #[derive(Clone)]
 pub struct Playback {
     plan: Route,
+    path: Vec<Position>,
     lengths: Vec<f64>,
     total: f64,
     elapsed: f64,
     paused: bool,
     updated: Instant,
+    factor: f64,
+    moving_seconds: f64,
 }
 
 fn arc(a: &Position, b: &Position) -> f64 {
@@ -51,6 +54,17 @@ fn arc(a: &Position, b: &Position) -> f64 {
             * b.latitude.to_radians().cos()
             * (dlon / 2.0).sin().powi(2);
     2.0 * h.clamp(0.0, 1.0).sqrt().asin()
+}
+
+pub fn distance(a: &Position, b: &Position) -> f64 {
+    arc(a, b) * EARTH_RADIUS
+}
+
+pub(super) fn interpolate(a: &Position, b: &Position, fraction: f64) -> Position {
+    let mut position =
+        crate::motion::translate(a, distance(a, b) * fraction, bearing(a, b).to_degrees());
+    position.altitude = a.altitude * (1.0 - fraction) + b.altitude * fraction;
+    position
 }
 
 fn bearing(a: &Position, b: &Position) -> f64 {
@@ -96,21 +110,97 @@ impl Playback {
         }
         Ok(Self {
             total: lengths.iter().sum(),
+            path: plan.points.clone(),
             plan,
             lengths,
             elapsed: 0.0,
             paused: false,
             updated: now,
+            factor: 1.0,
+            moving_seconds: 0.0,
         })
     }
 
+    pub fn smoothed(plan: Route, now: Instant, radius: f64) -> Result<Self, &'static str> {
+        let mut playback = Self::new(plan, now)?;
+        if radius > 0.0 {
+            playback.path = crate::smoothing::corners(&playback.plan.points, radius);
+            playback.lengths =
+                playback.path.windows(2).map(|pair| distance(&pair[0], &pair[1])).collect();
+            playback.total = playback.lengths.iter().sum();
+        }
+        Ok(playback)
+    }
+
     pub fn advance(&mut self, now: Instant) -> Position {
+        self.advance_with(now, |_, _| 1.0, 1.0)
+    }
+
+    pub fn advance_varied(&mut self, now: Instant, realism: &crate::realism::Realism) -> Position {
+        self.advance_with(now, |from, to| realism.average_factor(from, to), realism.factor(now))
+    }
+
+    pub fn moving_seconds(&self) -> f64 {
+        self.moving_seconds
+    }
+
+    fn advance_with(
+        &mut self,
+        now: Instant,
+        average: impl Fn(Instant, Instant) -> f64,
+        factor: f64,
+    ) -> Position {
+        self.moving_seconds = 0.0;
         if !self.paused {
-            self.elapsed = (self.elapsed
-                + now.saturating_duration_since(self.updated).as_secs_f64())
-            .min(self.duration());
+            let mut cursor = self.updated.min(now);
+            let travel = self.total / self.plan.speed;
+            let cycle = travel + self.plan.repeat_delay;
+            while cursor < now && self.elapsed < self.duration() {
+                let seconds = now.duration_since(cursor).as_secs_f64();
+                let index = (self.elapsed / cycle).floor();
+                let within = self.elapsed - index * cycle;
+                let moving = within < travel;
+                let end =
+                    (index * cycle + if moving { travel } else { cycle }).min(self.duration());
+                if end <= self.elapsed {
+                    self.elapsed = self.elapsed.next_up();
+                    continue;
+                }
+                let available = if moving { seconds * average(cursor, now) } else { seconds };
+                let remaining = end - self.elapsed;
+                if available >= remaining {
+                    let consumed = if moving {
+                        // Find arrival in wall time so repeat waits never inherit the speed multiplier.
+                        let (mut low, mut high) = (0.0, seconds);
+                        for _ in 0..48 {
+                            let middle = (low + high) / 2.0;
+                            let time = cursor + std::time::Duration::from_secs_f64(middle);
+                            if middle * average(cursor, time) < remaining {
+                                low = middle;
+                            } else {
+                                high = middle;
+                            }
+                        }
+                        high
+                    } else {
+                        remaining
+                    };
+                    if moving {
+                        self.moving_seconds += consumed;
+                    }
+                    self.elapsed = end;
+                    cursor += std::time::Duration::from_secs_f64(consumed);
+                } else {
+                    if moving {
+                        self.moving_seconds += seconds;
+                    }
+                    self.elapsed += available;
+                    break;
+                }
+            }
         }
         self.updated = now;
+        self.factor = factor;
         self.position()
     }
 
@@ -160,7 +250,7 @@ impl Playback {
     pub fn position(&self) -> Position {
         let (_, distance, _) = self.progress();
         if distance >= self.total {
-            let mut end = self.plan.points.last().unwrap().clone();
+            let mut end = self.path.last().unwrap().clone();
             end.speed = 0.0;
             return end;
         }
@@ -170,8 +260,8 @@ impl Playback {
             remaining -= self.lengths[index];
             index += 1;
         }
-        let a = &self.plan.points[index];
-        let b = &self.plan.points[index + 1];
+        let a = &self.path[index];
+        let b = &self.path[index + 1];
         let fraction = remaining / self.lengths[index];
         let angular = remaining / EARTH_RADIUS;
         let heading = bearing(a, b);
@@ -187,7 +277,7 @@ impl Playback {
             longitude: (lon.to_degrees() + 180.0).rem_euclid(360.0) - 180.0,
             altitude: a.altitude * (1.0 - fraction) + b.altitude * fraction,
             accuracy: a.accuracy,
-            speed: if self.paused { 0.0 } else { self.plan.speed },
+            speed: if self.paused { 0.0 } else { self.plan.speed * self.factor },
             bearing: 0.0,
         };
         point.bearing = bearing(&point, b).to_degrees().rem_euclid(360.0) % 360.0;

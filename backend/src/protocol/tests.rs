@@ -29,6 +29,73 @@ fn set_steps(linked: bool) -> String {
 }
 
 #[test]
+fn realism_drift_keeps_the_static_anchor_and_never_adds_linked_steps() {
+    let now = Instant::now();
+    let mut control = Control::default();
+    let settings = r#"{"version":1,"op":"set_realism","config":{"enabled":true,"seed":7}}"#;
+    assert!(control.handle_at(settings, now).ok);
+    assert!(control.handle_at(&static_start(), now).ok);
+    control.handle_at(&set_steps(true), now);
+    let anchor = control.session.engine.config().unwrap().position.clone();
+    let first = control.handle_at(r#"{"version":1,"op":"status"}"#, now + Duration::from_secs(5));
+    let later =
+        control.handle_at(r#"{"version":1,"op":"status"}"#, now + Duration::from_secs(1000));
+    assert_ne!(first.state.config.unwrap().position, later.state.config.unwrap().position);
+    assert_eq!(control.session.engine.config().unwrap().position, anchor);
+    assert_eq!(later.state.step_count.total, 0);
+    assert!(!control.handle_at(settings, now + Duration::from_secs(1000)).ok);
+}
+
+#[test]
+fn speed_variation_integrates_joystick_distance_only_until_lease_expiry() {
+    let now = Instant::now();
+    let mut control = Control::default();
+    control.handle_at(r#"{"version":1,"op":"set_realism","config":{"enabled":true,"seed":5,"drift_radius_m":0,"altitude_m":0,"bearing_degrees":0}}"#,now);
+    control.handle_at(&static_start(), now);
+    control.handle_at(&set_steps(true), now);
+    let anchor = control.session.engine.config().unwrap().position.clone();
+    control.handle_at(r#"{"version":1,"op":"drive","speed":0.75,"bearing":90}"#, now);
+    let expected = 1.5 * control.session.realism.average_factor(now, now + Duration::from_secs(2));
+    let reply = control.handle_at(r#"{"version":1,"op":"status"}"#, now + Duration::from_secs(60));
+    let output = reply.state.config.unwrap().position;
+    assert!((crate::route::distance(&anchor, &output) - expected).abs() < 1e-6);
+    assert_eq!(output.speed, 0.0);
+    assert!(
+        (reply.state.step_count.total as f64 + reply.state.step_count.fraction - expected / 0.75)
+            .abs()
+            < 1e-9
+    );
+}
+
+#[test]
+fn realism_route_progress_is_independent_of_polling_across_repeat_waits() {
+    let now = Instant::now();
+    let settings = r#"{"version":1,"op":"set_realism","config":{"enabled":true,"seed":9,"drift_radius_m":0,"altitude_m":0,"bearing_degrees":0}}"#;
+    let route = json!({"version":1,"op":"start_route","scope":{"mode":"all"},"route":{
+        "points":[Position::new(0.0,0.0),Position::new(0.0,0.0001)],"speed":1.0,"repeat_count":10,"repeat_delay":3.0
+    }}).to_string();
+    let (mut coarse, mut fine) = (Control::default(), Control::default());
+    for control in [&mut coarse, &mut fine] {
+        assert!(control.handle_at(settings, now).ok);
+        assert!(control.handle_at(&route, now).ok);
+    }
+    let status = r#"{"version":1,"op":"status"}"#;
+    for i in 1..=400 {
+        fine.handle_at(status, now + Duration::from_millis(i * 100));
+    }
+    coarse.handle_at(status, now + Duration::from_secs(40));
+    let a = coarse.session.route.as_ref().unwrap();
+    let b = fine.session.route.as_ref().unwrap();
+    assert!((a.travelled() - b.travelled()).abs() < 1e-6);
+    assert_eq!(a.state().lap, b.state().lap);
+    assert!(crate::route::distance(&a.position(), &b.position()) < 1e-6);
+    let paused =
+        fine.handle_at(r#"{"version":1,"op":"pause_route"}"#, now + Duration::from_secs(40));
+    let held = fine.handle_at(status, now + Duration::from_secs(80));
+    assert_eq!(paused.state.route.unwrap().distance, held.state.route.unwrap().distance);
+}
+
+#[test]
 fn steps_start_stop_and_rate_changes_charge_only_the_previous_interval() {
     let now = Instant::now();
     let mut control = Control::default();

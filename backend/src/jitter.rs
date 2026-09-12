@@ -11,6 +11,17 @@ const SLOW_MIN: f64 = 0.4;
 const FAST_MAX: f64 = 1.2;
 const FAST_MIN: f64 = 0.8;
 
+/// Stateless signed samples for continuous realism channels; independent of request ordering.
+pub fn signed_noise(seed: u64, index: u64, channel: u64) -> f64 {
+    let mut value = seed
+        .wrapping_add(index.wrapping_mul(0x9e3779b97f4a7c15))
+        .wrapping_add(channel.wrapping_mul(0xd1b54a32d192ed03));
+    value = (value ^ (value >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
+    value = (value ^ (value >> 27)).wrapping_mul(0x94d049bb133111eb);
+    value ^= value >> 31;
+    (value >> 11) as f64 / (1u64 << 53) as f64 * 2.0 - 1.0
+}
+
 #[derive(Clone, Debug)]
 pub struct Jitter {
     enabled: bool,

@@ -22,6 +22,33 @@ import java.util.concurrent.atomic.AtomicReference
 
 /** Location and satellite observations collected off the main thread. */
 internal class LocationChecks(private val manager: LocationManager, private val handler: Handler) {
+    /** Eight seconds of app-side updates for bounded drift and motion acceptance. */
+    @SuppressLint("MissingPermission")
+    fun collectMovement(report: CheckReport) {
+        val samples = CopyOnWriteArrayList<Location>()
+        val listener = LocationListener { samples.add(Location(it)) }
+        try {
+            manager.requestLocationUpdates(
+                LocationManager.GPS_PROVIDER,
+                500L,
+                0f,
+                listener,
+                handler.looper,
+            )
+            Thread.sleep(8000)
+        } finally {
+            manager.removeUpdates(listener)
+        }
+        val last = samples.lastOrNull()
+        val all =
+            samples.joinToString("|") {
+                String.format(Locale.ROOT, "%.6f,%.6f", it.latitude, it.longitude)
+            }
+        report.line(
+            "gps ${last?.latitude}, ${last?.longitude} source=live seen=${samples.size} all=$all"
+        )
+    }
+
     // The activity requests location access; each read also reports runtime failures.
     @SuppressLint("MissingPermission")
     fun collect(report: CheckReport) {

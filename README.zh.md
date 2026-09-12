@@ -34,6 +34,12 @@ justlocationd scode import --without-wifi < location.scode > imported-address.js
 
 地址 JSON 包含 `latitude`、`longitude`、可选的 `altitude`，以及名称、地址等元数据和 `nearbyCells` / `nearbyWifis` 附件。解码保留原地址；导入生成新 ID 并设为 `from=2`。导入默认保留两种附件，可分别通过 `--without-cells`、`--without-wifi` 去掉。操作只输出文件内容，不改变模拟状态。输入和解压后 JSON 均限 2 MiB；详情见 `scode --help`。
 
+## 运动现实感
+
+停止模拟后，可通过 `set_realism` 设置参数，省略的字段使用默认值。总开关默认关闭；启用后，静态、路线与摇杆输出共用连续变化的随机源，保存的坐标保持不变。默认漂移半径 2 米、高度 ±1 米、方向 ±3°、速度 ±10%、每 5 秒过渡、拐角最多提前 5 米圆滑转向。可选 `seed` 用于复现同一段模拟。
+
+字段为 `enabled`、`drift_radius_m`（0–100）、`altitude_m`（0–100）、`bearing_degrees`（0–45）、`speed_variation`（0–0.5）、`period_seconds`（1–60）、`corner_radius_m`（0–100）和 `seed`。速度浮动会影响实际路程；路线暂停和重复等待按真实时间处理，静态漂移不计步。原始路线点和端点与用于播放的平滑路径分开保留。
+
 ## 开发
 
 ```sh

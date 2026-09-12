@@ -34,6 +34,12 @@ justlocationd scode import --without-wifi < location.scode > imported-address.js
 
 Address JSON contains `latitude`, `longitude`, optional `altitude`, and any address metadata or `nearbyCells` / `nearbyWifis` attachments. Decode preserves the address; import creates a new ID and sets `from=2`. Import keeps both attachment types unless `--without-cells` or `--without-wifi` is supplied. Neither operation changes simulation state. Input and expanded JSON are limited to 2 MiB. Use `scode --help` for details.
 
+## Motion realism
+
+`set_realism` accepts an optional configuration (omitted fields use defaults). Stop simulation before changing it. It defaults to disabled; enabling it applies the same continuous noise to static, route and joystick output. Saved coordinates remain unchanged. Defaults: 2 m drift radius, ±1 m altitude, ±3° bearing, ±10% speed, 5 s transitions, and up to 5 m corner cuts. `seed` optionally makes a session reproducible.
+
+The fields are `enabled`, `drift_radius_m` (0–100), `altitude_m` (0–100), `bearing_degrees` (0–45), `speed_variation` (0–0.5), `period_seconds` (1–60), `corner_radius_m` (0–100), and `seed`. Speed variation changes travelled distance; route pauses and repeat waits use real time. Static drift does not count as steps. Original route points and endpoints are retained separately from the smoothed playback path.
+
 ## Development
 
 ```sh

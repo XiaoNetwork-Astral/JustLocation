@@ -6,6 +6,16 @@ export interface Position {
   speed: number;
   bearing: number;
 }
+export interface RealismConfig {
+  enabled: boolean;
+  drift_radius_m: number;
+  altitude_m: number;
+  bearing_degrees: number;
+  speed_variation: number;
+  period_seconds: number;
+  corner_radius_m: number;
+  seed?: number | null;
+}
 export type Scope = { mode: 'all' } | { mode: 'apps'; packages: string[] };
 export interface Config {
   position: Position;
@@ -70,6 +80,7 @@ export interface StepConfig {
   daily_reset: boolean;
 }
 export interface State {
+  realism?: RealismConfig;
   requested_active: boolean;
   config: Config | null;
   hook_connected?: boolean;
@@ -111,6 +122,7 @@ export type Command =
   | { op: 'set_gnss'; config: GnssConfig }
   | { op: 'set_wifi'; config: WifiConfig }
   | { op: 'set_steps'; config: StepConfig }
+  | { op: 'set_realism'; config: RealismConfig }
   | { op: 'set_step_count'; total: number }
   | { op: 'set_cell_region'; region: CellRegion | null };
 

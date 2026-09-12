@@ -20,6 +20,8 @@ pub(super) struct Stored {
     pub(super) wifi: WifiConfig,
     #[serde(default)]
     pub(super) steps: crate::steps::StepConfig,
+    #[serde(default)]
+    pub(super) realism: crate::realism::RealismConfig,
 }
 
 impl Default for Stored {
@@ -32,6 +34,7 @@ impl Default for Stored {
             gnss: GnssConfig::default(),
             wifi: WifiConfig::default(),
             steps: crate::steps::StepConfig::default(),
+            realism: crate::realism::RealismConfig::default(),
         }
     }
 }
@@ -58,6 +61,7 @@ impl Stored {
         stored.gnss.validate().map_err(io::Error::other)?;
         stored.wifi.validate().map_err(io::Error::other)?;
         stored.steps.validate().map_err(io::Error::other)?;
+        stored.realism.validate().map_err(io::Error::other)?;
         Ok(stored)
     }
 

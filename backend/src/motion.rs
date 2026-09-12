@@ -6,6 +6,8 @@ use std::time::{Duration, Instant};
 pub struct Motion {
     origin: Position,
     started: Instant,
+    updated: Instant,
+    distance: f64,
 }
 
 impl Motion {
@@ -32,29 +34,44 @@ impl Motion {
         if speed > 1000.0 {
             return Err("speed must not exceed 1000 m/s");
         }
-        Ok(Self { origin: position, started: now })
+        Ok(Self { origin: position, started: now, updated: now, distance: 0.0 })
     }
 
     pub fn advance(&mut self, now: Instant) -> Position {
+        self.advance_scaled(now, 1.0, 1.0)
+    }
+
+    pub fn travelled(&self) -> f64 {
+        self.distance
+    }
+
+    pub fn advance_scaled(&mut self, now: Instant, average: f64, factor: f64) -> Position {
         let elapsed = now.saturating_duration_since(self.started);
-        let distance = self.origin.speed * elapsed.min(Duration::from_secs(2)).as_secs_f64();
-        let angle = distance / 6_371_008.8;
-        let lat = self.origin.latitude.to_radians();
-        let bearing = self.origin.bearing.to_radians();
-        let next_lat = (lat.sin() * angle.cos() + lat.cos() * angle.sin() * bearing.cos())
-            .clamp(-1.0, 1.0)
-            .asin();
-        let next_lon = self.origin.longitude.to_radians()
-            + (bearing.sin() * angle.sin() * lat.cos())
-                .atan2(angle.cos() - lat.sin() * next_lat.sin());
-        let mut position = self.origin.clone();
-        position.latitude = next_lat.to_degrees();
-        position.longitude = (next_lon.to_degrees() + 180.0).rem_euclid(360.0) - 180.0;
-        if elapsed >= Duration::from_secs(2) {
-            position.speed = 0.0;
-        }
+        self.distance += self.origin.speed * self.moving_seconds(self.updated, now) * average;
+        self.updated = now;
+        let mut position = translate(&self.origin, self.distance, self.origin.bearing);
+        position.speed =
+            if elapsed >= Duration::from_secs(2) { 0.0 } else { self.origin.speed * factor };
         position
     }
+
+    pub fn expires(&self) -> Instant {
+        self.started + Duration::from_secs(2)
+    }
+}
+
+pub fn translate(origin: &Position, distance: f64, heading: f64) -> Position {
+    let angle = distance / 6_371_008.8;
+    let lat = origin.latitude.to_radians();
+    let bearing = heading.to_radians();
+    let next_lat =
+        (lat.sin() * angle.cos() + lat.cos() * angle.sin() * bearing.cos()).clamp(-1.0, 1.0).asin();
+    let next_lon = origin.longitude.to_radians()
+        + (bearing.sin() * angle.sin() * lat.cos()).atan2(angle.cos() - lat.sin() * next_lat.sin());
+    let mut position = origin.clone();
+    position.latitude = next_lat.to_degrees();
+    position.longitude = (next_lon.to_degrees() + 180.0).rem_euclid(360.0) - 180.0;
+    position
 }
 
 #[cfg(test)]

@@ -4,6 +4,7 @@ use crate::{
     gnss::GnssConfig,
     motion::Motion,
     operators::Operators,
+    realism::Realism,
     record::Recording,
     route::Playback,
     steps::{StepConfig, StepCount},
@@ -37,6 +38,7 @@ struct Session {
     gnss: GnssConfig,
     wifi: WifiConfig,
     steps: StepConfig,
+    realism: Realism,
 }
 
 #[derive(Default)]
@@ -82,20 +84,34 @@ impl Control {
         let mut speed = 0.0;
         if let Some(motion) = &mut self.session.motion {
             moving_seconds = motion.moving_seconds(from, now);
-            speed = motion.speed();
+            let travelled = motion.travelled();
+            let average = self.session.realism.average_factor(from, now.min(motion.expires()));
             self.session
                 .engine
-                .update_position(motion.advance(now))
+                .update_position(motion.advance_scaled(
+                    now,
+                    average,
+                    self.session.realism.factor(now),
+                ))
                 .expect("validated movement position");
+            speed = if moving_seconds > 0.0 {
+                (motion.travelled() - travelled) / moving_seconds
+            } else {
+                0.0
+            };
         }
         if let Some(route) = &mut self.session.route {
             let travelled = route.travelled();
             self.session
                 .engine
-                .update_position(route.advance(now))
+                .update_position(route.advance_varied(now, &self.session.realism))
                 .expect("validated route position");
-            speed = route.speed();
-            moving_seconds = (route.travelled() - travelled).max(0.0) / speed;
+            moving_seconds = route.moving_seconds();
+            speed = if moving_seconds > 0.0 {
+                (route.travelled() - travelled).max(0.0) / moving_seconds
+            } else {
+                0.0
+            };
         }
         self.step_updated = Some(now);
         let config = self.session.steps;
@@ -158,6 +174,7 @@ impl Control {
                 gnss: stored.gnss,
                 wifi: stored.wifi,
                 steps: stored.steps,
+                realism: Realism::new(stored.realism, Instant::now()),
                 ..Session::default()
             },
             storage: Some(path.to_owned()),
@@ -198,10 +215,19 @@ impl Control {
                 | Command::SetGnss { .. }
                 | Command::SetWifi { .. }
                 | Command::SetSteps { .. }
+                | Command::SetRealism { .. }
         );
         let previous = mutates_config.then(|| self.session.clone());
         let result = match request.command {
             Command::Status => Ok(()),
+            Command::SetRealism { config } => {
+                config.validate().map_err(str::to_owned)?;
+                if self.session.engine.is_running() {
+                    return Err("stop simulation before changing realism settings".into());
+                }
+                self.session.realism = Realism::new(config, now);
+                Ok(())
+            }
             Command::SetSteps { config } => {
                 config.validate().map_err(str::to_owned)?;
                 self.session.steps = config;
@@ -362,15 +388,24 @@ impl Control {
                 if self.recording.is_some() {
                     return Err("stop recording before starting the simulation".into());
                 }
-                self.session.engine.start(config).map_err(str::to_owned)
+                self.session.engine.start(config).map_err(str::to_owned)?;
+                self.session.realism.reset(now);
+                Ok(())
             }
             Command::StartRoute { route, scope } => {
-                let route = Playback::new(route, now).map_err(str::to_owned)?;
+                let config = self.session.realism.config;
+                let route = Playback::smoothed(
+                    route,
+                    now,
+                    if config.enabled { config.corner_radius_m } else { 0.0 },
+                )
+                .map_err(str::to_owned)?;
                 self.session
                     .engine
                     .start(Config { position: route.position(), scope })
                     .map_err(str::to_owned)?;
                 self.session.route = Some(route);
+                self.session.realism.reset(now);
                 Ok(())
             }
             Command::PauseRoute | Command::ResumeRoute => {
@@ -402,7 +437,14 @@ impl Control {
                     now,
                 )
                 .map_err(str::to_owned)?;
-                self.session.engine.update_position(motion.advance(now)).map_err(str::to_owned)?;
+                self.session
+                    .engine
+                    .update_position(motion.advance_scaled(
+                        now,
+                        1.0,
+                        self.session.realism.factor(now),
+                    ))
+                    .map_err(str::to_owned)?;
                 self.session.motion = if speed == 0.0 { None } else { Some(motion) };
                 Ok(())
             }
@@ -442,11 +484,19 @@ impl Control {
             gnss: self.session.gnss,
             wifi: self.session.wifi.clone(),
             steps: self.session.steps,
+            realism: self.session.realism.config,
         }
         .save(path)
     }
 
     fn response(&self, error: Option<String>) -> Response {
+        let now = self.step_updated.unwrap_or_else(Instant::now);
+        let mut output = self.session.engine.config().cloned();
+        if self.session.engine.is_running() {
+            if let Some(config) = &mut output {
+                config.position = self.session.realism.output(&config.position, now);
+            }
+        }
         let hook_connected =
             self.hook_seen_at.is_some_and(|time| time.elapsed() < Duration::from_secs(3));
         let phone_connected =
@@ -454,7 +504,7 @@ impl Control {
         let telephony_output = if self.session.engine.is_running()
             && (self.session.telephony.cells_enabled || self.session.telephony.sim_enabled)
         {
-            self.session.engine.config().map(|config| {
+            output.as_ref().map(|config| {
                 self.session.telephony.frame(
                     self.session.cell_region.as_ref(),
                     Coordinate {
@@ -474,7 +524,8 @@ impl Control {
             error,
             state: State {
                 requested_active: self.session.engine.is_running(),
-                config: self.session.engine.config().cloned(),
+                config: output,
+                realism: self.session.realism.config,
                 hook_connected,
                 location_hook_ready: hook_connected && self.hook_installed,
                 gnss_hook_ready: hook_connected && self.gnss_installed,

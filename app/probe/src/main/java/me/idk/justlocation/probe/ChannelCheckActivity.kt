@@ -75,6 +75,7 @@ class ChannelCheckActivity : Activity() {
     private fun run() {
         if (running || isDestroyed) return
         val stepsOnly = intent?.getBooleanExtra("steps_only", false) == true
+        val movementOnly = intent?.getBooleanExtra("movement_only", false) == true
         val permission =
             if (stepsOnly) Manifest.permission.ACTIVITY_RECOGNITION
             else Manifest.permission.ACCESS_FINE_LOCATION
@@ -97,6 +98,9 @@ class ChannelCheckActivity : Activity() {
                 if (stepsOnly) {
                     StepChecks(context.getSystemService(SensorManager::class.java), handler)
                         .collect(report)
+                } else if (movementOnly) {
+                    LocationChecks(context.getSystemService(LocationManager::class.java), handler)
+                        .collectMovement(report)
                 } else {
                     LocationChecks(context.getSystemService(LocationManager::class.java), handler)
                         .collect(report)
