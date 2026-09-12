@@ -1,5 +1,6 @@
 package me.idk.justlocation.joystick
 
+import java.io.IOException
 import java.util.Base64
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -13,13 +14,24 @@ internal class RootTransport(
 ) {
     fun exchange(frame: String): String {
         val encoded = Base64.getEncoder().encodeToString(frame.toByteArray(Charsets.UTF_8))
-        val process = start("/data/adb/modules/justlocation/bin/justlocationd request $encoded")
+        val process =
+            try {
+                start("/data/adb/modules/justlocation/bin/justlocationd request $encoded")
+            } catch (error: IOException) {
+                throw IllegalStateException(ROOT_HELP, error)
+            }
         val deadline =
             timeout.schedule({ process.destroyForcibly() }, timeoutMillis, TimeUnit.MILLISECONDS)
         try {
             val reply = process.inputStream.bufferedReader().use { it.readText() }
             check(process.waitFor() == 0) {
-                "cannot reach the module; check root access and module state"
+                if (
+                    reply.contains("denied", ignoreCase = true) ||
+                        reply.contains("not allowed", ignoreCase = true)
+                )
+                    ROOT_HELP
+                else
+                    "cannot reach the module; check that JustLocation is enabled and its service is running. $ROOT_HELP"
             }
             return reply
         } finally {
@@ -29,6 +41,8 @@ internal class RootTransport(
     }
 
     private companion object {
+        const val ROOT_HELP =
+            "Root access unavailable. In KernelSU > Superuser, allow JustLoystick (me.idk.justlocation.joystick), then retry."
         val timeout = Executors.newSingleThreadScheduledExecutor()
     }
 }

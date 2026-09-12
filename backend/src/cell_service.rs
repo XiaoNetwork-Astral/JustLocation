@@ -42,6 +42,10 @@ enum Command {
     ClearCache,
     /// Inspect locally installed datasets and update status.
     DatasetStatus,
+    DatasetAuto {
+        enabled: bool,
+        mcc: Option<u16>,
+    },
     DatasetDownload {
         mcc: u16,
         /// Download a full country export or one day's changes.
@@ -120,6 +124,20 @@ impl CellService {
         let cache_path = self.directory.join("cell-cache.json");
         match request.command {
             Command::Settings => unreachable!(),
+            Command::DatasetAuto { enabled, mcc } => {
+                if let Some(mcc) = mcc {
+                    if mcc != 0 && !(100..=999).contains(&mcc) {
+                        return Err("MCC must be 100..999, or 0 to clear".into());
+                    }
+                    settings.dataset_mcc = mcc;
+                }
+                if enabled && settings.dataset_mcc == 0 {
+                    return Err("set a country MCC before enabling automatic updates".into());
+                }
+                settings.dataset_auto_update = enabled;
+                settings.save(&self.directory)?;
+                Ok(json!({"settings":settings.public()}))
+            }
             Command::Configure { settings: update } => {
                 settings.update(update)?;
                 settings.save(&self.directory)?;

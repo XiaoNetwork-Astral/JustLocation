@@ -208,6 +208,7 @@ impl Control {
         let mutates_config = matches!(
             request.command,
             Command::Start { .. }
+                | Command::SetScope { .. }
                 | Command::StartRoute { .. }
                 | Command::Update { .. }
                 | Command::SetCellRegion { .. }
@@ -220,6 +221,9 @@ impl Control {
         let previous = mutates_config.then(|| self.session.clone());
         let result = match request.command {
             Command::Status => Ok(()),
+            Command::SetScope { scope } => {
+                self.session.engine.set_scope(scope).map_err(str::to_owned)
+            }
             Command::SetRealism { config } => {
                 config.validate().map_err(str::to_owned)?;
                 if self.session.engine.is_running() {

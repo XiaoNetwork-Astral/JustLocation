@@ -90,6 +90,17 @@ pub struct Engine {
 }
 
 impl Engine {
+    pub fn set_scope(&mut self, scope: Scope) -> Result<(), &'static str> {
+        if let Scope::Apps(packages) = &scope {
+            if packages.is_empty() || packages.iter().any(|name| name.trim().is_empty()) {
+                return Err("select at least one application");
+            }
+        }
+        self.config
+            .get_or_insert_with(|| Config { position: Position::new(0., 0.), scope: Scope::All })
+            .scope = scope;
+        Ok(())
+    }
     pub fn start(&mut self, config: Config) -> Result<(), &'static str> {
         if self.running {
             return Err("already running; stop before starting another session");

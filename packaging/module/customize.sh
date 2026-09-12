@@ -30,10 +30,16 @@ fi
 msg "$MSG_EXTRACTING"
 unzip -o "$ZIPFILE" -x 'META-INF/*' -d "$MODPATH" >/dev/null 2>&1 || fail "$MSG_EXTRACT_FAIL"
 
-# Replace the companion APK to handle signing or version changes.
+# Preserve the companion UID and permissions on normal upgrades; reinstall on signature changes.
 if [ -f "$MODPATH/bin/joystick.apk" ]; then
-    pm uninstall "$JOYSTICK_PACKAGE" >/dev/null 2>&1
+    installed=false
     if pm install -g -r "$MODPATH/bin/joystick.apk" >/dev/null 2>&1; then
+        installed=true
+    else
+        pm uninstall "$JOYSTICK_PACKAGE" >/dev/null 2>&1
+        if pm install -g -r "$MODPATH/bin/joystick.apk" >/dev/null 2>&1; then installed=true; fi
+    fi
+    if [ "$installed" = "true" ]; then
 
         # Overlay permission is an app-op; verify it after package registration settles.
         overlay_granted=false

@@ -12,9 +12,21 @@ import android.widget.Toast
 class CallActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (intent?.getBooleanExtra("record", false) == true) {
+            try {
+                startForegroundService(
+                    Intent(this, RouteRecordService::class.java)
+                        .setAction(RouteRecordService.ACTION_START)
+                )
+            } catch (error: Exception) {
+                Log.w(TAG, "recording service start failed", error)
+            }
+            finishAndRemoveTask()
+            return
+        }
         val speed = intent?.speedExtra() ?: -1.0
         Log.i(TAG, "wake: speed=$speed canDrawOverlays=${Settings.canDrawOverlays(this)}")
-        if (speed <= 1.0) {
+        if (!speed.isFinite() || speed <= 0.0 || speed > 1000.0) {
             Log.w(TAG, "invalid speed, ignoring this wake request")
             finishAndRemoveTask()
             return

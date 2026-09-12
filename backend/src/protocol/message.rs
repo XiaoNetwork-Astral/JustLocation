@@ -20,6 +20,9 @@ pub(super) struct Request {
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub(super) enum Command {
     Status,
+    SetScope {
+        scope: Scope,
+    },
     SetRealism {
         config: crate::realism::RealismConfig,
     },

@@ -137,25 +137,37 @@ mod platform {
 }
 
 pub fn serve() -> io::Result<()> {
+    serve_in(std::path::Path::new(DATA_DIR))
+}
+
+pub fn serve_in(directory: &std::path::Path) -> io::Result<()> {
     #[cfg(unix)]
     {
-        platform::serve(std::path::Path::new(DATA_DIR))
+        platform::serve(directory)
     }
     #[cfg(not(unix))]
     {
+        let _ = directory;
         Err(io::Error::other("Unix sockets require Android/Linux; use stdio for host testing"))
     }
 }
 
 pub fn request(encoded: &str) -> Result<String, String> {
     let decoded = decode_request(encoded)?;
+    request_in(std::path::Path::new(DATA_DIR), &decoded)
+}
+
+pub fn request_in(directory: &std::path::Path, decoded: &str) -> Result<String, String> {
+    if decoded.len() >= MAX_FRAME as usize || decoded.contains(['\n', '\r']) {
+        return Err("control request must be one line under 64 KiB".into());
+    }
     #[cfg(unix)]
     {
-        platform::request(std::path::Path::new(DATA_DIR), &decoded).map_err(|e| e.to_string())
+        platform::request(directory, decoded).map_err(|e| e.to_string())
     }
     #[cfg(not(unix))]
     {
-        let _ = decoded;
+        let _ = (directory, decoded);
         Err("Unix sockets require Android/Linux; use stdio for host testing".into())
     }
 }

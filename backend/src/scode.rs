@@ -115,13 +115,8 @@ pub fn decode(code: &str) -> Result<Address, String> {
 /// Import creates a new local identity; attachment choices are independent and explicit.
 /// It never changes live simulation or installs the imported attachment data globally.
 pub fn import(code: &str, keep_cells: bool, keep_wifi: bool) -> Result<Address, String> {
-    static SEQUENCE: AtomicU64 = AtomicU64::new(0);
     let mut address = decode(code)?;
-    let time = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|e| e.to_string())?.as_nanos();
-    let sequence = SEQUENCE.fetch_add(1, Ordering::Relaxed);
-    address
-        .0
-        .insert("id".into(), json!(format!("jl-{time:x}-{:x}-{sequence:x}", std::process::id())));
+    address.0.insert("id".into(), json!(new_id()?));
     address.0.insert("from".into(), json!(2));
     if !keep_cells {
         address.0.remove("nearbyCells");
@@ -130,6 +125,13 @@ pub fn import(code: &str, keep_cells: bool, keep_wifi: bool) -> Result<Address, 
         address.0.remove("nearbyWifis");
     }
     Ok(address)
+}
+
+pub(crate) fn new_id() -> Result<String, String> {
+    static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+    let time = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|e| e.to_string())?.as_nanos();
+    let sequence = SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    Ok(format!("jl-{time:x}-{:x}-{sequence:x}", std::process::id()))
 }
 
 #[cfg(test)]

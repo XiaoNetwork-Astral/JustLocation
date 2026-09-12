@@ -41,7 +41,8 @@ class RootTransportTest {
         val process = FakeProcess(ByteArrayInputStream("permission denied".toByteArray()), 1)
         val transport = RootTransport(start = { process })
         val error = assertThrows(IllegalStateException::class.java) { transport.exchange("{}") }
-        assertTrue(error.message!!.contains("cannot reach the module"))
+        assertTrue(error.message!!.contains("KernelSU > Superuser"))
+        assertTrue(error.message!!.contains("me.idk.justlocation.joystick"))
         assertTrue(process.destroyed)
     }
 
@@ -72,6 +73,14 @@ class RootTransportTest {
         assertThrows(IllegalStateException::class.java) { transport.exchange("{}") }
         assertTrue(process.forced)
         assertTrue(process.destroyed)
+    }
+
+    @Test
+    fun deniedSuExecutionExplainsWhichAppNeedsRoot() {
+        val transport = RootTransport(start = { throw IOException("error=13, Permission denied") })
+        val error = assertThrows(IllegalStateException::class.java) { transport.exchange("{}") }
+        assertTrue(error.message!!.contains("KernelSU > Superuser"))
+        assertTrue(error.message!!.contains("JustLoystick"))
     }
 
     private class FakeProcess(

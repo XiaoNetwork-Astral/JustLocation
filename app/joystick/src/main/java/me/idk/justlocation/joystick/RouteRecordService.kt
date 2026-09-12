@@ -10,6 +10,8 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Looper
 import android.os.SystemClock
+import android.util.AtomicFile
+import android.util.Log
 import java.io.File
 import java.util.concurrent.Executors
 import org.json.JSONObject
@@ -57,9 +59,13 @@ class RouteRecordService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_STOP -> stopRecording()
-            else -> beginRecording()
+        try {
+            when (intent?.action) {
+                ACTION_STOP -> stopRecording()
+                else -> beginRecording()
+            }
+        } catch (error: Exception) {
+            finish(error)
         }
         return START_NOT_STICKY
     }
@@ -89,6 +95,7 @@ class RouteRecordService : Service() {
                 startUpdates()
             } catch (error: Exception) {
                 lastError = error.message ?: "cannot start recording"
+                Log.w("JustLocationRecorder", "recording startup failed", error)
                 lastMessage = ""
                 publish()
                 stopSelf()
@@ -155,6 +162,7 @@ class RouteRecordService : Service() {
     }
 
     private fun finish(error: Exception) {
+        Log.w("JustLocationRecorder", "recording stopped", error)
         lastError = error.message ?: "recording failed"
         manager.removeUpdates(listener)
         publish()
@@ -175,6 +183,17 @@ class RouteRecordService : Service() {
         }
 
     private fun publish() {
+        val report = JSONObject().put("error", lastError).put("message", lastMessage)
+        val file = AtomicFile(File(filesDir, "recording-state.json"))
+        var stream: java.io.FileOutputStream? = null
+        try {
+            stream = file.startWrite()
+            stream.write(report.toString().toByteArray(Charsets.UTF_8))
+            file.finishWrite(stream)
+        } catch (error: Exception) {
+            file.failWrite(stream)
+            Log.w("JustLocationRecorder", "cannot publish recorder state", error)
+        }
         sendBroadcast(
             Intent(ACTION_STATE).setPackage(packageName).apply {
                 putExtra("message", lastMessage)

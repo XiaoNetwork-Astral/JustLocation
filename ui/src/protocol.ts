@@ -120,6 +120,7 @@ export type Command =
   | { op: 'start_route'; route: RoutePlan; scope: Scope }
   | { op: 'set_telephony'; config: TelephonyConfig }
   | { op: 'set_gnss'; config: GnssConfig }
+  | { op: 'set_scope'; scope: Scope }
   | { op: 'set_wifi'; config: WifiConfig }
   | { op: 'set_steps'; config: StepConfig }
   | { op: 'set_realism'; config: RealismConfig }
