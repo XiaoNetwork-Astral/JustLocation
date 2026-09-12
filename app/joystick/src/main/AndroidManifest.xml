@@ -6,22 +6,12 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!--
-      模块自带的附属 App：由模块安装脚本装上、卸载脚本删掉，随模块 ZIP 分发。
-
-      **故意没有启动器图标，也没有任何可以直接打开的 Activity**：全部入口只能由模块
-      （面板经 KernelSU exec 调 am）唤起——悬浮摇杆与路线录制各是一条前台服务。
-      这样它不会出现在桌面或应用列表里，用户也不会"手动打开"它。
-    -->
+    <!-- No launcher entry. The module starts the activity and services explicitly. -->
     <application
         android:allowBackup="false"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
-        <!--
-          唤起用的空壳 Activity：透明、无界面、启动后立刻结束。没有 intent-filter，
-          所以桌面上不会出现图标，也没有"可以手动打开"的入口；只有知道组件名的面板能唤起它。
-        -->
         <activity
             android:name=".CallActivity"
             android:exported="true"

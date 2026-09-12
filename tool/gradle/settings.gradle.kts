@@ -15,8 +15,12 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "JustLocation"
-// 只共享 Android 构建工具链；系统桥接与两个 App 没有 Gradle 项目依赖。
+
+// Share the Android toolchain without dependencies between the bridge and apps.
 include(":bridge", ":joystick", ":probe")
+
 project(":bridge").projectDir = file("../../zygisk/bridge")
+
 project(":joystick").projectDir = file("../../app/joystick")
+
 project(":probe").projectDir = file("../../app/probe")

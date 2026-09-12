@@ -16,3 +16,8 @@ trim_trailing_whitespace = false
 
 [*.{bat,cmd}]
 end_of_line = crlf
+
+[*.{kt,kts}]
+max_line_length = 100
+ij_kotlin_code_style_defaults = KOTLIN_OFFICIAL
+ij_continuation_indent_size = 4
