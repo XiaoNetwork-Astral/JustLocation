@@ -408,17 +408,13 @@ try {
 
   if (
     /seen=[1-9]\d*/.test(navigation) &&
-    navigation.includes('type=1') &&
+    /\btype=257\b/.test(navigation) &&
     navigation.includes('length=40')
   ) {
     check('navigation messages arrived and are GPS L1 C/A', true, navigation);
   } else {
-    report.push(
-      `KNOWN-GAP navigation messages not delivered (ROM parcel defect): ${navigation || 'no reading'}`,
-    );
-    process.stdout.write(
-      `KNOWN-GAP navigation messages not delivered (ROM parcel defect): ${navigation || 'no reading'}\n`,
-    );
+    check('navigation messages arrived and are GPS L1 C/A', false, navigation || 'no reading');
+    failures.push('navigation messages');
   }
 
   // Readiness confirms installation; callback counts confirm execution.

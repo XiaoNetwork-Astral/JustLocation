@@ -22,11 +22,9 @@ public class GnssFrameTest {
                     lines.get(1).contains(",A,3130.00000,S,12115.00000,W,19.438,90.000,100926,"));
             assertEquals(8, frame.satellites().size());
             assertEquals(2, lines.stream().filter(line -> line.startsWith("$GPGSV")).count());
-            assertTrue(lines.stream()
-                            .filter(line -> line.startsWith("$GPGSA"))
-                            .findFirst()
-                            .get()
-                            .contains(",03,07,11,14,19,22,26,30,,,,,"));
+            String gsa = lines.stream().filter(line -> line.startsWith("$GPGSA")).findFirst().get();
+            for (var satellite : frame.satellites())
+                assertTrue(gsa.contains(String.format(Locale.ROOT, ",%02d,", satellite.id())));
             for (String line : lines) {
                 assertTrue(line.endsWith("\r\n"));
                 int star = line.indexOf('*'), checksum = 0;

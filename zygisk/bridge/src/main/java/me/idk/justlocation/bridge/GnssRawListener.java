@@ -21,6 +21,8 @@ final class GnssRawListener implements InvocationHandler, GnssTick {
     private final LongSupplier clock;
     private final Method event;
     private final Function<GnssFrame, List<Object>> build;
+    private final boolean navigation;
+    private long lastSlot = Long.MIN_VALUE;
     private final java.util.concurrent.atomic.AtomicLong ticks =
             new java.util.concurrent.atomic.AtomicLong();
     private final java.util.concurrent.atomic.AtomicLong deliveries =
@@ -34,6 +36,7 @@ final class GnssRawListener implements InvocationHandler, GnssTick {
         this.type = type;
         this.clock = clock;
         this.build = build;
+        navigation = eventName.equals("onGnssNavigationMessageReceived");
         event = find(type, eventName);
         if (event == null)
             throw new IllegalArgumentException(type.getName() + " lacks " + eventName);
@@ -76,7 +79,12 @@ final class GnssRawListener implements InvocationHandler, GnssTick {
     public synchronized void tick() throws Throwable {
         ticks.incrementAndGet();
         Output value = current();
-        if (value == null || !value.enabled())
+        if (value == null || !value.enabled()) {
+            lastSlot = Long.MIN_VALUE;
+            return;
+        }
+        long slot = value.frame.gps.navigationSlot();
+        if (navigation && slot == lastSlot)
             return;
         for (Object item : build.apply(value.frame)) {
             // Recheck before each event in case the snapshot stops, expires or changes.
@@ -85,6 +93,8 @@ final class GnssRawListener implements InvocationHandler, GnssTick {
             call(event, new Object[] {item});
             deliveries.incrementAndGet();
         }
+        if (navigation)
+            lastSlot = slot;
     }
 
     /** Count tick entries and actual listener calls. */

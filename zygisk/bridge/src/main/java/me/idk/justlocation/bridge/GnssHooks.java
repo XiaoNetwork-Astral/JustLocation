@@ -15,6 +15,9 @@ final class GnssHooks {
     private volatile GnssRawListener.Output rawOutput;
     final List<GnssDispatcher> dispatchers = new ArrayList<>();
     int flags;
+    private long clockBias;
+    private boolean clockStarted;
+    private int clockDiscontinuities;
 
     GnssHooks(MethodHook.Installer installer) {
         this.installer = installer;
@@ -27,10 +30,22 @@ final class GnssHooks {
     }
 
     void update(LocationSnapshot current) {
+        long elapsed = SystemClock.elapsedRealtimeNanos(), wall = System.currentTimeMillis();
+        long observed = GpsOrbit.gpsMillis(wall) * 1000000L;
+        if (!clockStarted || Math.abs((elapsed - clockBias) - observed) > 1_000_000_000L) {
+            if (clockStarted)
+                clockDiscontinuities++;
+            clockBias = elapsed - observed;
+            clockStarted = true;
+        }
+        long gpsNanos = elapsed - clockBias;
+        long timestamp = Math.floorDiv(gpsNanos, 1000000) + GpsOrbit.UNIX_EPOCH_MS
+                - GpsOrbit.LEAP_SECONDS * 1000L;
         GnssFrame frame = current == null
                 ? null
                 : new GnssFrame(current.latitude, current.longitude, current.altitude,
-                          current.speed, current.bearing, System.currentTimeMillis());
+                          current.speed, current.bearing, timestamp, gpsNanos, elapsed,
+                          clockDiscontinuities);
         // All GNSS channels and NMEA share this frame.
         output = frame == null ? null
                                : new GnssListener.Output(current.scope, frame, current.gnssEnabled,

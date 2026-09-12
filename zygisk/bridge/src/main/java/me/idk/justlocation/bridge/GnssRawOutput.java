@@ -1,7 +1,6 @@
 package me.idk.justlocation.bridge;
 
 import android.location.GnssStatus;
-import android.os.SystemClock;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
@@ -9,12 +8,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Build raw measurements and navigation messages corresponding to the satellite table.
- * Pseudoranges use a fixed-scale model without ephemerides, orbital propagation or IS-GPS-200
- * parity; a position solution is not guaranteed to match the simulated coordinates. Constructors
+ * Pseudoranges and LNAV use the same quantized, offline GPS orbit model. Constructors
  * and setters are resolved at runtime because SDK stubs hide them. Missing required APIs disable
  * the raw channels.
  */
@@ -24,23 +21,13 @@ final class GnssRawOutput {
     private static final String EVENT_TYPE = "android.location.GnssMeasurementsEvent";
     private static final String MESSAGE_TYPE = "android.location.GnssNavigationMessage";
 
-    /** GPS-UTC leap-second offset. */
-    private static final int LEAP_SECONDS = 18;
     /** GPS L1 carrier frequency. */
     private static final float L1_HZ = 1575.42e6f;
-    /** Receiver time is expressed in nanoseconds within the GPS week. */
-    private static final long WEEK_NANOS = 604_800_000_000_000L;
-    /** Approximate satellite-to-receiver travel time. */
-    private static final long TRAVEL_NANOS = 70_000_000L;
-    /** GPS L1 C/A subframe payload size: ten words. */
-    private static final int SUBFRAME_BYTES = 40;
-
-    private static final AtomicInteger DISCONTINUITIES = new AtomicInteger();
-    private static final AtomicInteger SUBFRAME = new AtomicInteger();
 
     private static final Map<String, Method> SETTERS = new HashMap<>();
     private static final List<String> MISSING = new ArrayList<>();
     private static final Map<String, Integer> CONSTANTS = new HashMap<>();
+    private static Boolean verified;
 
     private static final Class<?> CLOCK = load(CLOCK_TYPE);
     private static final Class<?> MEASUREMENT = load(MEASUREMENT_TYPE);
@@ -105,7 +92,6 @@ final class GnssRawOutput {
             "STATE_SYMBOL_SYNC",
             "STATE_SUBFRAME_SYNC",
             "STATE_TOW_DECODED",
-            "STATE_MSEC_AMBIGUOUS",
             "MULTIPATH_INDICATOR_NOT_DETECTED",
     };
     private static final String[] MESSAGE_CONSTANTS = {"TYPE_GPS_L1CA", "STATUS_PARITY_PASSED"};
@@ -125,10 +111,24 @@ final class GnssRawOutput {
     }
 
     /** Whether all APIs required by both raw channels are available. */
-    static boolean usable() {
-        return MISSING.isEmpty() && NEW_CLOCK != null && NEW_MEASUREMENT != null
+    static synchronized boolean usable() {
+        if (verified != null)
+            return verified;
+        boolean resolved = MISSING.isEmpty() && NEW_CLOCK != null && NEW_MEASUREMENT != null
                 && NEW_MESSAGE != null && NEW_EVENT_BUILDER != null && EVENT_BUILD != null
                 && EVENT_SET_CLOCK != null && EVENT_SET_MEASUREMENTS != null;
+        if (resolved) {
+            try {
+                var sample = new GnssFrame(0, 0, 0, 0, 0, System.currentTimeMillis());
+                measurements(sample);
+                navigationMessages(sample);
+            } catch (RuntimeException failure) {
+                MISSING.add("object construction: " + failure);
+                resolved = false;
+            }
+        }
+        verified = resolved;
+        return resolved;
     }
 
     /** Missing APIs for installation diagnostics. */
@@ -140,22 +140,22 @@ final class GnssRawOutput {
 
     /** One receiver clock and one measurement per simulated satellite. */
     static Object measurements(GnssFrame frame) {
-        long now = SystemClock.elapsedRealtimeNanos();
-        long svTime = Math.floorMod(now - TRAVEL_NANOS, WEEK_NANOS);
-        Object clock = build(NEW_CLOCK, CLOCK, CLOCK_FIELDS, now, 20.0, now - svTime, 0.0, 5.0,
-                12.0, 1.5, now, 1000.0, LEAP_SECONDS, DISCONTINUITIES.incrementAndGet());
+        long now = frame.elapsedNanos;
+        long gpsNanos = frame.gps.gpsNanos;
+        Object clock = build(NEW_CLOCK, CLOCK, CLOCK_FIELDS, now, 1.0, now - gpsNanos, 0.0, 1.0,
+                0.0, 0.0, now, 1_000_000.0, GpsOrbit.LEAP_SECONDS, frame.discontinuities);
 
         int state = constant(MEASUREMENT, "STATE_CODE_LOCK")
                 | constant(MEASUREMENT, "STATE_SYMBOL_SYNC")
                 | constant(MEASUREMENT, "STATE_SUBFRAME_SYNC")
-                | constant(MEASUREMENT, "STATE_TOW_DECODED")
-                | constant(MEASUREMENT, "STATE_MSEC_AMBIGUOUS");
+                | constant(MEASUREMENT, "STATE_TOW_DECODED");
         int clean = constant(MEASUREMENT, "MULTIPATH_INDICATOR_NOT_DETECTED");
         List<Object> measurements = new ArrayList<>(frame.satellites().size());
-        for (GnssFrame.Satellite satellite : frame.satellites()) {
-            measurements.add(build(NEW_MEASUREMENT, MEASUREMENT, MEASUREMENT_FIELDS, satellite.id(),
-                    GnssStatus.CONSTELLATION_GPS, 0.0, state, svTime, 50L, (double) satellite.cn0(),
-                    (double) satellite.cn0() - 1.5, -frame.speed(), 0.5, L1_HZ, clean,
+        for (GpsEpoch.Observation satellite : frame.gps.observations) {
+            measurements.add(build(NEW_MEASUREMENT, MEASUREMENT, MEASUREMENT_FIELDS,
+                    satellite.orbit().id(), GnssStatus.CONSTELLATION_GPS, 0.0, state,
+                    satellite.transmitNanos(), 1L, (double) satellite.cn0(),
+                    (double) satellite.cn0() - 1.5, satellite.rangeRate(), 0.05, L1_HZ, clean,
                     (double) satellite.cn0() - 20.0, -6.0));
         }
         return event(clock, measurements);
@@ -166,13 +166,13 @@ final class GnssRawOutput {
      * delivers the batch one message at a time.
      */
     static List<Object> navigationMessages(GnssFrame frame) {
-        int subframe = SUBFRAME.getAndUpdate(value -> value % 5 + 1) % 5 + 1;
         int type = constant(MESSAGE, "TYPE_GPS_L1CA");
         int passed = constant(MESSAGE, "STATUS_PARITY_PASSED");
         List<Object> messages = new ArrayList<>(frame.satellites().size());
         for (GnssFrame.Satellite satellite : frame.satellites()) {
-            messages.add(build(NEW_MESSAGE, MESSAGE, MESSAGE_FIELDS, type, satellite.id(), 0,
-                    subframe, passed, payload(satellite, subframe)));
+            var nav = GpsLnav.message(satellite.id(), frame.gps.navigationSlot());
+            messages.add(build(NEW_MESSAGE, MESSAGE, MESSAGE_FIELDS, type, satellite.id(),
+                    nav.page(), nav.subframe(), passed, nav.data()));
         }
         return messages;
     }
@@ -204,18 +204,6 @@ final class GnssRawOutput {
         } catch (ReflectiveOperationException error) {
             throw new IllegalStateException("Cannot build " + owner.getSimpleName(), error);
         }
-    }
-
-    /** Deterministic payload with preamble, satellite ID and subframe ID; no parity bits. */
-    private static byte[] payload(GnssFrame.Satellite satellite, int subframe) {
-        byte[] data = new byte[SUBFRAME_BYTES];
-        data[0] = (byte) 0x8B;
-        data[1] = (byte) satellite.id();
-        data[2] = (byte) subframe;
-        for (int index = 3; index < data.length; index++) {
-            data[index] = (byte) ((satellite.id() * 31 + subframe * 17 + index * 7) & 0xFF);
-        }
-        return data;
     }
 
     // Reflection helpers.
@@ -258,7 +246,7 @@ final class GnssRawOutput {
     private static Method setter(Class<?> owner, String name, Class<?> type) {
         if (owner == null)
             return null;
-        String key = name + '/' + type.getName();
+        String key = owner.getName() + '/' + name + '/' + type.getName();
         Method method = SETTERS.get(key);
         if (method != null)
             return method;

@@ -14,6 +14,7 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import java.io.File
 import java.util.concurrent.Executors
 
 /** Displays observations and publishes the same report for device test scripts. */
@@ -76,6 +77,8 @@ class ChannelCheckActivity : Activity() {
         if (running || isDestroyed) return
         val stepsOnly = intent?.getBooleanExtra("steps_only", false) == true
         val movementOnly = intent?.getBooleanExtra("movement_only", false) == true
+        val gnssOnly = intent?.getBooleanExtra("gnss_only", false) == true
+        val gnssDuration = intent?.getLongExtra("gnss_duration_ms", 65000) ?: 65000
         val permission =
             if (stepsOnly) Manifest.permission.ACTIVITY_RECOGNITION
             else Manifest.permission.ACCESS_FINE_LOCATION
@@ -98,6 +101,9 @@ class ChannelCheckActivity : Activity() {
                 if (stepsOnly) {
                     StepChecks(context.getSystemService(SensorManager::class.java), handler)
                         .collect(report)
+                } else if (gnssOnly) {
+                    GnssChecks(context.getSystemService(LocationManager::class.java), handler)
+                        .collect(report, gnssDuration)
                 } else if (movementOnly) {
                     LocationChecks(context.getSystemService(LocationManager::class.java), handler)
                         .collectMovement(report)
@@ -114,6 +120,12 @@ class ChannelCheckActivity : Activity() {
                 report.line(error.toString())
             }
             val text = report.render()
+            if (gnssOnly) {
+                // Large raw captures can exceed logd's burst limits on some ROMs.
+                val captureId = intent?.getStringExtra("capture_id") ?: "manual"
+                File(filesDir, "gnss-report.txt")
+                    .writeText("GNSS_CAPTURE_ID=$captureId\n$text\n$END\n")
+            }
             handler.post {
                 if (!isDestroyed) {
                     running = false

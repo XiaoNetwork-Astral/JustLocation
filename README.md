@@ -46,9 +46,12 @@ Amap, Tencent and Baidu place search use separate WebService keys. The `maps` en
 
 ## Development
 
+GNSS simulation provides GPS L1 C/A navigation messages, raw measurements and satellite status from one offline synthetic orbit model. LNAV includes parity, time, clock parameters, ephemerides and the 25-page cycle. Measurements account for propagation time and Earth rotation. The model uses ideal satellite clocks and no atmospheric errors; it does not relay real satellite broadcasts. GNSS and NMEA default to disabled and respect the selected application scope.
+
 ```sh
 node build.mjs test         # Rust, TypeScript and React tests
 node build.mjs test:android # Android JVM tests
+node --test integration/gnss-model.test.mjs # Independent decoder and position solver; requires JDK
 node build.mjs help         # All build and test commands
 ```
 

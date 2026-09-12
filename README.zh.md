@@ -46,9 +46,12 @@ justlocationd scode import --without-wifi < location.scode > imported-address.js
 
 ## 开发
 
+GNSS 模拟支持 GPS L1 C/A 导航电文、原始测量与卫星状态，使用同一套离线合成轨道。LNAV 包含奇偶校验、时间、钟差、星历和 25 页轮播数据；原始测量包含传播时间和地球自转修正。模拟使用理想时钟和无大气误差模型，不提供真实卫星广播内容。GNSS 与 NMEA 开关默认关闭，输出受应用作用范围约束。
+
 ```sh
 node build.mjs test         # Rust、TypeScript 和 React 测试
 node build.mjs test:android # Android JVM 测试
+node --test integration/gnss-model.test.mjs # 独立解码与定位求解；需要 JDK
 node build.mjs help         # 全部构建与测试命令
 ```
 

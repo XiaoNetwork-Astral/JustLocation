@@ -1,14 +1,14 @@
-//! GNSS status and NMEA configuration. Status uses preset satellite data;
-//! NMEA suppression drops matching callbacks without synthesizing sentences.
+//! GNSS and NMEA configuration. The bridge synthesizes status, LNAV and raw GPS
+//! measurements from one orbit model, and NMEA from the simulated position.
 
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct GnssConfig {
-    /// Deliver preset GNSS/GPS status callbacks.
+    /// Deliver synthetic GNSS status, measurements and navigation messages.
     pub gnss_enabled: bool,
-    /// Suppress NMEA callbacks within the configured scope.
+    /// Deliver synthetic NMEA within the configured scope.
     pub nmea_enabled: bool,
 }
 

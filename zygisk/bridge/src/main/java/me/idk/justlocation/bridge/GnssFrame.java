@@ -10,20 +10,24 @@ import java.util.Locale;
 /** Position and time shared by satellite status, NMEA and raw GNSS output. */
 final class GnssFrame {
     record Satellite(int id, float cn0, float elevation, float azimuth) {}
-    private static final List<Satellite> SATELLITES =
-            List.of(new Satellite(3, 38, 24, 35), new Satellite(7, 42, 61, 85),
-                    new Satellite(11, 35, 18, 135), new Satellite(14, 44, 72, 180),
-                    new Satellite(19, 40, 46, 225), new Satellite(22, 37, 31, 270),
-                    new Satellite(26, 41, 55, 310), new Satellite(30, 36, 22, 350));
+    final GpsEpoch gps;
+    private final List<Satellite> satellites;
     private static final DateTimeFormatter TIME =
             DateTimeFormatter.ofPattern("HHmmss.SSS", Locale.ROOT).withZone(ZoneOffset.UTC);
     private static final DateTimeFormatter DATE =
             DateTimeFormatter.ofPattern("ddMMyy", Locale.ROOT).withZone(ZoneOffset.UTC);
     final long timestampMs;
+    final long elapsedNanos;
+    final int discontinuities;
     private final double latitude, longitude, altitude, speed, bearing;
 
     GnssFrame(double latitude, double longitude, double altitude, double speed, double bearing,
             long timestampMs) {
+        this(latitude, longitude, altitude, speed, bearing, timestampMs,
+                GpsOrbit.gpsMillis(timestampMs) * 1000000L, 0, 0);
+    }
+    GnssFrame(double latitude, double longitude, double altitude, double speed, double bearing,
+            long timestampMs, long gpsNanos, long elapsedNanos, int discontinuities) {
         if (!Double.isFinite(latitude) || Math.abs(latitude) > 90 || !Double.isFinite(longitude)
                 || Math.abs(longitude) > 180 || !Double.isFinite(altitude)
                 || !Double.isFinite(speed) || speed < 0 || !Double.isFinite(bearing) || bearing < 0
@@ -36,10 +40,18 @@ final class GnssFrame {
         this.speed = speed;
         this.bearing = bearing;
         this.timestampMs = timestampMs;
+        this.elapsedNanos = elapsedNanos;
+        this.discontinuities = discontinuities;
+        gps = new GpsEpoch(latitude, longitude, altitude, speed, bearing, timestampMs, gpsNanos);
+        satellites = gps.observations.stream()
+                             .map(s
+                                     -> new Satellite(
+                                             s.orbit().id(), s.cn0(), s.elevation(), s.azimuth()))
+                             .toList();
     }
 
     List<Satellite> satellites() {
-        return SATELLITES;
+        return satellites;
     }
 
     /** Read-only speed for deriving the pseudorange rate. */
@@ -59,10 +71,13 @@ final class GnssFrame {
                 sentence(format("GPGGA,%s,%s,1,08,1.0,%.3f,M,0.000,M,,", time, point, altitude)));
         result.add(sentence(format("GPRMC,%s,A,%s,%.3f,%.3f,%s,,,A", time, point,
                 speed / 0.5144444444444445, bearing, DATE.format(instant))));
-        result.add(sentence("GPGSA,A,3,03,07,11,14,19,22,26,30,,,,,1.5,1.0,1.1"));
+        StringBuilder gsa = new StringBuilder("GPGSA,A,3");
+        for (Satellite satellite : satellites)
+            gsa.append(format(",%02d", satellite.id()));
+        result.add(sentence(gsa + ",,,,,1.5,1.0,1.1"));
         for (int page = 0; page < 2; page++) {
             StringBuilder body = new StringBuilder("GPGSV,2," + (page + 1) + ",08");
-            for (Satellite satellite : SATELLITES.subList(page * 4, page * 4 + 4)) {
+            for (Satellite satellite : satellites.subList(page * 4, page * 4 + 4)) {
                 body.append(format(",%02d,%02.0f,%03.0f,%02.0f", satellite.id, satellite.elevation,
                         satellite.azimuth, satellite.cn0));
             }
