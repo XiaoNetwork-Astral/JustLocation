@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<FrameLayout android:layout_width="match_parent" android:layout_height="match_parent"
-  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
-    <com.lerist.lib.factory.widget.LWebView android:id="@id/a56" android:layout_width="match_parent" android:layout_height="match_parent" />
-    <ProgressBar android:id="@id/a53" android:background="@color/a1e" android:visibility="gone" android:layout_width="match_parent" android:layout_height="2.0dp" style="?android:progressBarStyleHorizontal" />
-</FrameLayout>

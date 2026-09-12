@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<merge android:layout_width="wrap_content" android:layout_height="wrap_content"
-  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
-    <carbon.widget.LinearLayout android:orientation="horizontal" android:id="@id/hf" android:background="?ed" android:paddingLeft="24.0dp" android:paddingRight="8.0dp" android:fitsSystemWindows="false" android:layout_width="wrap_content" android:layout_height="wrap_content" android:maxWidth="568.0dp" android:maxHeight="80.0dp" android:minWidth="288.0dp" android:minHeight="48.0dp">
-        <carbon.widget.TextView android:textAppearance="?gq" android:gravity="center_vertical" android:id="@id/h6" android:layout_width="0.0dp" android:layout_height="match_parent" android:maxLines="2" android:layout_weight="1.0" />
-        <carbon.widget.Button android:textColor="?k0" android:id="@id/gk" android:visibility="invisible" android:layout_width="wrap_content" android:layout_height="36.0dp" android:layout_marginTop="6.0dp" android:layout_marginBottom="6.0dp" app:g9="?g_" />
-    </carbon.widget.LinearLayout>
-</merge>

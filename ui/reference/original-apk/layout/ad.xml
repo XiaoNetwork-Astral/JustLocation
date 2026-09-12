@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout android:layout_width="match_parent" android:layout_height="match_parent"
-  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
-    <com.lerist.lib.factory.widget.LRecyclerView android:id="@id/cm" android:paddingBottom="@dimen/fw" android:clipToPadding="false" android:layout_width="match_parent" android:layout_height="match_parent" />
-    <com.google.android.material.floatingactionbutton.FloatingActionButton android:id="@id/cl" android:clickable="true" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="150.0dp" android:tint="@color/ix" android:layout_marginEnd="@dimen/fa" app:bm="@color/a1e" app:qe="vj" app:vt="@id/cj" app:vu="i4|a3x" app:a73="@drawable/ns" />
-    <com.google.android.material.floatingactionbutton.FloatingActionButton android:id="@id/cj" android:clickable="true" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="@dimen/f4" android:tint="@color/ix" android:layout_marginEnd="@dimen/fa" app:bm="@color/a1e" app:qe="vj" app:vt="@id/ck" app:vu="i4|a3x" app:a73="@drawable/nl" />
-    <com.google.android.material.floatingactionbutton.FloatingActionButton android:id="@id/ck" android:clickable="true" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="@dimen/ff" android:layout_marginEnd="@dimen/fa" app:bm="@color/ix" app:vt="@id/cm" app:vu="mm|fn" app:a73="@drawable/no" />
-</androidx.coordinatorlayout.widget.CoordinatorLayout>

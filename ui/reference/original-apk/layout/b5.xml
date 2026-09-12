@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent"
-  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
-    <carbon.widget.TextView android:textSize="14.0sp" android:textColor="?android:textColorSecondary" android:ellipsize="end" android:gravity="center_vertical" android:id="@id/hk" android:paddingLeft="@dimen/cu" android:paddingRight="@dimen/cu" android:layout_width="match_parent" android:layout_height="match_parent" android:maxLines="1" android:singleLine="true" app:ew="carbon/Roboto-Medium.ttf" />
-</LinearLayout>

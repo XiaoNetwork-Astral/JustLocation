@@ -31,11 +31,7 @@ function bridgeDex() {
   const bridgeDir = join(output, 'bridge');
   mkdirSync(bridgeDir, { recursive: true });
   const jar = process.env.JAVA_HOME ? join(process.env.JAVA_HOME, 'bin', `jar${exe}`) : `jar${exe}`;
-  // 每次从**本次的编译产物**重新生成输入 jar，再交给 d8。
-  //
-  // 原先的写法是把 AAR 解开取 classes.jar，但 `jar xf` 不覆盖已存在的文件：
-  // 中间 jar 一旦陈旧，d8 就会把旧类编成 DEX —— 源码改了、模块没变，而时间戳和哈希都自洽，
-  // 极难发现（本轮就在真机上踩了两次）。
+  // Rebuild the input jar from current compiler output so d8 cannot reuse stale classes.
   const classes = join(root, 'zygisk/bridge/build/tmp/kotlin-classes/release');
   const javac = join(root, 'zygisk/bridge/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes');
   const inputs = [classes, javac].filter(existsSync);
@@ -55,7 +51,7 @@ function bridgeDex() {
   run(jar, ['xf', join(bridgeDir, 'classes.zip'), 'classes.dex'], bridgeDir);
 }
 
-// 独立进程探针的编译属于 Zygisk；跨模块脚本只组合产物并运行设备验收。
+// Zygisk builds its probes; integration scripts compose artifacts and run device checks.
 export function probe() {
   bridge();
   native('justlocation_probe');

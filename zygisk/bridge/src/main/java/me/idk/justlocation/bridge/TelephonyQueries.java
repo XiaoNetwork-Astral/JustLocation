@@ -6,9 +6,8 @@ import java.lang.reflect.Method;
 import java.util.List;
 import java.util.function.Function;
 
-/** Android 15 PhoneInterfaceManager: substitute only downstream of its permission checks. */
+/** Android 15 PhoneInterfaceManager adapter; replace results after permission checks. */
 final class TelephonyQueries {
-    interface Installer { void install(Method target, MethodHook.Around around) throws Exception; }
     interface Output {
         List<?> cells(int subscriptionId) throws Exception;
         Object identity(int subscriptionId) throws Exception;
@@ -26,7 +25,8 @@ final class TelephonyQueries {
         cached = service.getDeclaredMethod("getCachedCellInfo");
         request = service.getDeclaredMethod("sendRequest", int.class, Object.class, Integer.class,
                 phone, workSource, long.class);
-        async = service.getDeclaredMethod("sendRequestAsync", int.class, Object.class, phone, workSource);
+        async = service.getDeclaredMethod(
+                "sendRequestAsync", int.class, Object.class, phone, workSource);
         all = service.getDeclaredMethod("getAllCellInfo", String.class, String.class);
         location = service.getDeclaredMethod("getCellLocation", String.class, String.class);
         update = service.getDeclaredMethod("requestCellInfoUpdateInternal", int.class, callback,
@@ -38,27 +38,35 @@ final class TelephonyQueries {
         updateCommand = constant(service, "CMD_REQUEST_CELL_INFO_UPDATE", 66);
     }
 
-    void install(Installer installer) throws Exception {
+    void install(MethodHook.Installer installer) throws Exception {
         installer.install(cached, call -> {
             Output output = current();
             return output == null ? call.original() : output.cells(Integer.MAX_VALUE);
         });
         installer.install(request, call -> {
             int command = (int) call.arguments[1];
-            if (command != allCommand && command != locationCommand) return call.original();
+            if (command != allCommand && command != locationCommand)
+                return call.original();
             Output output = current();
-            if (output == null) return call.original();
+            if (output == null)
+                return call.original();
             int subscription = call.arguments[4] == null ? (int) call.arguments[3]
-                    : (int) subId.invoke(call.arguments[4]);
-            return command == allCommand ? output.cells(subscription) : output.identity(subscription);
+                                                         : (int) subId.invoke(call.arguments[4]);
+            return command == allCommand ? output.cells(subscription)
+                                         : output.identity(subscription);
         });
         installer.install(async, call -> {
-            if ((int) call.arguments[1] != updateCommand) return call.original();
+            if ((int) call.arguments[1] != updateCommand)
+                return call.original();
             Output output = current();
-            if (output == null) return call.original();
+            if (output == null)
+                return call.original();
             List<?> cells = output.cells((int) subId.invoke(call.arguments[3]));
-            try { deliver.invoke(call.arguments[2], cells); }
-            catch (InvocationTargetException error) { throw error.getCause(); }
+            try {
+                deliver.invoke(call.arguments[2], cells);
+            } catch (InvocationTargetException error) {
+                throw error.getCause();
+            }
             return null;
         });
         installer.install(all, call -> withCaller(call, 1));
@@ -74,15 +82,25 @@ final class TelephonyQueries {
 
     private Object withCaller(MethodHook.Call call, int index) throws Throwable {
         String previous = caller.get();
-        try { caller.set((String) call.arguments[index]); return call.original(); }
-        finally { if (previous == null) caller.remove(); else caller.set(previous); }
+        try {
+            caller.set((String) call.arguments[index]);
+            return call.original();
+        } finally {
+            if (previous == null)
+                caller.remove();
+            else
+                caller.set(previous);
+        }
     }
 
     private static int constant(Class<?> type, String name, int android15Value) throws Exception {
         try {
-            Field field = type.getDeclaredField(name); field.setAccessible(true); return field.getInt(null);
+            Field field = type.getDeclaredField(name);
+            field.setAccessible(true);
+            return field.getInt(null);
         } catch (NoSuchFieldException removedByOptimizer) {
-            // Verified in android-15.0.0_r1 and the API 35 AVD TeleService DEX. ROMs need the same check.
+            // Verified in android-15.0.0_r1 and the API 35 AVD TeleService DEX. ROMs need the same
+            // check.
             return android15Value;
         }
     }

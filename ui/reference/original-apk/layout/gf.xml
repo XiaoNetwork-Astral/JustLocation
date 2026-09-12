@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<merge
-  xmlns:android="http://schemas.android.com/apk/res/android">
-    <RelativeLayout android:id="@id/q0" android:paddingTop="2.0sp" android:clipToPadding="false" android:layout_width="match_parent" android:layout_height="wrap_content" android:contentDescription="@string/a3g">
-        <com.stripe.android.paymentsheet.ui.PrimaryButton android:id="@id/q2" android:visibility="invisible" android:layout_width="match_parent" android:layout_height="@dimen/a07" />
-        <com.google.android.gms.wallet.button.PayButton android:id="@id/q1" android:layout_width="match_parent" android:layout_height="wrap_content" />
-    </RelativeLayout>
-</merge>

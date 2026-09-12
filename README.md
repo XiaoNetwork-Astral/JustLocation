@@ -4,8 +4,6 @@ English | [中文](README.zh.md)
 
 A Zygisk module for Android location simulation, with route playback and a floating joystick.
 
-Developed for Android 15 (ARM64), KernelSU and Zygisk Next. The React control panel is available as source but is currently not included in the module.
-
 ## Build
 
 Requires Node.js, Rust 1.89+ with rustup, JDK 21 and the Android SDK. Set `ANDROID_HOME` or `sdk.dir` in `tool/gradle/local.properties`. Toolchain versions are defined in [project-config.json](project-config.json).
@@ -26,8 +24,6 @@ node build.mjs test         # Rust, TypeScript and React tests
 node build.mjs test:android # Android JVM tests
 node build.mjs help         # All build and test commands
 ```
-
-See the [control protocol](integration/CONTRACT.md) and [UI development guide](ui/README.md) for details.
 
 ## Credits
 

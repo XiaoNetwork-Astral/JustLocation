@@ -5,9 +5,32 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Arrays;
 
-/** LSPlant's Object[] callback convention, independent of Android service classes. */
+/** LSPlant method hooks and Object[] callbacks, independent of Android service classes. */
 public final class MethodHook {
-    public interface Around { Object invoke(Call call) throws Throwable; }
+    public interface Around {
+        Object invoke(Call call) throws Throwable;
+    }
+    interface Installer {
+        void install(Method target, Around around) throws Exception;
+    }
+
+    interface NativeHook {
+        Method hook(Method target, Object callback, Method method);
+    }
+
+    static void install(Method target, Around around, NativeHook nativeHook) throws Exception {
+        target.setAccessible(true);
+        MethodHook callback = new MethodHook(target, around);
+        // Concurrent callbacks wait until the backup method is published.
+        synchronized (callback) {
+            Method backup = nativeHook.hook(
+                    target, callback, MethodHook.class.getMethod("callback", Object[].class));
+            if (backup == null)
+                throw new IllegalStateException("Cannot hook " + target);
+            callback.setBackup(backup);
+        }
+    }
+
     private final boolean isStatic;
     private final Around around;
     private Method backup;
@@ -24,7 +47,9 @@ public final class MethodHook {
 
     public Object callback(Object[] arguments) throws Throwable {
         Method original;
-        synchronized (this) { original = backup; }
+        synchronized (this) {
+            original = backup;
+        }
         return around.invoke(new Call(original, arguments, isStatic));
     }
 
@@ -40,8 +65,11 @@ public final class MethodHook {
         public Object original() throws Throwable {
             try {
                 return isStatic ? backup.invoke(null, arguments)
-                        : backup.invoke(arguments[0], Arrays.copyOfRange(arguments, 1, arguments.length));
-            } catch (InvocationTargetException error) { throw error.getCause(); }
+                                : backup.invoke(arguments[0],
+                                          Arrays.copyOfRange(arguments, 1, arguments.length));
+            } catch (InvocationTargetException error) {
+                throw error.getCause();
+            }
         }
     }
 }

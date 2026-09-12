@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout android:orientation="horizontal" android:id="@id/uw" android:layout_width="wrap_content" android:layout_height="wrap_content" android:baselineAligned="false" android:layoutDirection="ltr"
-  xmlns:android="http://schemas.android.com/apk/res/android">
-    <include android:id="@id/v5" layout="@layout/dx" />
-    <include layout="@layout/dr" />
-    <include android:id="@id/v8" layout="@layout/dx" />
-</LinearLayout>

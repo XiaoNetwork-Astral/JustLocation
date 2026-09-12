@@ -17,7 +17,8 @@ inline void* load_library(int directory, const char* name) {
     info.library_fd = fd;
     void* handle = android_dlopen_ext(name, RTLD_NOW | RTLD_GLOBAL | RTLD_NODELETE, &info);
     close(fd);
-    if (!handle) __android_log_print(ANDROID_LOG_ERROR, "JustLocation", "dlopen %s: %s", name, dlerror());
+    if (!handle)
+        __android_log_print(ANDROID_LOG_ERROR, "JustLocation", "dlopen %s: %s", name, dlerror());
     return handle;
 }
 
@@ -26,10 +27,14 @@ inline void* load_library(int directory, const char* name) {
 // preloading that library would skip the constructor scan that it needs.
 inline bool prepare_shadowhook(int directory, bool debug = false) {
     void* shadow = load_library(directory, "libshadowhook.so");
-    if (!shadow) return false;
+    if (!shadow)
+        return false;
     auto init = reinterpret_cast<int (*)(int, bool)>(dlsym(shadow, "shadowhook_init"));
-    if (!init) return false;
-    int error = init(1, debug); // SHADOWHOOK_MODE_UNIQUE (avoid a link dependency in the entry).
-    if (error) __android_log_print(ANDROID_LOG_ERROR, "JustLocation", "ShadowHook initialization failed: %d", error);
+    if (!init)
+        return false;
+    int error = init(1, debug);  // SHADOWHOOK_MODE_UNIQUE (avoid a link dependency in the entry).
+    if (error)
+        __android_log_print(ANDROID_LOG_ERROR, "JustLocation",
+                            "ShadowHook initialization failed: %d", error);
     return error == 0;
 }

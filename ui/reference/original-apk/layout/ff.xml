@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<merge
-  xmlns:android="http://schemas.android.com/apk/res/android">
-    <View android:id="@id/z1" android:background="@color/x_" android:layout_width="match_parent" android:layout_height="1.0dp" android:layout_marginStart="@dimen/x_" />
-    <FrameLayout android:layout_width="match_parent" android:layout_height="wrap_content">
-        <ProgressBar android:layout_gravity="center_vertical" android:id="@id/z4" android:padding="3.0dp" android:layout_width="@dimen/x8" android:layout_height="@dimen/x8" android:indeterminate="true" android:layout_marginStart="@dimen/x7" android:indeterminateTint="@color/x7" android:indeterminateTintMode="src_atop" style="@style/wf" />
-        <ImageView android:id="@id/z0" android:layout_width="wrap_content" android:layout_height="@dimen/x3" android:src="@drawable/oi" android:scaleType="center" android:contentDescription="@string/wb" android:layout_marginStart="@dimen/x_" />
-    </FrameLayout>
-</merge>

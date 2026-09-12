@@ -1,6 +1,11 @@
 # Local assistant configuration, private inputs, and historical references
 /.deepseek/
 
+# Local analysis material and machine-specific emulator helpers
+/ui/reference/
+/tool/avd.ps1
+/tool/avd-console.mjs
+
 # Private scratch notes
 草稿纸.md
 

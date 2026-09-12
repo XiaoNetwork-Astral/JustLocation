@@ -4,8 +4,6 @@
 
 用于 Android 定位模拟的 Zygisk 模块，支持路线回放和悬浮摇杆。
 
-面向 Android 15（ARM64）、KernelSU 和 Zygisk Next 开发。React 控制面板保留源码，目前不随模块打包。
-
 ## 构建
 
 需要 Node.js、Rust 1.89+（通过 rustup 安装）、JDK 21 和 Android SDK。设置 `ANDROID_HOME`，或在 `tool/gradle/local.properties` 中配置 `sdk.dir`。工具链版本见 [project-config.json](project-config.json)。
@@ -26,8 +24,6 @@ node build.mjs test         # Rust、TypeScript 和 React 测试
 node build.mjs test:android # Android JVM 测试
 node build.mjs help         # 全部构建与测试命令
 ```
-
-更多细节见[控制协议](integration/CONTRACT.md)和 [UI 开发说明](ui/README.md)。
 
 ## 致谢
 

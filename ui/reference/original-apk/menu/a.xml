@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<menu
-  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
-    <item android:id="@id/e9" android:orderInCategory="100" android:title="@string/fs" app:a62="xj" />
-    <item android:id="@id/e_" android:visible="false" android:orderInCategory="100" android:title="@string/ft" app:a62="xj" />
-    <item android:id="@id/dz" android:orderInCategory="100" android:title="@string/fr" app:a62="xj" />
-</menu>

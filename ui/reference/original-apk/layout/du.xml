@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<merge android:layout_gravity="center" android:id="@id/uy" android:layout_width="256.0dp" android:layout_height="256.0dp"
-  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
-    <com.google.android.material.timepicker.ClockHandView android:id="@id/uz" android:tag="skip" android:layout_width="match_parent" android:layout_height="match_parent" app:w5="yg" app:wa="yg" app:wu="yg" app:wy="yg" app:a5j="24.0dp" />
-</merge>

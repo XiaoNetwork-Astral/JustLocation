@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<carbon.widget.LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content"
-  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
-    <carbon.widget.ImageView android:id="@id/hp" android:layout_width="@dimen/d5" android:layout_height="@dimen/d3" android:layout_marginLeft="@dimen/d4" android:layout_marginRight="@dimen/d7" android:layout_marginStart="@dimen/d4" android:layout_marginEnd="@dimen/d7" app:f8="xo" app:fz="xo" style="@style/a49" />
-    <carbon.widget.TextView android:textAppearance="?h0" android:ellipsize="end" android:layout_gravity="center_vertical" android:id="@id/hq" android:visibility="gone" android:layout_width="0.0dp" android:layout_height="wrap_content" android:layout_marginLeft="@dimen/da" android:text="" android:maxLines="1" android:layout_weight="1.0" android:layout_marginStart="@dimen/da" />
-    <carbon.widget.LinearLayout android:gravity="end|center" android:orientation="horizontal" android:id="@id/ho" android:paddingRight="@dimen/d4" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minHeight="@dimen/d3" android:layout_centerVertical="true" android:layoutDirection="locale" android:paddingEnd="@dimen/d4" />
-</carbon.widget.LinearLayout>

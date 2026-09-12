@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content"
-  xmlns:android="http://schemas.android.com/apk/res/android">
-    <CheckedTextView android:textAppearance="?android:textAppearanceLarge" android:textColor="?android:textColorAlertDialogListItem" android:ellipsize="marquee" android:gravity="center_vertical" android:id="@id/rf" android:duplicateParentState="true" android:layout_width="match_parent" android:layout_height="wrap_content" android:checkMark="?android:listChoiceIndicatorSingle" android:minHeight="?android:listPreferredItemHeight" android:paddingStart="12.0dp" android:paddingEnd="7.0dp" />
-    <TextView android:id="@id/re" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="@dimen/fy" />
-</LinearLayout>

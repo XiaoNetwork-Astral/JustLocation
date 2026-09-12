@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout android:layout_width="match_parent" android:layout_height="match_parent"
-  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
-    <com.lerist.lib.factory.widget.LFragmentContainer android:id="@id/v" android:layout_width="match_parent" android:layout_height="match_parent" />
-    <com.google.android.material.floatingactionbutton.FloatingActionButton android:id="@id/u" android:clickable="true" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="@dimen/fw" android:layout_marginEnd="@dimen/ff" app:bm="@color/ix" app:vt="@id/v" app:vu="mm|fn" app:a73="@drawable/nl" />
-</androidx.coordinatorlayout.widget.CoordinatorLayout>

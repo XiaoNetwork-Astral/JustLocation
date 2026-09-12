@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout android:orientation="horizontal" android:addStatesFromChildren="true" android:layout_width="match_parent" android:layout_height="wrap_content" android:foreground="?a5g"
-  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
-    <carbon.widget.ImageView android:layout_gravity="bottom" android:id="@id/ss" android:padding="@dimen/fr" android:visibility="gone" android:layout_width="@dimen/ff" android:layout_height="@dimen/ff" android:layout_marginLeft="@dimen/f5" android:src="@mipmap/s" android:alpha="0.6" app:h5="@color/a1e" />
-    <com.lerist.lib.ads.widget.AdTextView android:textSize="@dimen/f3" android:textStyle="bold" android:textColor="@color/l9" android:id="@id/st" android:paddingTop="@dimen/fm" android:paddingBottom="@dimen/fm" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" android:alpha="0.6" />
-</LinearLayout>

@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content"
-  xmlns:android="http://schemas.android.com/apk/res/android">
-    <TextView android:textSize="@dimen/fb" android:textStyle="bold" android:textColor="@color/l5" android:id="@id/a4a" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="选择题" />
-    <com.lerist.lib.factory.widget.LRecyclerView android:id="@id/uf" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/fa" />
-</LinearLayout>

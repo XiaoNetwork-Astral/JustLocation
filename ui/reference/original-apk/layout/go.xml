@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout android:gravity="center" android:orientation="vertical" android:background="?android:colorBackground" android:paddingTop="30.0dp" android:paddingBottom="30.0dp" android:layout_width="match_parent" android:layout_height="match_parent"
-  xmlns:android="http://schemas.android.com/apk/res/android">
-    <ImageView android:id="@id/fv" android:visibility="gone" android:layout_width="96.0dp" android:layout_height="63.0dp" android:layout_marginLeft="40.0dp" android:layout_marginRight="40.0dp" android:layout_marginBottom="36.0dp" android:contentDescription="@null" />
-    <com.google.android.material.progressindicator.CircularProgressIndicator android:id="@id/zr" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="20.0dp" android:indeterminate="true" style="@style/a1s" />
-    <TextView android:textSize="14.0sp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/y2" />
-</LinearLayout>

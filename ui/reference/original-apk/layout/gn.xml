@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<merge
-  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
-    <androidx.compose.ui.platform.ComposeView android:gravity="center" android:layout_gravity="center" android:id="@id/tv" android:layout_width="match_parent" android:layout_height="wrap_content" />
-    <ImageView android:layout_gravity="end|center" android:id="@id/ud" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/ib" android:contentDescription="@null" android:layout_marginStart="@dimen/a0k" android:layout_marginEnd="@dimen/a0k" />
-    <com.google.android.material.progressindicator.CircularProgressIndicator android:layout_gravity="end|center" android:id="@id/iv" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:indeterminate="true" android:layout_marginStart="@dimen/a0k" android:layout_marginEnd="@dimen/a0k" app:ty="@color/a01" app:u2="@dimen/a0l" app:ac6="1.0dp" />
-    <ImageView android:layout_gravity="end|center" android:id="@id/iu" android:visibility="invisible" android:layout_width="@dimen/a0l" android:layout_height="@dimen/a0l" android:src="@drawable/jf" android:contentDescription="@null" android:layout_marginStart="@dimen/a0k" android:layout_marginEnd="@dimen/a0k" />
-</merge>

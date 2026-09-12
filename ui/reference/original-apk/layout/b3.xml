@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<carbon.widget.RelativeLayout android:paddingLeft="12.0dp" android:paddingRight="12.0dp" android:layout_width="match_parent" android:layout_height="match_parent" app:g9="?g9"
-  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
-    <TextView android:textSize="1.0sp" android:id="@id/h2" android:layout_width="1.0dp" android:layout_height="1.0dp" android:layout_marginBottom="20.0dp" android:layout_alignParentBottom="true" />
-    <carbon.widget.TextView android:textSize="14.0sp" android:textColor="@drawable/ch" android:gravity="center" android:id="@id/hg" android:duplicateParentState="true" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_alignBaseline="@id/h2" app:ew="carbon/Roboto-Medium.ttf" />
-</carbon.widget.RelativeLayout>

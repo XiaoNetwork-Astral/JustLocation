@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout android:orientation="horizontal" android:background="@drawable/lx" android:paddingTop="@dimen/yu" android:paddingBottom="@dimen/yu" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/yp" android:paddingStart="@dimen/zo" android:paddingEnd="@dimen/zm"
-  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
-    <androidx.appcompat.widget.AppCompatImageView android:layout_gravity="start|center" android:layout_width="@dimen/zr" android:layout_height="wrap_content" android:tint="?k0" app:a73="@drawable/go" />
-    <androidx.appcompat.widget.AppCompatTextView android:textAppearance="@android:style/TextAppearance.DeviceDefault.Medium" android:textColor="?k0" android:layout_gravity="start|center" android:id="@id/tv" android:layout_width="0.0dp" android:layout_height="wrap_content" android:layout_weight="1.0" android:layout_marginStart="@dimen/zo" />
-</LinearLayout>

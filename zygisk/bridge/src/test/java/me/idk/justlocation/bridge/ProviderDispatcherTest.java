@@ -1,26 +1,36 @@
 package me.idk.justlocation.bridge;
 
-import org.junit.Test;
+import static org.junit.Assert.*;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
-import static org.junit.Assert.*;
+
+import org.junit.Test;
 
 public class ProviderDispatcherTest {
     public static class Identity {
         final String name;
-        Identity(String name) { this.name = name; }
-        public String getPackageName() { return name; }
+        Identity(String name) {
+            this.name = name;
+        }
+        public String getPackageName() {
+            return name;
+        }
     }
     public static class Registration {
         final Identity identity;
         final boolean active, permitted;
         final List<String> received = new ArrayList<>();
         Registration(String name, boolean active, boolean permitted) {
-            identity = new Identity(name); this.active = active; this.permitted = permitted;
+            identity = new Identity(name);
+            this.active = active;
+            this.permitted = permitted;
         }
-        public Identity getIdentity() { return identity; }
+        public Identity getIdentity() {
+            return identity;
+        }
         Object acceptLocationChange(String point) {
             return permitted ? (Runnable) () -> received.add(point) : null;
         }
@@ -29,21 +39,29 @@ public class ProviderDispatcherTest {
         final List<Registration> registrations = new ArrayList<>();
         protected final void deliverToListeners(Function<Registration, Object> action) {
             for (Registration registration : registrations) {
-                if (!registration.active) continue;
+                if (!registration.active)
+                    continue;
                 Runnable operation = (Runnable) action.apply(registration);
-                if (operation != null) operation.run();
+                if (operation != null)
+                    operation.run();
             }
         }
     }
     public static class Provider extends Multiplexer {
-        public String getName() { return "gps"; }
+        public String getName() {
+            return "gps";
+        }
     }
     private ProviderDispatcher dispatcher() throws Exception {
-        return new ProviderDispatcher(Provider.class, Registration.class, String.class, Identity.class);
+        return new ProviderDispatcher(
+                Provider.class, Registration.class, String.class, Identity.class);
     }
-    private SessionSnapshot selected() { return new SessionSnapshot(true, false, Set.of("selected"), 1000); }
+    private SessionSnapshot selected() {
+        return new SessionSnapshot(true, false, Set.of("selected"), 1000);
+    }
 
-    @Test public void deliversWithoutProviderEventButKeepsScopeAndPlatformFiltering() throws Exception {
+    @Test
+    public void deliversWithoutProviderEventButKeepsScopeAndPlatformFiltering() throws Exception {
         Provider provider = new Provider();
         Registration selected = new Registration("selected", true, true);
         Registration other = new Registration("other", true, true);
@@ -59,25 +77,31 @@ public class ProviderDispatcherTest {
         assertTrue(denied.received.isEmpty());
     }
 
-    @Test public void duplicateTrackingDoesNotDuplicateOutputAndRemovedListenersStayRemoved() throws Exception {
+    @Test
+    public void duplicateTrackingDoesNotDuplicateOutputAndRemovedListenersStayRemoved()
+            throws Exception {
         Provider provider = new Provider();
         Registration selected = new Registration("selected", true, true);
         provider.registrations.add(selected);
         ProviderDispatcher dispatcher = dispatcher();
-        dispatcher.track(provider); dispatcher.track(provider);
+        dispatcher.track(provider);
+        dispatcher.track(provider);
         dispatcher.dispatch(selected(), () -> 1500, name -> "first");
         provider.registrations.clear();
         dispatcher.dispatch(selected(), () -> 2000, name -> "second");
         assertEquals(List.of("first"), selected.received);
     }
 
-    @Test public void stoppedAndExpiredSnapshotsDoNotDeliver() throws Exception {
+    @Test
+    public void stoppedAndExpiredSnapshotsDoNotDeliver() throws Exception {
         Provider provider = new Provider();
         Registration selected = new Registration("selected", true, true);
         provider.registrations.add(selected);
-        ProviderDispatcher dispatcher = dispatcher(); dispatcher.track(provider);
-        dispatcher.dispatch(new SessionSnapshot(false, true, Set.of(), 1000), () -> 1500, name -> "stopped");
-        // 快照过期用的是 20 秒窗口（见 SessionSnapshot 的说明），所以这里要跨过 20 秒。
+        ProviderDispatcher dispatcher = dispatcher();
+        dispatcher.track(provider);
+        dispatcher.dispatch(
+                new SessionSnapshot(false, true, Set.of(), 1000), () -> 1500, name -> "stopped");
+        // Advance beyond the shared 20-second snapshot expiry window.
         dispatcher.dispatch(selected(), () -> 25_000, name -> "expired");
         assertTrue(selected.received.isEmpty());
     }

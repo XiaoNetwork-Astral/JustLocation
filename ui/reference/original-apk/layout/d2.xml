@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content"
-  xmlns:android="http://schemas.android.com/apk/res/android">
-    <TextView android:textAppearance="?android:textAppearanceListItemSmall" android:id="@android:id/text1" android:paddingTop="@dimen/fy" android:paddingBottom="@dimen/fm" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="?android:listPreferredItemPaddingStart" android:paddingEnd="?android:listPreferredItemPaddingEnd" />
-    <TextView android:textSize="@dimen/xi" android:id="@id/rr" android:paddingBottom="@dimen/fy" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="?android:listPreferredItemPaddingStart" android:paddingEnd="?android:listPreferredItemPaddingEnd" />
-</LinearLayout>

@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout android:orientation="vertical" android:id="@id/eg" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_margin="@dimen/yt"
-  xmlns:android="http://schemas.android.com/apk/res/android">
-    <com.stripe.android.view.CardMultilineWidget android:id="@id/hx" android:layout_width="match_parent" android:layout_height="wrap_content" />
-    <com.stripe.android.view.ShippingInfoWidget android:id="@id/fh" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="48.0dp" />
-</LinearLayout>

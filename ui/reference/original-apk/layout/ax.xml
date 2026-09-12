@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<carbon.widget.LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" app:g9="?g9"
-  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
-    <carbon.widget.ImageView android:id="@id/gz" android:padding="@dimen/cu" android:layout_width="@dimen/d3" android:layout_height="@dimen/d3" app:h5="?k6" />
-    <carbon.widget.TextView android:textAppearance="?gx" android:gravity="center_vertical" android:id="@id/h0" android:paddingLeft="@dimen/cu" android:paddingRight="@dimen/cu" android:layout_width="match_parent" android:layout_height="@dimen/d3" />
-</carbon.widget.LinearLayout>
