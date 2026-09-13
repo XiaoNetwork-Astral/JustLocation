@@ -4,6 +4,8 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
+#include <cstdio>
+#include <ctime>
 #include <lsplant.hpp>
 #include <string>
 
@@ -13,10 +15,43 @@
 namespace {
 int companion_fd = -1;
 
+// The handshake happens once per injection, so a discarded descriptor can never be replaced in
+// this process. Every later heartbeat then returns null, the Java snapshots expire at 20 seconds
+// and apps silently see real output again. Record why that happened instead of failing mute.
+long companion_failures = 0;
+long companion_last_failure_ms = 0;
+const char* companion_failure = "none";
+
+long monotonic_ms() {
+    timespec time{};
+    clock_gettime(CLOCK_MONOTONIC, &time);
+    return static_cast<long>(time.tv_sec) * 1000 + time.tv_nsec / 1000000;
+}
+
+/** Persist the reason and its time; the periodic heartbeat also logs the transition. */
+void note_failure(const char* reason) {
+    int error = errno;
+    ++companion_failures;
+    companion_last_failure_ms = monotonic_ms();
+    companion_failure = reason;
+    __android_log_print(
+            ANDROID_LOG_ERROR, "JustLocation",
+            "Companion state exchange failed: reason=%s errno=%d failures=%ld; the bridge "
+            "cannot rebuild the descriptor and will restore real output when the "
+            "current snapshot expires",
+            reason, error, companion_failures);
+}
+
 jstring exchange_state(JNIEnv* env, jint installed, jint wifi_calls,
                        const std::string* subscriptions, const std::string& extra, char op = 'S') {
-    if (companion_fd < 0)
+    if (companion_fd < 0) {
+        // Keep the first failure and its time instead of overwriting it on every poll.
+        if (!companion_failures) {
+            errno = EBADF;
+            note_failure("descriptor unavailable");
+        }
         return nullptr;
+    }
     uint32_t length = 0;
     // Encode Wi-Fi callback counts as a saturated, big-endian 16-bit value, separate from
     // readiness flags.
@@ -29,27 +64,37 @@ jstring exchange_state(JNIEnv* env, jint installed, jint wifi_calls,
     // Always write the extra-field length, including zero. The companion reads it before any
     // optional subscription payload.
     uint32_t extra_size = htonl(static_cast<uint32_t>(extra.size()));
+    const char* reason = nullptr;
+    errno = 0;
     if (!send_all(companion_fd, request, sizeof(request)) ||
         !send_all(companion_fd, &extra_size, sizeof(extra_size)) ||
         (!extra.empty() && !send_all(companion_fd, extra.data(), extra.size())) ||
         (subscriptions &&
          (!send_all(companion_fd, &size, sizeof(size)) ||
-          !send_all(companion_fd, subscriptions->data(), subscriptions->size()))) ||
-        !receive_all(companion_fd, &length, sizeof(length))) {
+          !send_all(companion_fd, subscriptions->data(), subscriptions->size())))) {
+        reason = "request write failed";
+    } else if (!receive_all(companion_fd, &length, sizeof(length))) {
+        reason = "reply header read failed";
+    }
+    if (reason) {
+        note_failure(reason);
         close(companion_fd);
         companion_fd = -1;
         return nullptr;
     }
     length = ntohl(length);
     if (length > 131072) {
+        note_failure("reply exceeds the size limit");
         close(companion_fd);
         companion_fd = -1;
         return nullptr;
     }
+    // A zero-length reply reports no state without breaking the connection.
     if (!length)
         return nullptr;
     std::string state(length, '\0');
     if (!receive_all(companion_fd, state.data(), length)) {
+        note_failure("reply body read failed");
         close(companion_fd);
         companion_fd = -1;
         return nullptr;
@@ -129,6 +174,15 @@ jboolean deoptimize_method(JNIEnv* env, jclass, jobject target) {
     return lsplant::Deoptimize(env, target);
 }
 
+/** Report the last companion failure so the heartbeat can log state transitions. */
+jstring companion_diagnostics(JNIEnv* env, jclass) {
+    char text[192];
+    snprintf(text, sizeof(text), "{\"failures\":%ld,\"reason\":\"%s\",\"age_ms\":%ld}",
+             companion_failures, companion_failure,
+             companion_last_failure_ms ? monotonic_ms() - companion_last_failure_ms : -1L);
+    return env->NewStringUTF(text);
+}
+
 }  // namespace
 
 bool register_bridge_natives(JNIEnv* env, jclass entry, int companion, bool phone) {
@@ -150,13 +204,16 @@ bool register_bridge_natives(JNIEnv* env, jclass entry, int companion, bool phon
         return false;
     if (!phone) {
         JNINativeMethod steps[] = {
+                {const_cast<char*>("companionDiagnostics"),
+                 const_cast<char*>("()Ljava/lang/String;"),
+                 reinterpret_cast<void*>(companion_diagnostics)},
                 {const_cast<char*>("installSteps"), const_cast<char*>("()Z"),
                  reinterpret_cast<void*>(install_steps)},
                 {const_cast<char*>("updateSteps"),
                  const_cast<char*>("(ZZ[Ljava/lang/String;JJ[I[I)V"),
                  reinterpret_cast<void*>(update_steps)},
         };
-        return env->RegisterNatives(entry, steps, 2) == JNI_OK;
+        return env->RegisterNatives(entry, steps, 3) == JNI_OK;
     }
     return true;
 }

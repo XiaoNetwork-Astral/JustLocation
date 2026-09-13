@@ -2,10 +2,13 @@ package me.idk.justlocation.probe
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Typeface
 import android.hardware.SensorManager
 import android.location.LocationManager
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -77,6 +80,7 @@ class ChannelCheckActivity : Activity() {
         if (running || isDestroyed) return
         val stepsOnly = intent?.getBooleanExtra("steps_only", false) == true
         val movementOnly = intent?.getBooleanExtra("movement_only", false) == true
+        val continuityOnly = intent?.getBooleanExtra("continuity_only", false) == true
         val gnssOnly = intent?.getBooleanExtra("gnss_only", false) == true
         val gnssDuration = intent?.getLongExtra("gnss_duration_ms", 65000) ?: 65000
         val permission =
@@ -84,6 +88,46 @@ class ChannelCheckActivity : Activity() {
             else Manifest.permission.ACCESS_FINE_LOCATION
         if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(permission), 1)
+            return
+        }
+        if (continuityOnly) {
+            if (
+                intent.hasExtra("amap_mode") &&
+                    !getSharedPreferences("amap_diagnostics", MODE_PRIVATE)
+                        .getBoolean("consent", false)
+            ) {
+                AlertDialog.Builder(this)
+                    .setTitle("高德定位 SDK 对照测试")
+                    .setMessage(
+                        "自检将使用高德定位 SDK，向高德发送定位及网络请求，并可能采集位置、GNSS、Wi-Fi、基站、传感器和设备信息。诊断结果保存在本机，用于比较定位来源。请阅读高德隐私政策后选择是否同意。"
+                    )
+                    .setNeutralButton("隐私政策") { _, _ ->
+                        startActivity(
+                            Intent(
+                                Intent.ACTION_VIEW,
+                                Uri.parse("https://lbs.amap.com/pages/privacy/"),
+                            )
+                        )
+                    }
+                    .setNegativeButton("取消", null)
+                    .setPositiveButton("同意并开始") { _, _ ->
+                        getSharedPreferences("amap_diagnostics", MODE_PRIVATE)
+                            .edit()
+                            .putBoolean("consent", true)
+                            .apply()
+                        run()
+                    }
+                    .show()
+                return
+            }
+            startForegroundService(
+                Intent(this, LocationCaptureService::class.java)
+                    .putExtra("duration_ms", intent?.getLongExtra("duration_ms", 180000) ?: 180000)
+                    .putExtra("amap_mode", intent.getStringExtra("amap_mode"))
+                    .putExtra("amap_cache", intent.getBooleanExtra("amap_cache", false))
+                    .putExtra("location_queries", intent.getBooleanExtra("location_queries", false))
+            )
+            summary.text = "Continuous location capture is running."
             return
         }
         running = true

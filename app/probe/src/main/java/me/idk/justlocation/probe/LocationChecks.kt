@@ -12,6 +12,8 @@ import android.os.CancellationSignal
 import android.os.Handler
 import android.os.Parcel
 import android.os.Parcelable
+import android.os.SystemClock
+import java.io.File
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
@@ -19,9 +21,97 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
+import org.json.JSONObject
 
 /** Location and satellite observations collected off the main thread. */
 internal class LocationChecks(private val manager: LocationManager, private val handler: Handler) {
+    /** Timestamped, independent platform callbacks for sustained location diagnosis. */
+    @SuppressLint("MissingPermission")
+    fun collectContinuity(
+        report: CheckReport,
+        durationMs: Long,
+        destination: File,
+        includeQueries: Boolean = false,
+    ) {
+        val samples = java.util.concurrent.ConcurrentLinkedQueue<String>()
+        val listeners = ArrayList<LocationListener>()
+        val providers =
+            mutableListOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+        if (includeQueries) {
+            for (provider in
+                listOf(LocationManager.FUSED_PROVIDER, LocationManager.PASSIVE_PROVIDER)) {
+                if (provider in manager.allProviders) providers.add(provider)
+            }
+        }
+        destination.writeText("")
+        try {
+            for (provider in providers) {
+                val listener = LocationListener { fix ->
+                    samples.add(locationRow("callback", provider, fix).toString())
+                }
+                manager.requestLocationUpdates(provider, 500L, 0f, listener, handler.looper)
+                listeners.add(listener)
+            }
+            val end = SystemClock.elapsedRealtime() + durationMs
+            var nextQuery = 0L
+            while (SystemClock.elapsedRealtime() < end) {
+                if (includeQueries && SystemClock.elapsedRealtime() >= nextQuery) {
+                    for (provider in providers) {
+                        val row =
+                            try {
+                                locationRow(
+                                    "last_known",
+                                    provider,
+                                    manager.getLastKnownLocation(provider),
+                                )
+                            } catch (error: Exception) {
+                                locationRow("last_known", provider, null)
+                                    .put("error_class", error.javaClass.name)
+                            }
+                        samples.add(row.toString())
+                    }
+                    nextQuery = SystemClock.elapsedRealtime() + 1000
+                }
+                Thread.sleep(500)
+                destination.appendText(
+                    buildString {
+                        while (true) appendLine(samples.poll() ?: break)
+                    }
+                )
+            }
+            report.line("Continuous location capture completed: ${durationMs}ms")
+        } finally {
+            listeners.forEach { manager.removeUpdates(it) }
+            destination.appendText(
+                buildString {
+                    while (true) appendLine(samples.poll() ?: break)
+                }
+            )
+        }
+    }
+
+    private fun locationRow(event: String, provider: String, fix: Location?): JSONObject {
+        val row =
+            JSONObject()
+                .put("event", event)
+                .put("provider", provider)
+                .put("received_ms", SystemClock.elapsedRealtime())
+                .put("present", fix != null)
+        if (fix != null) {
+            row.put("fix_provider", fix.provider)
+                .put("fix_time_ms", fix.time)
+                .put("fix_elapsed_ms", fix.elapsedRealtimeNanos / 1_000_000)
+                .put("latitude", fix.latitude)
+                .put("longitude", fix.longitude)
+                .put("accuracy", fix.accuracy)
+                .put("speed", fix.speed)
+                .put("bearing", fix.bearing)
+                .put("mock", fix.isMock)
+                .put("extras_satellites", fix.extras?.getInt("satellites", -1) ?: -1)
+        }
+        return row
+    }
+
     /** Eight seconds of app-side updates for bounded drift and motion acceptance. */
     @SuppressLint("MissingPermission")
     fun collectMovement(report: CheckReport) {

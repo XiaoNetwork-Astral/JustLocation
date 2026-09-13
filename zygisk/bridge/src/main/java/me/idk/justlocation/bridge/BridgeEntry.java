@@ -5,6 +5,8 @@ import android.util.Log;
 
 import java.lang.reflect.Method;
 
+import org.json.JSONObject;
+
 /** system_server entry point: install channels, poll state and drive periodic delivery. */
 public final class BridgeEntry {
     private static final String TAG = "JustLocation";
@@ -18,12 +20,14 @@ public final class BridgeEntry {
     private static volatile WifiServiceImplHooks wifiHooks;
     private static volatile boolean cellsSynthesized;
     private static long lastDispatchError;
+    private static long reportedCompanionFailures;
     private static final StepChannel steps = new StepChannel();
 
     private BridgeEntry() {}
 
     private static native String readState(int installed, int wifiCalls, String gnssRawDetail);
     private static native Method hook(Method target, Object callback, Method method);
+    private static native String companionDiagnostics();
     static native boolean installSteps();
     static native void updateSteps(boolean active, boolean all, String[] packages, long total,
             long epoch, int[] handles, int[] types);
@@ -51,17 +55,46 @@ public final class BridgeEntry {
                 if (response != null)
                     updateState(response);
             } catch (Exception error) {
+                // The native exchange already records its own failures; this path covers a
+                // malformed reply and must not stay silent either.
+                Log.w(TAG,
+                        "Cannot apply backend state; dropping snapshots until the next valid"
+                                + " heartbeat",
+                        error);
                 fix = null;
                 telephony = null;
                 wifi = null;
                 steps.stop();
             }
+            reportCompanionFailures();
             dispatch();
             try {
                 Thread.sleep(1000);
             } catch (InterruptedException error) {
                 Thread.currentThread().interrupt();
             }
+        }
+    }
+
+    /**
+     * A lost companion descriptor cannot be rebuilt inside this process: the handshake happens
+     * once per injection. Log the first occurrence with its reason and time so the silent switch
+     * back to real output is traceable instead of guessed.
+     */
+    private static void reportCompanionFailures() {
+        try {
+            JSONObject report = new JSONObject(companionDiagnostics());
+            long failures = report.optLong("failures");
+            if (failures <= reportedCompanionFailures)
+                return;
+            reportedCompanionFailures = failures;
+            Log.e(TAG,
+                    "Companion connection lost: reason=" + report.optString("reason")
+                            + " ageMs=" + report.optLong("age_ms") + " failures=" + failures
+                            + "; real location output returns when the 20-second snapshot expires and"
+                            + " requires a restart to recover");
+        } catch (Exception error) {
+            Log.w(TAG, "Cannot read companion diagnostics", error);
         }
     }
 
