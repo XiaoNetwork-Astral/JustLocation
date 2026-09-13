@@ -202,6 +202,7 @@ mod tests {
         recording.add(at(31.0, 121.0), 0.0).unwrap();
         recording.add(at(31.001, 121.0), 5.0).unwrap();
         let route = crate::route::Route {
+            geometry: None,
             points: recording.points().to_vec(),
             speed: 5.0,
             repeat_count: 1,

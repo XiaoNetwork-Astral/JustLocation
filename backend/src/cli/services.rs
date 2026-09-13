@@ -4,6 +4,15 @@ impl Runtime {
     pub(super) fn maps(&self, command: MapCommand) -> Result<()> {
         let request = match command {
             MapCommand::Settings => json!({"op":"settings"}),
+            MapCommand::Capabilities => json!({"op":"capabilities"}),
+            MapCommand::Plan { input, output } => {
+                let result = self
+                    .local_service(false, json!({"op":"plan","plan":read_json(&input.input)?}))?;
+                return write_output(
+                    output.output.as_deref(),
+                    &(serde_json::to_string_pretty(&result).unwrap() + "\n"),
+                );
+            }
             MapCommand::Key { provider, file } => {
                 json!({"op":"configure_key","provider":provider,"key":read_input(&file.input)?.trim()})
             }
@@ -51,11 +60,15 @@ impl Runtime {
         };
         self.emit(&self.local_service(true, request)?)
     }
-    fn local_service(&self, cells: bool, mut request: Value) -> Result<Value> {
+    pub(super) fn local_service(&self, cells: bool, mut request: Value) -> Result<Value> {
         request["version"] = json!(1);
         let _lock =
             library::lock(&self.directory, if cells { "cell-cli.lock" } else { "map-cli.lock" })?;
-        let mut network = crate::cell_http::Network::default();
+        let mut network = if cells {
+            crate::cell_http::Network::default()
+        } else {
+            crate::cell_http::Network::maps()
+        };
         let result = if cells {
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

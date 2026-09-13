@@ -14,6 +14,7 @@ use std::{
 
 fn route(count: usize) -> Route {
     Route {
+        geometry: None,
         points: (0..count).map(|i| Position::new(31.0 + i as f64 * 0.00001, 121.0)).collect(),
         breaks: vec![],
         speed: 1000.0,
@@ -182,6 +183,7 @@ fn ten_thousand_recorded_points_survive_restart_and_pause_gaps_without_large_sta
 #[test]
 fn segment_breaks_never_interpolate_the_gap_or_add_it_to_distance() {
     let plan = Route {
+        geometry: None,
         points: vec![
             Position::new(0., 0.),
             Position::new(0., 0.001),

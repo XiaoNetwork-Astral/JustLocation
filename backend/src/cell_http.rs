@@ -15,10 +15,16 @@ pub fn validate_endpoint(endpoint: &str) -> Result<(), QueryError> {
 
 pub struct Network {
     deadline: Instant,
+    response_limit: u64,
 }
 impl Default for Network {
     fn default() -> Self {
-        Self { deadline: Instant::now() + Duration::from_secs(30) }
+        Self { deadline: Instant::now() + Duration::from_secs(30), response_limit: 1024 * 1024 }
+    }
+}
+impl Network {
+    pub fn maps() -> Self {
+        Self { response_limit: 64 * 1024 * 1024, ..Self::default() }
     }
 }
 impl Http for Network {
@@ -59,7 +65,7 @@ impl Http for Network {
         let body = response
             .body_mut()
             .with_config()
-            .limit(1024 * 1024)
+            .limit(self.response_limit)
             .read_to_string()
             .map_err(|_| QueryError::InvalidResponse)?;
         Ok(HttpResponse { status, body })

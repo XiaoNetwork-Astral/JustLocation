@@ -179,6 +179,70 @@ impl Runtime {
     pub(super) fn route(&self, command: RouteCommand) -> Result<()> {
         let value = match command {
             RouteCommand::List => json!(self.library()?.routes),
+            RouteCommand::Candidates(file) => {
+                let input = read_large_json(&file.input)?;
+                if input["version"] != 1
+                    || input["ok"] != true
+                    || input["coordinate_system"] != "wgs84"
+                {
+                    return Err("invalid route candidate file".into());
+                }
+                let plans = input["candidates"].as_array().ok_or("missing route candidates")?;
+                let mut summaries = Vec::new();
+                for (index, value) in plans.iter().enumerate() {
+                    let plan = validate_route(value.clone())?;
+                    let g = plan.geometry.ok_or("candidate has no provider geometry metadata")?;
+                    summaries.push(json!({"candidate":index,"provider":g.provider,"mode":g.mode,"distance_m":g.distance_m,"duration_s":g.duration_s,"point_count":plan.points.len(),"segments":g.segments.len()}));
+                }
+                json!(summaries)
+            }
+            RouteCommand::Select { name, file, candidate, start, scope } => {
+                let input = read_large_json(&file.input)?;
+                if input["version"] != 1
+                    || input["ok"] != true
+                    || input["coordinate_system"] != "wgs84"
+                {
+                    return Err("invalid route candidate file".into());
+                }
+                let plan = input["candidates"]
+                    .as_array()
+                    .and_then(|v| v.get(candidate))
+                    .ok_or("candidate index not found")?;
+                let plan = validate_route(plan.clone())?;
+                if plan.geometry.is_none() {
+                    return Err("candidate has no provider geometry metadata".into());
+                }
+                let scope = if start { Some(self.scope(scope)?) } else { None };
+                let mut saved = self.save_route(name, plan)?;
+                if let Some(scope) = scope {
+                    let library = self.library()?;
+                    let id = saved["id"].as_str().unwrap();
+                    let file_id = &route(&library, id)?.file_id;
+                    self.request(json!({"op":"start_route_ref","id":file_id,"scope":scope}))
+                        .map_err(|e| {
+                            format!("route saved as {id}, but playback did not start: {e}")
+                        })?;
+                    saved["started"] = json!(true);
+                }
+                saved
+            }
+            RouteCommand::Replan { id, provider, mode, via, output } => {
+                let library = self.library()?;
+                let original = self.load_route(route(&library, &id)?)?;
+                if via.windows(2).any(|x| x[0] >= x[1])
+                    || via.iter().any(|&i| i == 0 || i >= original.points.len() - 1)
+                {
+                    return Err("via indices must be increasing interior point indices".into());
+                }
+                let point =
+                    |p: &crate::Position| json!({"latitude":p.latitude,"longitude":p.longitude});
+                let mut result = self.local_service(false,json!({"op":"plan","plan":{"provider":provider,"mode":mode,"origin":point(&original.points[0]),"destination":point(original.points.last().unwrap()),"waypoints":via.iter().map(|&i|point(&original.points[i])).collect::<Vec<_>>(),"speed":original.speed}}))?;
+                result["original_route_id"] = json!(id);
+                return write_output(
+                    output.output.as_deref(),
+                    &(serde_json::to_string_pretty(&result).unwrap() + "\n"),
+                );
+            }
             RouteCommand::ImportGpx { file, speed } => {
                 let routes = gpx::parse(&read_large(&file.input)?, speed)?;
                 self.edit_library(|library| {

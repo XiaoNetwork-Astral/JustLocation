@@ -27,6 +27,8 @@ justlocation route --help                              # Show route commands
 
 Coordinates default to WGS84. Replace `--all` with `--app PACKAGE` to select an app. The joystick needs Root access in KernelSU → Superuser → JustLoystick. Use `COMMAND --help` for more options.
 
+Map keys, route planning and candidate selection: [map service guide](docs/maps.md).
+
 ## Build
 
 - Node.js 22.12+

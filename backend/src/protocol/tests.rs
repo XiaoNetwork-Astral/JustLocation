@@ -47,6 +47,33 @@ fn realism_drift_keeps_the_static_anchor_and_never_adds_linked_steps() {
 }
 
 #[test]
+fn planned_routes_keep_corners_and_never_drift_off_the_provider_geometry() {
+    let now = Instant::now();
+    let mut control = Control::default();
+    assert!(control.handle_at(r#"{"version":1,"op":"set_realism","config":{"enabled":true,"seed":7,"drift_radius_m":100,"corner_radius_m":100}}"#, now).ok);
+    let mut input: serde_json::Value =
+        serde_json::from_str(&route_start(&[(0., 0.), (0., 0.001), (0.001, 0.001)], 1.4)).unwrap();
+    input["route"]["geometry"] = json!({"provider":"amap","mode":"walking","distance_m":222,"duration_s":160,"segments":[{"first":0,"last":2,"distance_m":222,"duration_s":160,"road_name":"","instruction":"","attributes":{}}]});
+    assert!(control.handle_at(&input.to_string(), now).ok);
+    assert!(
+        (control.session.route.as_ref().unwrap().state().total_distance - 222.390160467).abs()
+            < 0.00001
+    );
+    for seconds in 0..240 {
+        let output = control
+            .handle_at(r#"{"version":1,"op":"status"}"#, now + Duration::from_secs(seconds))
+            .state
+            .config
+            .unwrap()
+            .position;
+        let anchor = &control.session.engine.config().unwrap().position;
+        assert_eq!(output.latitude, anchor.latitude);
+        assert_eq!(output.longitude, anchor.longitude);
+        assert!(output.latitude.abs() < 1e-12 || (output.longitude - 0.001).abs() < 1e-12);
+    }
+}
+
+#[test]
 fn speed_variation_integrates_joystick_distance_only_until_lease_expiry() {
     let now = Instant::now();
     let mut control = Control::default();
@@ -215,6 +242,7 @@ fn recording_collects_points_and_hands_them_over_for_replay() {
     assert!(!again.ok);
     assert!(again.error.unwrap().contains("no recorded route"));
     let route = Route {
+        geometry: None,
         points: track.points,
         speed: 5.0,
         repeat_count: 1,

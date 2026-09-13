@@ -115,6 +115,7 @@ pub fn begin(directory: &Path, upload: Upload) -> Result<String> {
     }
     Playback::new(
         Route {
+            geometry: None,
             points: vec![Position::new(0., 0.), Position::new(0., 0.001)],
             breaks: vec![],
             speed: upload.speed,
@@ -163,6 +164,7 @@ pub fn append(directory: &Path, id: &str, page: Page) -> Result<()> {
 pub fn finish(directory: &Path, id: &str) -> Result<Route> {
     let upload = upload(directory, id)?;
     let mut route = Route {
+        geometry: None,
         points: Vec::with_capacity(upload.point_count),
         breaks: vec![],
         speed: upload.speed,

@@ -245,6 +245,7 @@ impl Runtime {
             track["id"].as_str().ok_or("no completed recording; stop capture first")?.to_owned();
         let count = track["point_count"].as_u64().ok_or("invalid recording summary")? as usize;
         let mut route = crate::route::Route {
+            geometry: None,
             points: Vec::with_capacity(count),
             breaks: vec![],
             speed,

@@ -524,7 +524,12 @@ impl Control {
         let mut output = self.session.engine.config().cloned();
         if self.session.engine.is_running() {
             if let Some(config) = &mut output {
-                config.position = self.session.realism.output(&config.position, now);
+                let anchor = config.position.clone();
+                config.position = self.session.realism.output(&anchor, now);
+                if self.session.route.as_ref().is_some_and(|r| r.plan().geometry.is_some()) {
+                    config.position.latitude = anchor.latitude;
+                    config.position.longitude = anchor.longitude;
+                }
             }
         }
         let hook_connected =

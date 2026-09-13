@@ -23,6 +23,7 @@ pub mod record;
 mod record_journal;
 pub mod route;
 pub mod route_store;
+pub mod routing;
 pub mod scode;
 pub mod smoothing;
 pub mod steps;

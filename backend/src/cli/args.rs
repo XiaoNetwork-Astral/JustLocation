@@ -267,6 +267,32 @@ pub enum PlaceCommand {
 #[derive(Subcommand)]
 pub enum RouteCommand {
     List,
+    /// List candidate summaries without printing the full geometry.
+    Candidates(FileInput),
+    /// Save an explicitly selected candidate from maps plan output (zero-based index).
+    Select {
+        name: String,
+        #[command(flatten)]
+        file: FileInput,
+        #[arg(long)]
+        candidate: usize,
+        #[arg(long)]
+        start: bool,
+        #[command(flatten)]
+        scope: ScopeArgs,
+    },
+    /// Plan a new route through explicit point indices from a saved route. Keep the original.
+    Replan {
+        id: String,
+        #[arg(value_enum)]
+        provider: Provider,
+        #[arg(value_enum)]
+        mode: crate::routing::TravelMode,
+        #[arg(long, value_delimiter = ',')]
+        via: Vec<usize>,
+        #[command(flatten)]
+        output: FileOutput,
+    },
     /// Read at most 128 points from a saved route, or from current playback when --id is omitted.
     Page {
         #[arg(long)]
@@ -523,6 +549,14 @@ pub enum Provider {
 #[derive(Subcommand)]
 pub enum MapCommand {
     Settings,
+    Capabilities,
+    /// Request real provider routes from a WGS84 PlanRequest JSON file.
+    Plan {
+        #[command(flatten)]
+        input: FileInput,
+        #[command(flatten)]
+        output: FileOutput,
+    },
     /// Read a key from stdin or a file; an empty input removes it.
     Key {
         #[arg(value_enum)]

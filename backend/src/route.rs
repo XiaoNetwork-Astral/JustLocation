@@ -10,6 +10,8 @@ const EARTH_RADIUS: f64 = 6_371_008.8;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Route {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<crate::routing::Geometry>,
     pub points: Vec<Position>,
     /// Indices of segment starts; no movement is interpolated across a break.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -43,6 +45,7 @@ pub struct RouteState {
 #[derive(Clone)]
 pub struct Playback {
     plan: Arc<Route>,
+    inline: bool,
     path: Arc<Vec<Position>>,
     lengths: Arc<Vec<f64>>,
     cumulative: Arc<Vec<f64>>,
@@ -116,6 +119,9 @@ impl Playback {
         if !plan.repeat_delay.is_finite() || !(0.0..=86_400.0).contains(&plan.repeat_delay) {
             return Err("route repeat delay must be between 0 and 86400 seconds");
         }
+        if let Some(geometry) = &plan.geometry {
+            geometry.validate(plan.points.len())?;
+        }
         for point in &plan.points {
             point.validate()?;
         }
@@ -143,7 +149,13 @@ impl Playback {
         if *cumulative.last().unwrap() <= 0.0 {
             return Err("route must contain at least one moving segment");
         }
+        let inline = plan.points.len() <= INLINE_POINTS
+            && plan
+                .geometry
+                .as_ref()
+                .is_none_or(|g| serde_json::to_vec(g).is_ok_and(|v| v.len() <= 32 * 1024));
         Ok(Self {
+            inline,
             total: lengths.iter().sum(),
             path: Arc::new(plan.points.clone()),
             plan: Arc::new(plan),
@@ -159,7 +171,7 @@ impl Playback {
 
     pub fn smoothed(plan: Route, now: Instant, radius: f64) -> Result<Self, &'static str> {
         let mut playback = Self::new(plan, now)?;
-        if radius > 0.0 {
+        if radius > 0.0 && playback.plan.geometry.is_none() {
             let mut path = Vec::new();
             let mut lengths = Vec::new();
             let mut start = 0;
@@ -267,7 +279,7 @@ impl Playback {
     pub fn state(&self) -> RouteState {
         let (lap, distance, waiting_seconds) = self.progress();
         RouteState {
-            plan: (self.plan.points.len() <= INLINE_POINTS).then(|| (*self.plan).clone()),
+            plan: self.inline.then(|| (*self.plan).clone()),
             point_count: self.plan.points.len(),
             distance,
             total_distance: self.total,
@@ -344,6 +356,7 @@ mod tests {
         let now = Instant::now();
         let mut playback = Playback::new(
             Route {
+                geometry: None,
                 points: vec![Position::new(0.0, 0.0), Position::new(0.0, 0.001)],
                 speed: 10.0,
                 repeat_count: 2,
@@ -373,6 +386,7 @@ mod tests {
         let now = Instant::now();
         let mut playback = Playback::new(
             Route {
+                geometry: None,
                 points: vec![Position::new(0.0, 179.999), Position::new(0.0, -179.999)],
                 speed: 10.0,
                 repeat_count: 1,
@@ -395,6 +409,7 @@ mod tests {
         last.altitude = 100.0;
         let mut playback = Playback::new(
             Route {
+                geometry: None,
                 points: vec![Position::new(0.0, 0.0), Position::new(0.0, 0.001), last],
                 speed: 10.0,
                 repeat_count: 1,

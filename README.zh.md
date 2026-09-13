@@ -27,6 +27,8 @@ justlocation route --help                              # 查看路线命令
 
 坐标默认为 WGS84。将 `--all` 换成 `--app 包名` 可指定生效应用。摇杆需要在 KernelSU → 超级用户中给 JustLoystick 开启 Root 授权。其他参数通过 `命令 --help` 查看。
 
+地图 Key、自动路线规划与候选选择：[地图服务用法](docs/maps.md)。
+
 ## 构建
 
 - Node.js 22.12+

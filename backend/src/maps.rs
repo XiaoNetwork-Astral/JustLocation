@@ -40,6 +40,8 @@ struct Keys {
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 enum Command {
     Settings,
+    Capabilities,
+    Plan { plan: crate::routing::PlanRequest },
     ConfigureKey { provider: MapProvider, key: String },
     Search { provider: MapProvider, query: String, region: String },
 }
@@ -84,6 +86,33 @@ impl MapService {
         let mut keys = self.load()?;
         match request.command {
             Command::Settings => Ok(public_settings(&keys)),
+            Command::Capabilities => Ok(crate::routing::capabilities()),
+            Command::Plan { plan } => {
+                plan.validate()?;
+                let key = keys
+                    .keys
+                    .get(&plan.provider)
+                    .ok_or("missing WebService key for route provider")?;
+                let response = http
+                    .send(crate::routing::request(&plan, key)?)
+                    .map_err(|_| "route service network request failed")?;
+                if response.status != 200 {
+                    return Err(format!(
+                        "route service HTTP {}; check key permissions and quota",
+                        response.status
+                    ));
+                }
+                let data = serde_json::from_str(&response.body)
+                    .map_err(|_| "invalid route service JSON")?;
+                let candidates = crate::routing::parse(&plan, &data)?;
+                let output = json!({"coordinate_system":"wgs84","candidates":candidates});
+                if serde_json::to_vec(&output).map_err(|_| "cannot encode route candidates")?.len()
+                    > crate::route_store::MAX_FILE - 64
+                {
+                    return Err("route candidates exceed 64 MiB".into());
+                }
+                Ok(output)
+            }
             Command::ConfigureKey { provider, key } => {
                 let key = key.trim();
                 if key.len() > 512 || !key.bytes().all(|byte| byte.is_ascii_graphic()) {
@@ -246,7 +275,7 @@ pub fn request(encoded: &str) -> Result<String, String> {
     Ok(format!(
         "{}\n",
         MapService::new(Path::new(crate::transport::DATA_DIR))
-            .handle(&mut crate::cell_http::Network::default(), &input)
+            .handle(&mut crate::cell_http::Network::maps(), &input)
     ))
 }
 

@@ -26,6 +26,7 @@ pub(super) fn parse(text: &str, speed: f64) -> Result<Vec<(String, Route)>> {
                 let segments: Vec<_> =
                     element.children().filter(|n| n.has_tag_name("trkseg")).collect();
                 let mut track = Route {
+                    geometry: None,
                     points: vec![],
                     breaks: vec![],
                     speed,
@@ -55,6 +56,7 @@ pub(super) fn parse(text: &str, speed: f64) -> Result<Vec<(String, Route)>> {
 }
 fn plan(element: roxmltree::Node<'_, '_>, tag: &str, speed: f64) -> Result<Route> {
     let route = Route {
+        geometry: None,
         points: points(element, tag)?,
         breaks: vec![],
         speed,
