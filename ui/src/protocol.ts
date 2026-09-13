@@ -57,6 +57,7 @@ export interface TelephonyConfig {
   sim_enabled: boolean;
   radius_m: number;
   subscriptions: Subscription[];
+  virtual_sim?: { subscriptions: Subscription[]; default_slot: number | null };
 }
 
 export interface GnssConfig {
@@ -97,6 +98,11 @@ export interface State {
   telephony?: TelephonyConfig;
   cell_hook_ready?: boolean;
   sim_hook_ready?: boolean;
+  active_modem_count?: number | null;
+  virtual_sim_query_hook_ready?: boolean;
+  virtual_sim_callback_hook_ready?: boolean;
+  virtual_sim_version?: string | null;
+  virtual_sim_applied?: string | null;
   gnss?: GnssConfig;
   wifi?: WifiConfig;
   steps?: StepConfig;

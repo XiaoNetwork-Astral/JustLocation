@@ -22,8 +22,12 @@ public final class SessionSnapshot {
     }
 
     public boolean appliesTo(String packageName, long nowMs) {
+        return fresh(nowMs) && packageName != null && !packageName.isBlank()
+                && (all || packages.contains(packageName));
+    }
+
+    boolean fresh(long nowMs) {
         long age = nowMs - receivedAtMs;
-        return active && packageName != null && !packageName.isBlank() && age >= 0
-                && age < MAX_AGE_MS && (all || packages.contains(packageName));
+        return active && age >= 0 && age < MAX_AGE_MS;
     }
 }

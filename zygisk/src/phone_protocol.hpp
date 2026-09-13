@@ -39,6 +39,19 @@ inline std::string operator_fields(std::string_view extra) {
             result += std::string(",\"") + name + "\":" + quote(value);
         start = end + 1;
     }
+    if (start < extra.size()) {
+        auto end = extra.find('|', start);
+        auto count = extra.substr(start, end == std::string_view::npos ? end : end - start);
+        if (count == "0" || count == "1" || count == "2")
+            result += ",\"active_modem_count\":" + std::string(count);
+        if (end != std::string_view::npos) {
+            auto token = extra.substr(end + 1);
+            if (token == "off" ||
+                (token.size() <= 80 && token.substr(0, 3) == "jl-" &&
+                 token.find_first_not_of("jl-0123456789abcdef") == std::string_view::npos))
+                result += ",\"virtual_sim_applied\":" + quote(token);
+        }
+    }
     return result;
 }
 

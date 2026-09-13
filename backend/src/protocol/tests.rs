@@ -29,6 +29,46 @@ fn set_steps(linked: bool) -> String {
 }
 
 #[test]
+fn virtual_subscription_publications_follow_model_scope_and_phone_acknowledgements() {
+    let mut control = Control::default();
+    assert!(control.handle(r#"{"version":1,"op":"set_scope","feature":"sim","scope":{"mode":"apps","packages":["example.selected"]}}"#).ok);
+    let config = json!({"cells_enabled":false,"sim_enabled":true,"subscriptions":[],
+        "virtual_sim":{"subscriptions":[{"id":1900000001,"slot":1,"mcc":"460","mnc":"01","country":"cn","carrier":"Virtual","enabled":true}],"default_slot":1}});
+    assert!(
+        send(&mut control, json!({"version":1,"op":"set_telephony","config":config}).to_string())
+            .ok
+    );
+    assert!(control.handle(&static_start()).ok);
+    let heartbeat = json!({"version":1,"op":"telephony_hook_status","cells":true,"sim":true,
+        "virtual_sim_queries":true,"active_modem_count":2,"subscriptions":[]});
+    let state = send(&mut control, heartbeat.to_string()).state;
+    let token = state.virtual_sim_version.unwrap();
+    assert!(token.starts_with("jl-"));
+    assert_eq!(state.telephony_output.unwrap().virtual_ids, vec![1900000001]);
+    assert!(state.virtual_sim_query_hook_ready);
+    assert!(state.virtual_sim_applied.is_none());
+    let mut applied = heartbeat.clone();
+    applied["virtual_sim_applied"] = json!(token);
+    let state = send(&mut control, applied.to_string()).state;
+    assert_eq!(state.virtual_sim_version.as_deref(), Some(token.as_str()));
+    assert_eq!(state.virtual_sim_applied.as_deref(), Some(token.as_str()));
+    let changed = control.handle(r#"{"version":1,"op":"set_scope","feature":"sim","scope":{"mode":"apps","packages":["example.changed"]}}"#).state;
+    assert_ne!(changed.virtual_sim_version.as_deref(), Some(token.as_str()));
+    assert_eq!(changed.virtual_sim_applied.as_deref(), Some(token.as_str()));
+    let mut physical = heartbeat.clone();
+    physical["subscriptions"] =
+        json!([{"id":7,"slot":1,"mcc":"460","mnc":"11","country":"cn","carrier":"Real"}]);
+    let state = send(&mut control, physical.to_string()).state;
+    assert_eq!(state.virtual_sim_version.as_deref(), Some("off"));
+    assert!(state.telephony_output.unwrap().virtual_ids.is_empty());
+    let resumed = send(&mut control, heartbeat.to_string()).state.virtual_sim_version;
+    assert_ne!(resumed.as_deref(), Some(token.as_str()));
+    let stopped = control.handle(r#"{"version":1,"op":"stop"}"#).state;
+    assert_eq!(stopped.virtual_sim_version.as_deref(), Some("off"));
+    assert!(stopped.telephony_output.is_none());
+}
+
+#[test]
 fn realism_drift_keeps_the_static_anchor_and_never_adds_linked_steps() {
     let now = Instant::now();
     let mut control = Control::default();

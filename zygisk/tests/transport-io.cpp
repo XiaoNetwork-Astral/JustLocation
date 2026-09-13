@@ -50,6 +50,12 @@ int main() {
             phone_protocol::operator_fields("|A\"B\\C||46011") ==
                     ",\"sim_alpha\":\"A\\\"B\\\\C\",\"sim_numeric\":\"46011\"" &&
             phone_protocol::operator_fields("|||").empty() &&
+            phone_protocol::operator_fields("||||2") == ",\"active_modem_count\":2" &&
+            phone_protocol::operator_fields("||||-1").empty() &&
+            phone_protocol::operator_fields("||||2|true") == ",\"active_modem_count\":2" &&
+            phone_protocol::operator_fields("||||2|jl-123-ab-1") ==
+                    ",\"active_modem_count\":2,\"virtual_sim_applied\":\"jl-123-ab-1\"" &&
+            phone_protocol::operator_fields("|||||off") == ",\"virtual_sim_applied\":\"off\"" &&
             phone_protocol::quote("line\nnext") == "\"line\\u000anext\"";
     printf("%s: phone operator metadata preserves fields and JSON framing\n",
            operators ? "PASS" : "FAIL");

@@ -123,6 +123,35 @@ impl Runtime {
                 match command {
                     SimCommand::Get => return self.emit(&json!({"config":config,"detected_subscriptions":state["detected_subscriptions"],"output":state["telephony_output"]})),
                     SimCommand::Set(file) => config = read_json(&file.input)?,
+                    SimCommand::Virtual { command } => {
+                        if config.get("virtual_sim").is_none() {
+                            return Err("the running service does not support virtual subscriptions; update and restart it first".into());
+                        }
+                        let mut typed: crate::telephony::TelephonyConfig = serde_json::from_value(config).map_err(|e| e.to_string())?;
+                        match command {
+                            VirtualSimCommand::Upsert { slot, mcc, mnc, carrier, country, enabled } => {
+                                let detected: Option<Vec<crate::telephony::DetectedSubscription>> = serde_json::from_value(state["detected_subscriptions"].clone()).map_err(|e| e.to_string())?;
+                                let id = typed.virtual_sim.allocate_id(slot, &typed.subscriptions, detected.as_deref())?;
+                                let sub = crate::telephony::Subscription { id, slot, mcc, mnc, carrier, country, enabled, cdma_sid: None };
+                                if let Some(existing) = typed.virtual_sim.subscriptions.iter_mut().find(|s| s.slot == slot) { *existing = sub; }
+                                else { typed.virtual_sim.subscriptions.push(sub); }
+                                if !enabled && typed.virtual_sim.default_slot == Some(slot) { typed.virtual_sim.default_slot = None; }
+                            }
+                            VirtualSimCommand::Remove { slot } => {
+                                let original = typed.virtual_sim.subscriptions.len();
+                                typed.virtual_sim.subscriptions.retain(|s| s.slot != slot);
+                                if original == typed.virtual_sim.subscriptions.len() { return Err("virtual slot not found".into()); }
+                                if typed.virtual_sim.default_slot == Some(slot) { typed.virtual_sim.default_slot = None; }
+                            }
+                            VirtualSimCommand::Default { slot } => typed.virtual_sim.default_slot = slot,
+                        }
+                        if !typed.subscriptions.iter().chain(&typed.virtual_sim.subscriptions).any(|s| s.enabled) {
+                            typed.sim_enabled = false;
+                            typed.cells_enabled = false;
+                        }
+                        typed.validate()?;
+                        config = serde_json::to_value(typed).map_err(|e| e.to_string())?;
+                    }
                     SimCommand::Cells { enabled } => config["cells_enabled"] = json!(enabled),
                     SimCommand::Operator { enabled } => config["sim_enabled"] = json!(enabled),
                     SimCommand::Upsert { id, slot, mcc, mnc, carrier, country, enabled, cdma_sid } => {

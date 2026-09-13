@@ -17,6 +17,7 @@ public final class BridgeEntry {
             new LocationHooks(BridgeEntry::install, () -> fix);
     private static final GnssHooks gnss = new GnssHooks(BridgeEntry::install);
     private static TelephonyRegistryAdapter telephonyRegistry;
+    private static SubscriptionRegistryHooks subscriptionRegistry;
     private static volatile WifiServiceImplHooks wifiHooks;
     private static volatile boolean cellsSynthesized;
     private static long lastDispatchError;
@@ -37,6 +38,8 @@ public final class BridgeEntry {
         gnss.install(systemServerLoader);
         telephonyRegistry = TelephonyRegistryHooks.install(
                 systemServerLoader, BridgeEntry::install, () -> telephony);
+        subscriptionRegistry =
+                SubscriptionRegistryHooks.install(systemServerLoader, () -> telephony);
         installWifiService(systemServerLoader);
         Thread thread = new Thread(BridgeEntry::run, "JustLocation-state");
         thread.setDaemon(true);
@@ -48,7 +51,10 @@ public final class BridgeEntry {
             try {
                 String response = readState((location.ready ? 1 : 0) | gnss.flags
                                 | (telephonyRegistry != null ? 8 : 0) | (wifiScanReady() ? 16 : 0)
-                                | (wifiConnectionReady() ? 32 : 0),
+                                | (wifiConnectionReady() ? 32 : 0)
+                                | (subscriptionRegistry != null && subscriptionRegistry.ready()
+                                                ? 128
+                                                : 0),
                         WifiServiceImplHooks.calls(), gnss.counters());
                 // Keep snapshots on a lost heartbeat; expiry and explicit stop responses restore
                 // real output.
@@ -99,6 +105,9 @@ public final class BridgeEntry {
     }
 
     private static void updateState(String response) throws Exception {
+        if (subscriptionRegistry != null)
+            subscriptionRegistry.observe(
+                    new JSONObject(response).getJSONObject("state"), SystemClock.elapsedRealtime());
         steps.update(response);
         fix = !location.ready ? null : LocationSnapshot.parse(response);
         try {
@@ -126,6 +135,12 @@ public final class BridgeEntry {
     }
 
     private static void dispatch() {
+        try {
+            if (subscriptionRegistry != null)
+                subscriptionRegistry.update();
+        } catch (Exception error) {
+            Log.w(TAG, "Subscription change delivery failed", error);
+        }
         steps.tick();
         LocationSnapshot current = fix;
         gnss.update(current);

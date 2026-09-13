@@ -12,16 +12,25 @@ import org.json.*;
 /** Runs against real Android framework objects on the dedicated API 35 AVD. */
 public final class TelephonyObjectChecks extends Instrumentation {
     private boolean scopeOnly;
+    private boolean virtualOnly;
     @Override
     public void onCreate(Bundle arguments) {
         super.onCreate(arguments);
         scopeOnly = arguments != null && "true".equals(arguments.getString("scope_only"));
+        virtualOnly = arguments != null && "true".equals(arguments.getString("virtual_only"));
         start();
     }
     @Override
     public void onStart() {
         Bundle result = new Bundle();
         try {
+            if (virtualOnly) {
+                checkVirtualSubscriptions();
+                result.putString("stream",
+                        "PASS: virtual subscription parcel, stable snapshot identity, mappings, SIM-only service state, scope/shared UID, stop/expiry, Android interface signatures\n");
+                finish(-1, result);
+                return;
+            }
             String[] identities = {
                     "{\"radio\":\"gsm\",\"mcc\":\"460\",\"mnc\":\"01\",\"lac\":1,\"cid\":11}",
                     "{\"radio\":\"wcdma\",\"mcc\":\"460\",\"mnc\":\"01\",\"lac\":2,\"cid\":268435455}",
@@ -289,6 +298,111 @@ public final class TelephonyObjectChecks extends Instrumentation {
         } finally {
             parcel.recycle();
         }
+    }
+    private void checkVirtualSubscriptions() throws Exception {
+        JSONObject sub = new JSONObject()
+                                 .put("id", 1900000001)
+                                 .put("slot", 1)
+                                 .put("mcc", "460")
+                                 .put("mnc", "001")
+                                 .put("country", "cn")
+                                 .put("carrier", "Virtual test");
+        JSONObject output = new JSONObject()
+                                    .put("groups", new JSONArray())
+                                    .put("subscriptions", new JSONArray().put(sub))
+                                    .put("virtual_ids", new JSONArray().put(1900000001))
+                                    .put("virtual_default_id", 1900000001)
+                                    .put("has_real_subscriptions", false);
+        JSONObject state =
+                new JSONObject()
+                        .put("requested_active", true)
+                        .put("virtual_sim_query_hook_ready", true)
+                        .put("virtual_sim_version", "jl-test")
+                        .put("telephony",
+                                new JSONObject()
+                                        .put("cells_enabled", false)
+                                        .put("sim_enabled", true))
+                        .put("scopes",
+                                new JSONObject().put("sim",
+                                        new JSONObject()
+                                                .put("mode", "apps")
+                                                .put("packages",
+                                                        new JSONArray().put("example.selected"))))
+                        .put("telephony_output", output);
+        JSONObject response =
+                new JSONObject().put("version", 1).put("ok", true).put("state", state);
+        TelephonySnapshot first = TelephonySnapshot.parse(response.toString(), 1000);
+        TelephonySnapshot next = TelephonySnapshot.parse(response.toString(), 1001);
+        check(first.virtualVersion(1002).equals(next.virtualVersion(1002)),
+                "heartbeat must not change subscription cache identity");
+        check(first.publication(1002).equals("jl-test"), "publication token");
+        VirtualSubscriptions model = first.virtuals("example.selected", 1002);
+        check(model.defaultId(-1) == 1900000001 && model.slot(1900000001, -1) == 1
+                        && model.id(1, -1) == 1900000001,
+                "default and slot mappings");
+        check(first.resolveSubscription(-1, 1) == 1900000001
+                        && first.resolveSubscription(999, 1) == 999,
+                "SIM-only slot resolution and unknown ID");
+        check(first.virtuals(new String[] {"example.selected", "example.other"}, 1002) == null
+                        && first.virtuals((String[]) null, 1002) == null,
+                "ambiguous and unknown callers");
+        SubscriptionInfo info = (SubscriptionInfo) model.byId(1900000001).info();
+        check(info.getSubscriptionId() == 1900000001 && info.getSimSlotIndex() == 1
+                        && info.getMncString().equals("001") && !info.isEmbedded()
+                        && !info.isOpportunistic(),
+                "ordinary virtual subscription metadata");
+        check(info.getIccId().isEmpty() && info.getNumber().isEmpty(),
+                "no manufactured permanent identifiers");
+        Parcel parcel = Parcel.obtain();
+        try {
+            info.writeToParcel(parcel, 0);
+            parcel.setDataPosition(0);
+            check(info.equals(SubscriptionInfo.CREATOR.createFromParcel(parcel)),
+                    "virtual SubscriptionInfo parcel");
+        } finally {
+            parcel.recycle();
+        }
+        ServiceState original = new ServiceState();
+        ServiceState.class.getMethod("setOperatorName", String.class, String.class, String.class)
+                .invoke(original, "Real", "Real", "310260");
+        check(first.serviceState(1900000001, original, false, true)
+                        .getOperatorAlphaLong()
+                        .equals("Virtual test"),
+                "SIM-only service state");
+        check(first.serviceState(999, original, false, true).getOperatorAlphaLong().equals("Real"),
+                "unknown subscription preserves carrier");
+        check(first.virtualVersion(21000) == null && first.publication(21000).equals("off"),
+                "expiry restores real subscriptions");
+        state.put("virtual_sim_query_hook_ready", false);
+        check(TelephonySnapshot.parse(response.toString(), 1000).virtualVersion(1001) == null,
+                "unavailable queries do not publish virtual subscriptions");
+        state.put("requested_active", false);
+        check(TelephonySnapshot.parse(response.toString(), 1000) == null, "stop");
+
+        ClassLoader phoneLoader =
+                getContext()
+                        .createPackageContext("com.android.phone",
+                                android.content.Context.CONTEXT_INCLUDE_CODE
+                                        | android.content.Context.CONTEXT_IGNORE_SECURITY)
+                        .getClassLoader();
+        Class<?> subscriptions = Class.forName(
+                "com.android.internal.telephony.subscription.SubscriptionManagerService", false,
+                phoneLoader);
+        new SubscriptionQueries(subscriptions, pkg -> null);
+        new VirtualSubscriptionQueries(subscriptions,
+                Class.forName("com.android.phone.PhoneInterfaceManager", false, phoneLoader),
+                (pkg, attribution) -> null);
+        new SubscriptionCallers(getContext(), phoneLoader);
+        new SubscriptionCache(); // Resolve the API only; this test app does not invalidate global
+                                 // caches.
+        ClassLoader services = new dalvik.system.PathClassLoader(
+                "/system/framework/services.jar", ClassLoader.getSystemClassLoader());
+        new SubscriptionRegistry(
+                Class.forName("com.android.server.TelephonyRegistry", false, services),
+                Class.forName("com.android.server.TelephonyRegistry$Record", false, services),
+                Class.forName("com.android.internal.telephony.IOnSubscriptionsChangedListener",
+                        false, services),
+                pkg -> null);
     }
     @SuppressWarnings("unchecked")
     private static NetworkRegistrationInfo registration(ServiceState state) throws Exception {

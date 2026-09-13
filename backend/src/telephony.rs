@@ -65,10 +65,17 @@ pub struct TelephonyConfig {
     pub sim_enabled: bool,
     pub radius_m: f64,
     pub subscriptions: Vec<Subscription>,
+    pub virtual_sim: crate::virtual_sim::VirtualSimConfig,
 }
 impl Default for TelephonyConfig {
     fn default() -> Self {
-        Self { cells_enabled: false, sim_enabled: false, radius_m: 500., subscriptions: Vec::new() }
+        Self {
+            cells_enabled: false,
+            sim_enabled: false,
+            radius_m: 500.,
+            subscriptions: Vec::new(),
+            virtual_sim: Default::default(),
+        }
     }
 }
 impl TelephonyConfig {
@@ -76,37 +83,18 @@ impl TelephonyConfig {
         if !self.radius_m.is_finite() || !(1. ..=200_000.).contains(&self.radius_m) {
             return Err("invalid telephony radius");
         }
-        if self.subscriptions.len() > 2 {
-            return Err("at most two subscriptions are supported");
+        validate_subscriptions(&self.subscriptions)?;
+        self.virtual_sim.validate()?;
+        if self
+            .virtual_sim
+            .subscriptions
+            .iter()
+            .any(|v| self.subscriptions.iter().any(|s| s.id == v.id))
+        {
+            return Err("physical and virtual subscription IDs must be distinct");
         }
-        let mut ids = HashSet::new();
-        let mut slots = HashSet::new();
-        for sub in &self.subscriptions {
-            if sub.id < 0
-                || sub.id == i32::MAX
-                || sub.slot > 1
-                || !ids.insert(sub.id)
-                || !slots.insert(sub.slot)
-            {
-                return Err("invalid or duplicate subscription id/slot");
-            }
-            if !sub.enabled {
-                continue;
-            }
-            if sub.mcc.len() != 3
-                || !(2..=3).contains(&sub.mnc.len())
-                || !sub.mcc.bytes().chain(sub.mnc.bytes()).all(|b| b.is_ascii_digit())
-                || sub.country.len() != 2
-                || !sub.country.bytes().all(|b| b.is_ascii_lowercase())
-                || sub.carrier.trim().is_empty()
-                || sub.carrier.len() > 128
-                || sub.carrier.chars().any(char::is_control)
-                || sub.cdma_sid.is_some_and(|sid| sid > 32767)
-            {
-                return Err("invalid subscription operator");
-            }
-        }
-        if (self.cells_enabled || self.sim_enabled) && !self.subscriptions.iter().any(|s| s.enabled)
+        if (self.cells_enabled || self.sim_enabled)
+            && !self.subscriptions.iter().chain(&self.virtual_sim.subscriptions).any(|s| s.enabled)
         {
             return Err("select an active subscription first");
         }
@@ -198,7 +186,16 @@ impl TelephonyConfig {
                 .collect();
             groups.push(CellGroup { subscription_id: sub.id, slot: sub.slot, cells });
         }
-        TelephonyFrame { availability, subscriptions, groups, synthesized }
+        TelephonyFrame {
+            availability,
+            subscriptions,
+            groups,
+            synthesized,
+            virtual_ids: Vec::new(),
+            virtual_default_id: None,
+            virtual_blocked: Vec::new(),
+            has_real_subscriptions: false,
+        }
     }
 }
 
@@ -300,4 +297,43 @@ pub struct TelephonyFrame {
     pub groups: Vec<CellGroup>,
     /// True when cells are synthetic fallbacks rather than acquired tower records.
     pub synthesized: bool,
+    pub virtual_ids: Vec<i32>,
+    pub virtual_default_id: Option<i32>,
+    pub virtual_blocked: Vec<crate::virtual_sim::Blocked>,
+    pub has_real_subscriptions: bool,
+}
+
+pub(crate) fn validate_subscriptions(subscriptions: &[Subscription]) -> Result<(), &'static str> {
+    if subscriptions.len() > 2 {
+        return Err("at most two subscriptions are supported");
+    }
+    let mut ids = HashSet::new();
+    let mut slots = HashSet::new();
+    for sub in subscriptions {
+        if sub.id < 0
+            || sub.id == i32::MAX
+            || sub.slot > 1
+            || !ids.insert(sub.id)
+            || !slots.insert(sub.slot)
+        {
+            return Err("invalid or duplicate subscription id/slot");
+        }
+        if !sub.enabled {
+            continue;
+        }
+        if sub.mcc.len() != 3
+            || !(2..=3).contains(&sub.mnc.len())
+            || !sub.mcc.bytes().chain(sub.mnc.bytes()).all(|b| b.is_ascii_digit())
+            || sub.country.len() != 2
+            || !sub.country.bytes().all(|b| b.is_ascii_lowercase())
+            || sub.carrier.trim().is_empty()
+            || sub.carrier.len() > 128
+            || sub.carrier.chars().any(char::is_control)
+            || sub.cdma_sid.is_some_and(|sid| sid > 32767)
+        {
+            return Err("invalid subscription operator");
+        }
+    }
+
+    Ok(())
 }

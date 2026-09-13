@@ -61,6 +61,8 @@ pub(super) enum Command {
         nmea: bool,
         #[serde(default)]
         cell_callbacks: bool,
+        #[serde(default)]
+        virtual_sim_callbacks: bool,
         /// Older bridges omit these Wi-Fi installation flags.
         #[serde(default)]
         wifi_scan: bool,
@@ -125,7 +127,13 @@ pub(super) enum Command {
         cells: bool,
         sim: bool,
         #[serde(default)]
+        virtual_sim_queries: bool,
+        #[serde(default)]
+        virtual_sim_applied: Option<String>,
+        #[serde(default)]
         subscriptions: Option<Vec<DetectedSubscription>>,
+        #[serde(default)]
+        active_modem_count: Option<u8>,
         /// Original operator values from the phone service, before property replacement.
         /// Older bridges omit these fields.
         #[serde(default)]
@@ -207,6 +215,10 @@ pub struct State {
     pub cell_query_hook_ready: bool,
     pub cell_callback_hook_ready: bool,
     pub sim_hook_ready: bool,
+    pub virtual_sim_query_hook_ready: bool,
+    pub virtual_sim_callback_hook_ready: bool,
+    pub virtual_sim_version: Option<String>,
+    pub virtual_sim_applied: Option<String>,
     /// Readiness of the operator name and PLMN property output.
     pub operator_hook_ready: bool,
     /// Scanning and connection hooks install independently.
@@ -220,6 +232,7 @@ pub struct State {
     pub gnss_raw_detail: Option<String>,
     pub phone_connected: bool,
     pub detected_subscriptions: Option<Vec<DetectedSubscription>>,
+    pub active_modem_count: Option<u8>,
 }
 
 #[derive(Serialize)]

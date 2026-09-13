@@ -45,6 +45,9 @@ public class SubscriptionQueriesTest {
         public List<Info> getAvailableSubscriptionInfoList(String pkg, String feature) {
             return getAllSubInfoList(pkg, feature);
         }
+        public int getActiveSubInfoCount(String pkg, String feature, boolean allProfiles) {
+            return getActiveSubscriptionInfoList(pkg, feature, allProfiles).size();
+        }
         public List<Info> getAccessibleSubscriptionInfoList(String pkg) {
             return getAllSubInfoList(pkg, null);
         }
@@ -143,5 +146,56 @@ public class SubscriptionQueriesTest {
                                 }));
         assertEquals(
                 List.of(f.service.real), f.service.invoke("getAllSubInfoList", "selected", null));
+    }
+    @Test
+    public void addsOnlyAuthorizedVirtualRecordsAndKeepsCountsAndSpecialListsConsistent()
+            throws Throwable {
+        Service service = new Service();
+        Info virtual = new Info(1900000001, "virtual", "");
+        VirtualSubscriptions model = new VirtualSubscriptions(
+                List.of(new VirtualSubscriptions.Entry(virtual.id(), 1, virtual)), virtual.id(),
+                true);
+        new SubscriptionQueries(Service.class, (pkg, attribution) -> {
+            if (!"selected".equals(pkg) || !service.allowed)
+                return null;
+            assertEquals("feature", attribution);
+            return new SubscriptionQueries.Output() {
+                public Object replace(Object original) {
+                    return original;
+                }
+                public VirtualSubscriptions virtuals() {
+                    return model;
+                }
+                public List<?> additions(List<?> records) {
+                    return model.additions(
+                            records, r -> ((Info) r).id(), r -> ((Info) r).id() == 7 ? 0 : 1);
+                }
+            };
+        }).install((target, around) -> {
+            MethodHook hook = new MethodHook(target, around);
+            hook.setBackup(target);
+            service.hooks.put(target.getName(), hook);
+        });
+        assertEquals(List.of(service.real, virtual),
+                service.invoke("getActiveSubscriptionInfoList", "selected", "feature", false));
+        assertEquals(2, service.invoke("getActiveSubInfoCount", "selected", "feature", false));
+        assertEquals(virtual,
+                service.invoke("getActiveSubscriptionInfo", virtual.id(), "selected", "feature"));
+        assertEquals(virtual,
+                service.invoke(
+                        "getActiveSubscriptionInfoForSimSlotIndex", 1, "selected", "feature"));
+        assertNull(service.invoke("getActiveSubscriptionInfo", 999, "selected", "feature"));
+        assertNull(service.invoke(
+                "getActiveSubscriptionInfoForIccId", "missing", "selected", "feature"));
+        assertEquals(List.of(service.real),
+                service.invoke("getOpportunisticSubscriptions", "selected", "feature"));
+        service.allowed = false;
+        assertEquals(List.of(),
+                service.invoke("getActiveSubscriptionInfoList", "selected", "feature", false));
+        assertNull(
+                service.invoke("getActiveSubscriptionInfo", virtual.id(), "selected", "feature"));
+        service.hardDenied = true;
+        assertThrows(SecurityException.class,
+                () -> service.invoke("getActiveSubInfoCount", "selected", "feature", false));
     }
 }

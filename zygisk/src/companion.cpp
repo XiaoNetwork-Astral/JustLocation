@@ -32,8 +32,10 @@ std::string status(unsigned char installed, unsigned wifi_calls, const std::stri
             std::string("{\"version\":1,\"op\":\"hook_status\",\"installed\":") +
             ((installed & 1) ? "true" : "false") +
             ",\"gnss\":" + ((installed & 2) ? "true" : "false") +
-            ",\"nmea\":" + ((installed & 4) ? "true" : "false") + ",\"cell_callbacks\":" +
-            ((installed & 8) ? "true" : "false")
+            ",\"nmea\":" + ((installed & 4) ? "true" : "false") +
+            ",\"cell_callbacks\":" + ((installed & 8) ? "true" : "false") +
+            ",\"virtual_sim_callbacks\":" +
+            ((installed & 128) ? "true" : "false")
             // Report scan and connection hooks separately.
             + ",\"wifi_scan\":" + ((installed & 16) ? "true" : "false") + ",\"wifi_connection\":" +
             ((installed & 32) ? "true" : "false")
@@ -54,12 +56,13 @@ std::string status(unsigned char installed, unsigned wifi_calls, const std::stri
         }
         request = std::string("{\"version\":1,\"op\":\"step_hook_status\",\"installed\":") +
                   ((installed & 1) ? "true" : "false") + ",\"events\":" + gnss_raw + "}\n";
-    } else if (installed & 128) {
+    } else if (operation == 'P') {
         // Phone operator fields use a pipe separator. Literal newlines would invalidate the JSON
         // request.
         request = std::string("{\"version\":1,\"op\":\"telephony_hook_status\",\"cells\":") +
                   ((installed & 1) ? "true" : "false") +
                   ",\"sim\":" + ((installed & 2) ? "true" : "false") +
+                  ",\"virtual_sim_queries\":" + ((installed & 4) ? "true" : "false") +
                   ",\"subscriptions\":" + subscriptions +
                   phone_protocol::operator_fields(gnss_raw) + "}\n";
     }

@@ -518,6 +518,11 @@ pub enum WifiCommand {
 pub enum SimCommand {
     Get,
     Set(FileInput),
+    /// Configure subscriptions for confirmed empty slots, without changing real SIMs.
+    Virtual {
+        #[command(subcommand)]
+        command: VirtualSimCommand,
+    },
     Cells {
         #[arg(action=clap::ArgAction::Set)]
         enabled: bool,
@@ -546,6 +551,30 @@ pub enum SimCommand {
     },
     Remove {
         id: i32,
+    },
+}
+#[derive(Subcommand)]
+pub enum VirtualSimCommand {
+    Upsert {
+        #[arg(long)]
+        slot: u8,
+        #[arg(long)]
+        mcc: String,
+        #[arg(long)]
+        mnc: String,
+        #[arg(long)]
+        carrier: String,
+        #[arg(long, default_value = "cn")]
+        country: String,
+        #[arg(long,default_value_t=true,action=clap::ArgAction::Set)]
+        enabled: bool,
+    },
+    Remove {
+        slot: u8,
+    },
+    /// Select a virtual default slot; omit the slot to use the lowest available one.
+    Default {
+        slot: Option<u8>,
     },
 }
 #[derive(Clone, Copy, ValueEnum, Serialize)]

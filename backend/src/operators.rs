@@ -165,6 +165,9 @@ pub struct Operators {
     backup: PathBuf,
     real: Option<Real>,
     ready: bool,
+    applied: Option<Vec<(String, String)>>,
+    // A phone heartbeat may echo a property value written by this daemon.
+    written: Vec<(String, String)>,
 }
 
 impl Operators {
@@ -173,7 +176,14 @@ impl Operators {
     }
 
     pub fn with_properties(properties: Box<dyn Properties + Send>, directory: &Path) -> Self {
-        Self { properties, backup: directory.join("operator.bak"), real: None, ready: false }
+        Self {
+            properties,
+            backup: directory.join("operator.bak"),
+            real: None,
+            ready: false,
+            applied: None,
+            written: Vec::new(),
+        }
     }
 
     /// Whether replacement properties have been applied successfully.
@@ -190,14 +200,28 @@ impl Operators {
     ) -> io::Result<()> {
         let desired = Spoof::values(config, running);
         if desired.is_active() {
-            if self.real.is_some() {
-                return Ok(());
+            let backup = if self.real.is_none() {
+                let values = self.real_values(live);
+                // Keep originals even if publication fails; stop can still restore from memory.
+                let result = write_backup(&self.backup, &values);
+                self.real = Some(Real { values });
+                result
+            } else {
+                Ok(())
+            };
+            let replacements = self.replacements(&desired, live);
+            if !self.ready || self.applied.as_ref() != Some(&replacements) {
+                for replacement in &replacements {
+                    if !self.written.contains(replacement) {
+                        self.written.push(replacement.clone());
+                    }
+                }
+                self.ready = false;
+                for (name, value) in &replacements {
+                    self.properties.set(name, value)?;
+                }
+                self.applied = Some(replacements);
             }
-            let values = self.real_values(live);
-            // Keep originals in memory even if the backup fails, so a later stop can restore them.
-            let backup = write_backup(&self.backup, &values);
-            self.real = Some(Real { values });
-            self.write(&desired)?;
             self.ready = true;
             backup
         } else {
@@ -207,44 +231,51 @@ impl Operators {
 
     /// Prefer fresh phone values, then in-memory originals, then current properties.
     fn real_values(&self, live: Option<&Live>) -> Vec<(String, String)> {
+        let mut values = self.real.as_ref().map(|real| real.values.clone()).unwrap_or_else(|| {
+            ALL.iter()
+                .map(|name| ((*name).to_string(), self.properties.get(name).unwrap_or_default()))
+                .collect()
+        });
+        self.merge_live(&mut values, live);
+        values
+    }
+
+    fn merge_live(&self, originals: &mut [(String, String)], live: Option<&Live>) {
         if let Some(live) = live.filter(|live| live.is_usable()) {
-            return live.values();
+            for (name, value) in live.values() {
+                let echo =
+                    self.written.iter().any(|(key, written)| *key == name && *written == value);
+                if !value.is_empty() && !echo {
+                    if let Some((_, saved)) = originals.iter_mut().find(|(key, _)| *key == name) {
+                        *saved = value;
+                    }
+                }
+            }
         }
-        if let Some(real) = &self.real {
-            return real.values.clone();
-        }
-        ALL.iter()
-            .map(|name| ((*name).to_string(), self.properties.get(name).unwrap_or_default()))
-            .collect()
     }
 
     /// Restore fresh phone values, in-memory originals or the backup, in that order.
     /// Remove the backup after successful restoration.
     pub fn restore(&mut self, live: Option<&Live>) -> io::Result<()> {
-        let values = if let Some(live) = live.filter(|live| live.is_usable()) {
-            live.values()
-        } else {
-            match &self.real {
-                Some(real) => real.values.clone(),
-                None => {
-                    if !self.backup.exists() {
-                        self.ready = false;
-                        return Ok(());
-                    }
-                    read_backup(&self.backup)?
+        let mut values = match &self.real {
+            Some(real) => real.values.clone(),
+            None => {
+                if !self.backup.exists() {
+                    self.ready = false;
+                    return Ok(());
                 }
+                read_backup(&self.backup)?
             }
         };
+        self.merge_live(&mut values, live);
         for (name, value) in &values {
-            // Skip empty values when restoring unregistered operator fields.
-            if value.is_empty() {
-                continue;
-            }
+            // Empty strings are the real operator values on a device without a SIM.
             self.properties.set(name, value)?;
         }
         let _ = fs::remove_file(&self.backup);
         self.real = None;
         self.ready = false;
+        self.applied = None;
         Ok(())
     }
 
@@ -257,16 +288,25 @@ impl Operators {
         Ok(true)
     }
 
-    fn write(&mut self, spoof: &Spoof) -> io::Result<()> {
-        for (name, value) in [
-            (NETWORK_ALPHA, &spoof.alpha),
-            (SIM_ALPHA, &spoof.alpha),
-            (NETWORK_NUMERIC, &spoof.numeric),
-            (SIM_NUMERIC, &spoof.numeric),
-        ] {
-            self.properties.set(name, value)?;
-        }
-        Ok(())
+    fn replacements(&self, spoof: &Spoof, live: Option<&Live>) -> Vec<(String, String)> {
+        self.real_values(live)
+            .into_iter()
+            .map(|(name, original)| {
+                let alpha = name == NETWORK_ALPHA || name == SIM_ALPHA;
+                let mut slots: Vec<String> = original.split(',').map(str::to_string).collect();
+                let replacement = if alpha { &spoof.alpha } else { &spoof.numeric };
+                for (index, value) in replacement.split(',').enumerate() {
+                    if value.is_empty() {
+                        continue;
+                    }
+                    if slots.len() <= index {
+                        slots.resize(index + 1, String::new());
+                    }
+                    slots[index] = value.to_string();
+                }
+                (name, join(&slots, alpha))
+            })
+            .collect()
     }
 }
 
@@ -317,7 +357,13 @@ pub mod tests {
     }
 
     fn config(subscriptions: Vec<Subscription>, sim_enabled: bool) -> TelephonyConfig {
-        TelephonyConfig { cells_enabled: false, sim_enabled, radius_m: 500., subscriptions }
+        TelephonyConfig {
+            cells_enabled: false,
+            sim_enabled,
+            radius_m: 500.,
+            subscriptions,
+            virtual_sim: Default::default(),
+        }
     }
 
     #[test]
@@ -457,8 +503,9 @@ pub mod tests {
 
         operators.apply(&configuration, true, None).unwrap();
         assert!(operators.is_ready());
-        assert_eq!(shared.get(NETWORK_ALPHA).unwrap(), "中国联通");
-        assert_eq!(shared.get(NETWORK_NUMERIC).unwrap(), "46011");
+        // Only the configured slot changes; the other real slot keeps its original fields.
+        assert_eq!(shared.get(NETWORK_ALPHA).unwrap(), "中国联通,中国电信");
+        assert_eq!(shared.get(NETWORK_NUMERIC).unwrap(), "46011,46011");
         assert!(dir.join("operator.bak").exists());
 
         let before = shared.0.writes.lock().unwrap().len();
@@ -564,6 +611,78 @@ pub mod tests {
         assert!(!dir.join("operator.bak").exists());
         assert!(!operators.recover(None).unwrap());
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn restores_empty_operators_and_ignores_own_heartbeat_echo() {
+        let dir = directory("no-sim-echo");
+        let shared = fake(&[]);
+        let mut operators = Operators::with_properties(Box::new(shared.clone()), &dir);
+        let first = config(vec![subscription(0, "Virtual", "460", "01", true)], true);
+        operators.apply(&first, true, None).unwrap();
+        let echo = Live {
+            network_alpha: "Virtual".into(),
+            sim_alpha: "Virtual".into(),
+            network_numeric: "46001".into(),
+            sim_numeric: "46001".into(),
+        };
+        let second = config(vec![subscription(0, "Updated", "460", "02", true)], true);
+        operators.apply(&second, true, Some(&echo)).unwrap();
+        assert_eq!(shared.get(NETWORK_ALPHA).as_deref(), Some("Updated"));
+        assert_eq!(shared.get(SIM_NUMERIC).as_deref(), Some("46002"));
+        operators.apply(&second, false, Some(&echo)).unwrap();
+        for name in ALL {
+            assert_eq!(shared.get(name).as_deref(), Some(""));
+        }
+        // Stale echoes must neither change idle properties nor become next-session originals.
+        let writes = shared.0.write_count();
+        operators.apply(&second, false, Some(&echo)).unwrap();
+        assert_eq!(shared.0.write_count(), writes);
+        operators.apply(&first, true, Some(&echo)).unwrap();
+        operators.apply(&first, false, Some(&echo)).unwrap();
+        assert_eq!(shared.get(NETWORK_ALPHA).as_deref(), Some(""));
+        assert!(!dir.join("operator.bak").exists());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn startup_recovery_writes_empty_original_properties() {
+        let dir = directory("recover-empty");
+        let shared = fake(&[(NETWORK_ALPHA, "Virtual"), (SIM_NUMERIC, "46001")]);
+        fs::write(dir.join("operator.bak"), format!("{NETWORK_ALPHA}=\n{SIM_NUMERIC}=\n")).unwrap();
+        let mut operators = Operators::with_properties(Box::new(shared.clone()), &dir);
+        assert!(operators.recover(None).unwrap());
+        assert_eq!(shared.get(NETWORK_ALPHA).as_deref(), Some(""));
+        assert_eq!(shared.get(SIM_NUMERIC).as_deref(), Some(""));
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn virtual_second_slot_preserves_the_first_real_card() {
+        let dir = directory("mixed-slots");
+        let shared = fake(&[
+            (NETWORK_ALPHA, "Network"),
+            (SIM_ALPHA, "Card"),
+            (NETWORK_NUMERIC, "46011"),
+            (SIM_NUMERIC, "46003"),
+        ]);
+        let mut operators = Operators::with_properties(Box::new(shared.clone()), &dir);
+        let config = config(vec![subscription(1, "Virtual", "460", "01", true)], true);
+        operators.apply(&config, true, None).unwrap();
+        assert_eq!(shared.get(NETWORK_ALPHA).as_deref(), Some("Network,Virtual"));
+        assert_eq!(shared.get(SIM_ALPHA).as_deref(), Some("Card,Virtual"));
+        assert_eq!(shared.get(NETWORK_NUMERIC).as_deref(), Some("46011,46001"));
+        assert_eq!(shared.get(SIM_NUMERIC).as_deref(), Some("46003,46001"));
+        let echo = Live {
+            network_alpha: "Network,Virtual".into(),
+            sim_alpha: "Card,Virtual".into(),
+            network_numeric: "46011,46001".into(),
+            sim_numeric: "46003,46001".into(),
+        };
+        operators.apply(&config, false, Some(&echo)).unwrap();
+        assert_eq!(shared.get(NETWORK_ALPHA).as_deref(), Some("Network"));
+        assert_eq!(shared.get(SIM_ALPHA).as_deref(), Some("Card"));
+        fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

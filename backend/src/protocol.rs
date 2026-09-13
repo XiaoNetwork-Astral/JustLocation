@@ -60,6 +60,10 @@ pub struct Control {
     cells_installed: bool,
     cell_callbacks_installed: bool,
     sim_installed: bool,
+    virtual_sim_queries_installed: bool,
+    virtual_sim_callbacks_installed: bool,
+    virtual_sim_publication: std::cell::RefCell<crate::virtual_sim::Publication>,
+    virtual_sim_applied: Option<String>,
     wifi_scan_installed: bool,
     wifi_connection_installed: bool,
     wifi_hook_calls: u32,
@@ -70,6 +74,7 @@ pub struct Control {
     live_operators: Option<crate::operators::Live>,
     live_operators_seen_at: Option<Instant>,
     detected_subscriptions: Option<Vec<DetectedSubscription>>,
+    active_modem_count: Option<u8>,
     step_count: StepCount,
     step_updated: Option<Instant>,
     step_seen: Option<Instant>,
@@ -137,7 +142,7 @@ impl Control {
             .filter(|seen| seen.elapsed() < Duration::from_secs(3))
             .and(self.live_operators.clone());
         if let Err(error) = self.operators.apply(
-            &self.session.telephony,
+            &self.resolved_telephony().config,
             self.session.engine.is_running() && self.session.scopes.sim == crate::Scope::All,
             live.as_ref(),
         ) {
@@ -309,18 +314,26 @@ impl Control {
             Command::TelephonyHookStatus {
                 cells,
                 sim,
+                virtual_sim_queries,
+                virtual_sim_applied,
                 subscriptions,
+                active_modem_count,
                 network_alpha,
                 sim_alpha,
                 network_numeric,
                 sim_numeric,
             } => {
+                if active_modem_count.is_some_and(|count| count > 2) {
+                    return Err("at most two active modems are supported".into());
+                }
                 if let Some(cards) = &subscriptions {
                     validate_detected(cards).map_err(str::to_owned)?;
                 }
                 self.phone_seen_at = Some(Instant::now());
                 self.cells_installed = cells;
                 self.sim_installed = sim;
+                self.virtual_sim_queries_installed = virtual_sim_queries;
+                self.virtual_sim_applied = virtual_sim_applied;
                 // Unreported fields remain empty; any usable original value can update the snapshot.
                 let live = crate::operators::Live {
                     network_alpha: network_alpha.unwrap_or_default(),
@@ -333,6 +346,7 @@ impl Control {
                     self.live_operators_seen_at = Some(Instant::now());
                 }
                 self.detected_subscriptions = subscriptions;
+                self.active_modem_count = active_modem_count;
                 Ok(())
             }
             Command::SetCellRegion { region } => {
@@ -402,6 +416,7 @@ impl Control {
                 gnss,
                 nmea,
                 cell_callbacks,
+                virtual_sim_callbacks,
                 wifi_scan,
                 wifi_connection,
                 wifi_calls,
@@ -413,6 +428,7 @@ impl Control {
                 self.gnss_installed = gnss;
                 self.nmea_installed = nmea;
                 self.cell_callbacks_installed = cell_callbacks;
+                self.virtual_sim_callbacks_installed = virtual_sim_callbacks;
                 self.wifi_scan_installed = wifi_scan;
                 self.wifi_connection_installed = wifi_connection;
                 self.wifi_hook_calls = wifi_calls;
@@ -552,6 +568,16 @@ impl Control {
         };
         self.session.engine.set_scope(scope.clone()).map_err(str::to_owned)
     }
+    fn resolved_telephony(&self) -> crate::virtual_sim::Resolved {
+        let detected =
+            if self.phone_seen_at.is_some_and(|time| time.elapsed() < Duration::from_secs(3)) {
+                self.detected_subscriptions.as_deref()
+            } else {
+                None
+            };
+        self.session.telephony.resolve(detected, self.active_modem_count)
+    }
+
     fn response(&self, error: Option<String>) -> Response {
         let now = self.step_updated.unwrap_or_else(Instant::now);
         let mut output = self.session.engine.config().cloned();
@@ -573,7 +599,7 @@ impl Control {
             && (self.session.telephony.cells_enabled || self.session.telephony.sim_enabled)
         {
             output.as_ref().map(|config| {
-                self.session.telephony.frame(
+                self.resolved_telephony().frame(
                     self.session.cell_region.as_ref(),
                     Coordinate {
                         latitude: config.position.latitude,
@@ -585,6 +611,10 @@ impl Control {
             None
         };
         let cells_synthesized = telephony_output.as_ref().is_some_and(|frame| frame.synthesized);
+        let virtual_sim_version = self
+            .virtual_sim_publication
+            .borrow_mut()
+            .update(telephony_output.as_ref(), &self.session.scopes.sim);
         Response {
             version: VERSION,
             page: if error.is_none() { self.page.clone() } else { None },
@@ -650,6 +680,17 @@ impl Control {
                 cell_query_hook_ready: phone_connected && self.cells_installed,
                 cell_callback_hook_ready: hook_connected && self.cell_callbacks_installed,
                 sim_hook_ready: phone_connected && self.sim_installed,
+                virtual_sim_version,
+                virtual_sim_applied: if phone_connected {
+                    self.virtual_sim_applied.clone()
+                } else {
+                    None
+                },
+                virtual_sim_query_hook_ready: phone_connected
+                    && self.sim_installed
+                    && self.virtual_sim_queries_installed,
+                virtual_sim_callback_hook_ready: hook_connected
+                    && self.virtual_sim_callbacks_installed,
                 operator_hook_ready: self.operators.is_ready(),
                 wifi_scan_hook_ready: hook_connected && self.wifi_scan_installed,
                 wifi_connection_hook_ready: hook_connected && self.wifi_connection_installed,
@@ -663,6 +704,7 @@ impl Control {
                 } else {
                     None
                 },
+                active_modem_count: if phone_connected { self.active_modem_count } else { None },
             },
         }
     }

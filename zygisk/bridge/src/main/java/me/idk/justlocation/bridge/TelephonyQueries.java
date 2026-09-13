@@ -11,8 +11,11 @@ final class TelephonyQueries {
     interface Output {
         List<?> cells(int subscriptionId) throws Exception;
         Object identity(int subscriptionId) throws Exception;
+        default int resolve(int subscriptionId, int slot) {
+            return subscriptionId;
+        }
     }
-    private final Method cached, request, async, all, location, update, subId, deliver;
+    private final Method cached, request, async, all, location, update, subId, phoneId, deliver;
     private final int allCommand, locationCommand, updateCommand;
     private final Function<String, Output> source;
     private final ThreadLocal<String> caller = new ThreadLocal<>();
@@ -32,6 +35,7 @@ final class TelephonyQueries {
         update = service.getDeclaredMethod("requestCellInfoUpdateInternal", int.class, callback,
                 String.class, String.class, workSource);
         subId = phone.getMethod("getSubId");
+        phoneId = phone.getMethod("getPhoneId");
         deliver = callback.getMethod("onCellInfo", List.class);
         allCommand = constant(service, "CMD_GET_ALL_CELL_INFO", 60);
         locationCommand = constant(service, "CMD_GET_CELL_LOCATION", 62);
@@ -52,6 +56,9 @@ final class TelephonyQueries {
                 return call.original();
             int subscription = call.arguments[4] == null ? (int) call.arguments[3]
                                                          : (int) subId.invoke(call.arguments[4]);
+            if (call.arguments[4] != null)
+                subscription =
+                        output.resolve(subscription, (int) phoneId.invoke(call.arguments[4]));
             return command == allCommand ? output.cells(subscription)
                                          : output.identity(subscription);
         });
@@ -61,7 +68,8 @@ final class TelephonyQueries {
             Output output = current();
             if (output == null)
                 return call.original();
-            List<?> cells = output.cells((int) subId.invoke(call.arguments[3]));
+            List<?> cells = output.cells(output.resolve((int) subId.invoke(call.arguments[3]),
+                    (int) phoneId.invoke(call.arguments[3])));
             try {
                 deliver.invoke(call.arguments[2], cells);
             } catch (InvocationTargetException error) {

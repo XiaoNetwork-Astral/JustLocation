@@ -12,6 +12,9 @@ public final class PhoneBridge {
     private static volatile TelephonySnapshot snapshot;
     private static volatile boolean queriesReady;
     private static volatile boolean subscriptionsReady;
+    private static volatile boolean virtualQueriesReady;
+    private static SubscriptionCache subscriptionCache;
+    private static String appliedVirtualVersion = "off";
     private static boolean attached;
     private static native String readState(
             int installed, int wifiCalls, byte[] subscriptions, String extra);
@@ -38,6 +41,12 @@ public final class PhoneBridge {
         attached = true;
         ClassLoader loader = context.getClassLoader();
         try {
+            subscriptionCache = new SubscriptionCache();
+            subscriptionCache.update(null);
+        } catch (Exception error) {
+            Log.w("JustLocation", "Subscription cache invalidation unavailable", error);
+        }
+        try {
             Class<?> service =
                     Class.forName("com.android.phone.PhoneInterfaceManager", false, loader);
             for (Method method : service.getDeclaredMethods()) {
@@ -58,6 +67,9 @@ public final class PhoneBridge {
                                 || !current.cellsApplyTo(name, SystemClock.elapsedRealtime()))
                             return null;
                         return new TelephonyQueries.Output() {
+                            public int resolve(int subId, int slot) {
+                                return current.resolveSubscription(subId, slot);
+                            }
                             public java.util.List<?> cells(int subId) throws Exception {
                                 return current.cells(subId, SystemClock.elapsedRealtimeNanos());
                             }
@@ -90,18 +102,55 @@ public final class PhoneBridge {
             Class<?> service = Class.forName(
                     "com.android.internal.telephony.subscription.SubscriptionManagerService", false,
                     loader);
-            new SubscriptionQueries(service, name -> {
+            SubscriptionCallers callers = new SubscriptionCallers(context, loader);
+            new SubscriptionQueries(service, (name, attribution) -> {
                 // Local phone-service work must continue to see the actual subscription database.
                 if (android.os.Binder.getCallingUid() == android.os.Process.myUid())
                     return null;
                 TelephonySnapshot current = snapshot;
-                if (current == null || !current.simAppliesTo(name, SystemClock.elapsedRealtime()))
+                if (current == null || callers.packages(name) == null
+                        || !current.simAppliesTo(name, SystemClock.elapsedRealtime()))
                     return null;
-                return original
-                        -> current.subscription((android.telephony.SubscriptionInfo) original);
+                VirtualSubscriptions virtuals = virtualQueriesReady && subscriptionCache != null
+                                && callers.canReadVirtual(name, attribution)
+                        ? current.virtuals(name, SystemClock.elapsedRealtime())
+                        : null;
+                return new SubscriptionQueries.Output() {
+                    public Object replace(Object original) throws Exception {
+                        return current.subscription((android.telephony.SubscriptionInfo) original);
+                    }
+                    public VirtualSubscriptions virtuals() {
+                        return virtuals;
+                    }
+                    public java.util.List<?> additions(java.util.List<?> records) {
+                        return virtuals == null
+                                ? java.util.List.of()
+                                : virtuals.additions(records,
+                                          record
+                                          -> ((android.telephony.SubscriptionInfo) record)
+                                                  .getSubscriptionId(),
+                                          record
+                                          -> ((android.telephony.SubscriptionInfo) record)
+                                                  .getSimSlotIndex());
+                    }
+                };
             }).install(PhoneBridge::install);
             subscriptionsReady = true;
             Log.i("JustLocation", "Subscription operator hooks installed");
+            if (subscriptionCache != null) {
+                new VirtualSubscriptionQueries(service,
+                        Class.forName("com.android.phone.PhoneInterfaceManager", false, loader),
+                        (name, attribution) -> {
+                            TelephonySnapshot current = snapshot;
+                            if (current == null
+                                    || (name != null && !callers.canReadVirtual(name, attribution)))
+                                return null;
+                            return current.virtuals(
+                                    callers.packages(name), SystemClock.elapsedRealtime());
+                        })
+                        .install(PhoneBridge::install);
+                virtualQueriesReady = true;
+            }
         } catch (Exception error) {
             Log.w("JustLocation", "Subscription operator queries unavailable", error);
         }
@@ -123,9 +172,9 @@ public final class PhoneBridge {
                     // Wi-Fi hooks run only in system_server, so this process reports zero Wi-Fi
                     // calls. The extra field carries operator values for the daemon's restore
                     // logic.
-                    String response =
-                            readState(128 | (queriesReady ? 1 : 0) | (subscriptionsReady ? 2 : 0),
-                                    0, cards, realOperators(context));
+                    String response = readState(128 | (queriesReady ? 1 : 0)
+                                    | (subscriptionsReady ? 2 : 0) | (virtualQueriesReady ? 4 : 0),
+                            0, cards, heartbeatExtra(context));
                     // Log each heartbeat failure once to avoid flooding logcat.
                     if (response == null) {
                         if (!reportedEmpty) {
@@ -145,6 +194,19 @@ public final class PhoneBridge {
                         Log.w("JustLocation", "Phone heartbeat failed", error);
                     }
                     snapshot = null;
+                }
+                try {
+                    TelephonySnapshot current = snapshot;
+                    if (subscriptionCache != null)
+                        subscriptionCache.update(current == null
+                                        ? null
+                                        : current.virtualVersion(SystemClock.elapsedRealtime()));
+                    appliedVirtualVersion = current == null
+                            ? "off"
+                            : current.publication(SystemClock.elapsedRealtime());
+                } catch (Exception error) {
+                    snapshot = null;
+                    Log.w("JustLocation", "Subscription cache refresh failed", error);
                 }
                 try {
                     Thread.sleep(1000);
@@ -167,11 +229,17 @@ public final class PhoneBridge {
             if (manager == null)
                 return null;
             return PhoneOperators.encode(safe(() -> manager.getNetworkOperatorName()),
-                    safe(() -> manager.getSimOperatorName()),
-                    safe(() -> manager.getNetworkOperator()), safe(() -> manager.getSimOperator()));
+                           safe(() -> manager.getSimOperatorName()),
+                           safe(() -> manager.getNetworkOperator()),
+                           safe(() -> manager.getSimOperator()))
+                    + "|" + Math.min(2, manager.getActiveModemCount());
         } catch (Exception error) {
             return null;
         }
+    }
+    private static String heartbeatExtra(Context context) {
+        String operators = realOperators(context);
+        return (operators == null ? "||||" : operators) + "|" + appliedVirtualVersion;
     }
 
     private static String safe(java.util.function.Supplier<String> value) {

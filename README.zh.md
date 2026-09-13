@@ -33,6 +33,8 @@ justlocation route --help                              # 查看路线命令
 
 位置、路线、Wi-Fi 和 SIM 的独立应用名单：[作用范围](docs/scopes.md)。
 
+空卡槽的虚拟订阅与配置：[无 SIM 虚拟订阅](docs/virtual-sim.md)。
+
 ## 构建
 
 - Node.js 22.12+

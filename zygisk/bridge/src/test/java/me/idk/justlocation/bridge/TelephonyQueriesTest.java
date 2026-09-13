@@ -14,6 +14,9 @@ public class TelephonyQueriesTest {
         void onCellInfo(List<?> cells);
     }
     public static class Phone {
+        public int getPhoneId() {
+            return 0;
+        }
         public int getSubId() {
             return 7;
         }

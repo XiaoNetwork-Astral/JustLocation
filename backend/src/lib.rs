@@ -31,6 +31,7 @@ pub mod smoothing;
 pub mod steps;
 pub mod telephony;
 pub mod transport;
+pub mod virtual_sim;
 pub mod wifi;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

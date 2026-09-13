@@ -33,6 +33,8 @@ Floating controls, direction lock and compass following: [joystick guide](docs/j
 
 Separate position, route, Wi-Fi and SIM app lists: [application scopes](docs/scopes.md).
 
+Subscription metadata for empty SIM slots: [virtual subscriptions](docs/virtual-sim.md).
+
 ## Build
 
 - Node.js 22.12+
