@@ -4,6 +4,12 @@ impl Runtime {
     pub(super) fn maps(&self, command: MapCommand) -> Result<()> {
         let request = match command {
             MapCommand::Settings => json!({"op":"settings"}),
+            MapCommand::Reverse { provider, lat, lon } => {
+                json!({"op":"reverse","provider":provider,"position":{"latitude":lat,"longitude":lon}})
+            }
+            MapCommand::Link { provider, lat, lon } => {
+                json!({"op":"link","provider":provider,"position":{"latitude":lat,"longitude":lon}})
+            }
             MapCommand::Capabilities => json!({"op":"capabilities"}),
             MapCommand::Plan { input, output } => {
                 let result = self

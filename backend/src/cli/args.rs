@@ -545,10 +545,29 @@ pub enum Provider {
     Amap,
     Tencent,
     Baidu,
+    Google,
 }
 #[derive(Subcommand)]
 pub enum MapCommand {
     Settings,
+    /// Look up an address, administrative components and available POIs from WGS84.
+    Reverse {
+        #[arg(value_enum)]
+        provider: Provider,
+        #[arg(long, allow_hyphen_values = true)]
+        lat: f64,
+        #[arg(long, allow_hyphen_values = true)]
+        lon: f64,
+    },
+    /// Return a Google Maps URL; opening a map does not need a WebService key.
+    Link {
+        #[arg(value_enum)]
+        provider: Provider,
+        #[arg(long, allow_hyphen_values = true)]
+        lat: f64,
+        #[arg(long, allow_hyphen_values = true)]
+        lon: f64,
+    },
     Capabilities,
     /// Request real provider routes from a WGS84 PlanRequest JSON file.
     Plan {

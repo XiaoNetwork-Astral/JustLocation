@@ -58,9 +58,17 @@ writeFileSync(
   }),
 );
 const capabilities = run(['maps', 'capabilities']);
-assert.equal(capabilities.providers.length, 3);
+assert.equal(capabilities.providers.length, 4);
 assert.ok(
   capabilities.providers.every((p) => p.map_matching === false && p.building_avoidance === false),
+);
+assert.equal(
+  run(['maps', 'link', 'google', '--lat', '-33.8568', '--lon', '151.2153']).requires_key,
+  false,
+);
+assert.match(
+  run(['maps', 'reverse', 'google', '--lat', '1', '--lon', '2'], false),
+  /missing WebService key/,
 );
 const summaries = run(['route', 'candidates', '-i', candidates]);
 assert.equal(summaries.length, 2);

@@ -12,6 +12,7 @@ pub mod cells;
 pub mod cli;
 pub mod coordinates;
 pub mod dataset;
+pub mod geocoding;
 pub mod gnss;
 pub mod jitter;
 pub mod maps;

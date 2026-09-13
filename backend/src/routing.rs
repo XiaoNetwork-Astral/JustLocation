@@ -25,7 +25,7 @@ pub struct Coordinate {
     pub longitude: f64,
 }
 impl Coordinate {
-    fn position(&self) -> Result<Position, String> {
+    pub fn position(&self) -> Result<Position, String> {
         let p = Position::new(self.latitude, self.longitude);
         p.validate()?;
         Ok(p)
@@ -54,11 +54,14 @@ impl PlanRequest {
         if !self.speed.is_finite() || self.speed <= 0.0 || self.speed > 1000.0 {
             return Err("route speed must be greater than 0 and at most 1000 m/s".into());
         }
-        let max = if self.mode == TravelMode::Driving {
+        let max = if self.provider == MapProvider::Google {
+            25
+        } else if self.mode == TravelMode::Driving {
             match self.provider {
                 MapProvider::Amap => 16,
                 MapProvider::Tencent => 30,
                 MapProvider::Baidu => 10,
+                MapProvider::Google => 25,
             }
         } else {
             0
@@ -92,6 +95,8 @@ pub struct Geometry {
     pub mode: TravelMode,
     pub distance_m: f64,
     pub duration_s: f64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
     pub segments: Vec<Segment>,
 }
 impl Geometry {
@@ -121,10 +126,12 @@ impl Geometry {
 }
 
 pub fn capabilities() -> Value {
-    json!({"coordinate_system":"wgs84","providers":([MapProvider::Amap,MapProvider::Tencent,MapProvider::Baidu].map(|p| json!({
-        "provider":p,"place_search":true,"route_modes":["walking","cycling","driving"],
-        "driving_waypoints_max":match p {MapProvider::Amap=>16,MapProvider::Tencent=>30,MapProvider::Baidu=>10},
-        "walking_cycling_waypoints_max":0,"key_type":"WebService","quota":"account-dependent",
+    json!({"coordinate_system":"wgs84","providers":([MapProvider::Amap,MapProvider::Tencent,MapProvider::Baidu,MapProvider::Google].map(|p| json!({
+        "provider":p,"place_search":true,"reverse_geocoding":true,"reverse_nearby_pois":p!=MapProvider::Google,
+        "external_map_link":p==MapProvider::Google,"embedded_map":"frontend capability; not provided by WebService key",
+        "route_modes":["walking","cycling","driving"],"coverage":if p==MapProvider::Google {"varies by country and mode; see Google coverage table"} else {"domestic endpoints; overseas routing not connected"},
+        "driving_waypoints_max":match p {MapProvider::Amap=>16,MapProvider::Tencent=>30,MapProvider::Baidu=>10,MapProvider::Google=>25},
+        "walking_cycling_waypoints_max":if p==MapProvider::Google {25} else {0},"key_type":"WebService","quota":"account-dependent",
         "independent_of_base_map":true,"map_matching":false,"building_avoidance":false,
         "level_constraints":false,"planned_geometry":"preserved; corner smoothing and horizontal drift disabled"
     })))})
@@ -132,6 +139,12 @@ pub fn capabilities() -> Value {
 
 pub fn request(plan: &PlanRequest, key: &str) -> Result<HttpRequest, String> {
     plan.validate()?;
+    if plan.provider == MapProvider::Google {
+        let waypoint = |p: &Coordinate| json!({"location":{"latLng":p}});
+        return Ok(HttpRequest {url:"https://routes.googleapis.com/directions/v2:computeRoutes".into(),
+            query:vec![("key".into(),key.into()),("fields".into(),"routes.distanceMeters,routes.duration,routes.warnings,routes.polyline.geoJsonLinestring,routes.legs.steps.distanceMeters,routes.legs.steps.staticDuration,routes.legs.steps.polyline.geoJsonLinestring,routes.legs.steps.navigationInstruction,routes.legs.steps.travelMode".into())],
+            body:Some(json!({"origin":waypoint(&plan.origin),"destination":waypoint(&plan.destination),"intermediates":plan.waypoints.iter().map(waypoint).collect::<Vec<_>>(),"travelMode":match plan.mode {TravelMode::Walking=>"WALK",TravelMode::Cycling=>"BICYCLE",TravelMode::Driving=>"DRIVE"},"computeAlternativeRoutes":plan.waypoints.is_empty(),"polylineQuality":"HIGH_QUALITY","polylineEncoding":"GEO_JSON_LINESTRING"})),bearer:None});
+    }
     let coordinate = |p: &Coordinate| -> Result<String, String> {
         let p = if plan.provider == MapProvider::Baidu {
             p.position()?
@@ -188,6 +201,7 @@ pub fn request(plan: &PlanRequest, key: &str) -> Result<HttpRequest, String> {
                 ("ret_coordtype", "gcj02".into()),
             ],
         ),
+        MapProvider::Google => unreachable!(),
     };
     if plan.provider == MapProvider::Tencent && plan.mode == TravelMode::Driving {
         query.extend([("get_mp", "1".into()), ("no_step", "0".into())]);
@@ -254,6 +268,9 @@ fn tencent_polyline(value: &Value) -> Result<Vec<Position>, String> {
 
 pub fn parse(plan: &PlanRequest, data: &Value) -> Result<Vec<Route>, String> {
     plan.validate()?;
+    if plan.provider == MapProvider::Google {
+        return google_routes(plan, data);
+    }
     let success = if plan.provider == MapProvider::Amap {
         data["status"] == "1"
     } else {
@@ -286,6 +303,7 @@ pub fn parse(plan: &PlanRequest, data: &Value) -> Result<Vec<Route>, String> {
             distance_m: number(&path["distance"]).ok_or("missing route distance")?,
             duration_s: number(duration).ok_or("missing route duration")?
                 * if plan.provider == MapProvider::Tencent { 60.0 } else { 1.0 },
+            warnings: vec![],
             segments: Vec::new(),
         };
         let mut points = if plan.provider == MapProvider::Tencent {
@@ -374,6 +392,113 @@ pub fn parse(plan: &PlanRequest, data: &Value) -> Result<Vec<Route>, String> {
     Ok(result)
 }
 
+fn geojson(value: &Value) -> Result<Vec<Position>, String> {
+    if value["type"] != "LineString" {
+        return Err("route requires full GeoJSON LineString geometry".into());
+    }
+    let values = value["coordinates"]
+        .as_array()
+        .filter(|v| !v.is_empty() && v.len() <= MAX_POINTS)
+        .ok_or("invalid route geometry length")?;
+    values
+        .iter()
+        .map(|v| {
+            let coords = v
+                .as_array()
+                .filter(|v| v.len() == 2 || v.len() == 3)
+                .ok_or("invalid route coordinate")?;
+            let mut p = Position::new(
+                coords[1].as_f64().ok_or("invalid route latitude")?,
+                coords[0].as_f64().ok_or("invalid route longitude")?,
+            );
+            if coords.len() == 3 {
+                p.altitude = coords[2].as_f64().ok_or("invalid route altitude")?;
+            }
+            p.validate()?;
+            Ok(p)
+        })
+        .collect()
+}
+fn google_duration(value: &Value) -> Option<f64> {
+    value.as_str()?.strip_suffix('s')?.parse::<f64>().ok().filter(|x| x.is_finite() && *x >= 0.0)
+}
+fn google_routes(plan: &PlanRequest, data: &Value) -> Result<Vec<Route>, String> {
+    if data.get("error").is_some() {
+        return Err("Google Routes rejected the request; check API permissions, billing, coverage and quota".into());
+    }
+    let paths = data["routes"]
+        .as_array()
+        .filter(|v| !v.is_empty())
+        .ok_or("no route found for the requested points and travel mode")?;
+    paths
+        .iter()
+        .map(|path| {
+            let points = geojson(&path["polyline"]["geoJsonLinestring"])?;
+            let mut segments = Vec::new();
+            let mut cursor = 0;
+            for (leg_index, leg) in
+                path["legs"].as_array().ok_or("route has no legs")?.iter().enumerate()
+            {
+                for step in leg["steps"].as_array().ok_or("route leg has no steps")? {
+                    let geometry = geojson(&step["polyline"]["geoJsonLinestring"])?;
+                    if points[cursor] != geometry[0] {
+                        return Err("Google step geometry is disconnected".into());
+                    }
+                    let last = points[cursor..]
+                        .iter()
+                        .position(|p| p == geometry.last().unwrap())
+                        .ok_or("Google step endpoint is absent from route geometry")?
+                        + cursor;
+                    let mut attributes =
+                        std::collections::BTreeMap::from([("leg_index".into(), json!(leg_index))]);
+                    for key in ["navigationInstruction", "travelMode"] {
+                        if let Some(v) = step.get(key) {
+                            attributes.insert(key.into(), v.clone());
+                        }
+                    }
+                    segments.push(Segment {
+                        first: cursor,
+                        last,
+                        distance_m: number(&step["distanceMeters"]),
+                        duration_s: google_duration(&step["staticDuration"]),
+                        road_name: String::new(),
+                        instruction: step["navigationInstruction"]["instructions"]
+                            .as_str()
+                            .unwrap_or("")
+                            .into(),
+                        attributes,
+                    });
+                    cursor = last;
+                }
+            }
+            if cursor != points.len() - 1 {
+                return Err("Google steps do not cover the full route".into());
+            }
+            let route = Route {
+                points,
+                breaks: vec![],
+                speed: plan.speed,
+                repeat_count: 1,
+                repeat_delay: 0.0,
+                geometry: Some(Geometry {
+                    provider: plan.provider,
+                    mode: plan.mode,
+                    distance_m: number(&path["distanceMeters"]).ok_or("missing route distance")?,
+                    duration_s: google_duration(&path["duration"])
+                        .ok_or("missing route duration")?,
+                    warnings: serde_json::from_value(
+                        path.get("warnings").cloned().unwrap_or(json!([])),
+                    )
+                    .map_err(|_| "invalid route warnings")?,
+                    segments,
+                }),
+            };
+            Playback::new(route.clone(), Instant::now())?;
+            Ok(route)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -389,6 +514,7 @@ mod tests {
     }
     fn fixture(provider: MapProvider) -> Value {
         match provider {
+            MapProvider::Google => unreachable!(),
             MapProvider::Amap => {
                 json!({"status":"1","route":{"paths":[{"distance":"100","cost":{"duration":"90"},"steps":[{"step_distance":"50","road_name":"bridge","navi":{"walk_type":"22"},"polyline":"121.47822305927693,31.22845773757727;121.4783,31.2285"},{"step_distance":"50","polyline":"121.4783,31.2285;121.4783,31.2286"}]}]}})
             }
@@ -483,5 +609,43 @@ mod tests {
         crate::route_store::remove(&directory, &id).unwrap();
         std::fs::remove_dir(directory.join("routes")).unwrap();
         std::fs::remove_dir(directory).unwrap();
+    }
+
+    #[test]
+    fn google_routes_use_full_wgs84_lines_and_preserve_step_boundaries() {
+        let shape = json!({"type":"LineString","coordinates":[[151.2,-33.85],[151.21,-33.85],[151.21,-33.86]]});
+        let data = json!({"routes":[{"distanceMeters":2000,"duration":"900.5s","warnings":["Walking fixture"],"polyline":{"geoJsonLinestring":shape},"legs":[{"steps":[{"distanceMeters":1000,"staticDuration":"450.25s","polyline":{"geoJsonLinestring":{"type":"LineString","coordinates":[[151.2,-33.85],[151.21,-33.85]]}},"navigationInstruction":{"instructions":"Turn right","maneuver":"TURN_RIGHT"}},{"distanceMeters":1000,"staticDuration":"450.25s","polyline":{"geoJsonLinestring":{"type":"LineString","coordinates":[[151.21,-33.85],[151.21,-33.86]]}}}]}]}]});
+        for (mode, expected) in [
+            (TravelMode::Walking, "WALK"),
+            (TravelMode::Cycling, "BICYCLE"),
+            (TravelMode::Driving, "DRIVE"),
+        ] {
+            let mut p = plan(MapProvider::Google, mode);
+            p.origin = Coordinate { latitude: -33.85, longitude: 151.2 };
+            p.destination = Coordinate { latitude: -33.86, longitude: 151.21 };
+            let request = super::request(&p, "private-key").unwrap();
+            let body = request.body.unwrap();
+            assert_eq!(body["origin"]["location"]["latLng"]["latitude"], -33.85);
+            assert_eq!(body["travelMode"], expected);
+            assert_eq!(body["polylineQuality"], "HIGH_QUALITY");
+            let routes = parse(&p, &data).unwrap();
+            assert_eq!(routes[0].points[0], Position::new(-33.85, 151.2));
+            let g = routes[0].geometry.as_ref().unwrap();
+            assert_eq!(g.duration_s, 900.5);
+            assert_eq!(g.segments[0].duration_s, Some(450.25));
+            assert_eq!((g.segments[0].last, g.segments[1].first, g.segments[1].last), (1, 1, 2));
+            assert_eq!(g.warnings, vec!["Walking fixture"]);
+            p.waypoints.push(Coordinate { latitude: -33.85, longitude: 151.21 });
+            assert_eq!(
+                super::request(&p, "key").unwrap().body.unwrap()["computeAlternativeRoutes"],
+                false
+            );
+        }
+        let p = plan(MapProvider::Google, TravelMode::Walking);
+        assert!(parse(&p, &json!({"routes":[]})).is_err());
+        let mut broken = data;
+        broken["routes"][0]["polyline"]["geoJsonLinestring"]["coordinates"] =
+            json!([[151.2, -33.85], [151.3, -33.86]]);
+        assert!(parse(&p, &broken).is_err());
     }
 }

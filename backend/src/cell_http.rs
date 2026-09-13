@@ -49,6 +49,9 @@ impl Http for Network {
             if let Some(token) = request.bearer {
                 builder = builder.header("Authorization", format!("Bearer {token}"));
             }
+            for (key, value) in request.query {
+                builder = builder.query(&key, &value);
+            }
             builder.send(body.to_string())
         } else {
             let mut builder = agent.get(&request.url).header("Accept", "application/json");
@@ -69,6 +72,62 @@ impl Http for Network {
             .read_to_string()
             .map_err(|_| QueryError::InvalidResponse)?;
         Ok(HttpResponse { status, body })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{BufRead, Read, Write};
+    #[test]
+    fn json_posts_keep_query_authentication_and_field_masks() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+            let mut reader = std::io::BufReader::new(stream);
+            let mut line = String::new();
+            reader.read_line(&mut line).unwrap();
+            assert!(
+                line.starts_with("POST /v1/test?key=test-key&fields=places.id HTTP/1.1"),
+                "{line}"
+            );
+            let mut length = 0;
+            loop {
+                line.clear();
+                reader.read_line(&mut line).unwrap();
+                if line == "\r\n" {
+                    break;
+                }
+                if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                    length = value.trim().parse::<usize>().unwrap();
+                }
+            }
+            let mut body = vec![0; length];
+            reader.read_exact(&mut body).unwrap();
+            assert_eq!(
+                serde_json::from_slice::<serde_json::Value>(&body).unwrap(),
+                serde_json::json!({"textQuery":"test"})
+            );
+            reader
+                .get_mut()
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}")
+                .unwrap();
+        });
+        let result = Network::maps()
+            .send(HttpRequest {
+                url: format!("http://{address}/v1/test"),
+                query: vec![
+                    ("key".into(), "test-key".into()),
+                    ("fields".into(), "places.id".into()),
+                ],
+                bearer: None,
+                body: Some(serde_json::json!({"textQuery":"test"})),
+            })
+            .unwrap();
+        assert_eq!(result.status, 200);
+        server.join().unwrap();
     }
 }
 

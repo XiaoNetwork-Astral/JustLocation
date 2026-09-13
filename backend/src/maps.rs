@@ -18,6 +18,7 @@ pub enum MapProvider {
     Amap,
     Tencent,
     Baidu,
+    Google,
 }
 
 impl MapProvider {
@@ -26,6 +27,7 @@ impl MapProvider {
             Self::Amap => "https://console.amap.com/dev/key/app",
             Self::Tencent => "https://lbs.qq.com/dev/console/key/manage",
             Self::Baidu => "https://lbsyun.baidu.com/apiconsole/key",
+            Self::Google => "https://console.cloud.google.com/google/maps-apis/credentials",
         }
     }
 }
@@ -41,6 +43,8 @@ struct Keys {
 enum Command {
     Settings,
     Capabilities,
+    Reverse { provider: MapProvider, position: crate::routing::Coordinate },
+    Link { provider: MapProvider, position: crate::routing::Coordinate },
     Plan { plan: crate::routing::PlanRequest },
     ConfigureKey { provider: MapProvider, key: String },
     Search { provider: MapProvider, query: String, region: String },
@@ -87,6 +91,28 @@ impl MapService {
         match request.command {
             Command::Settings => Ok(public_settings(&keys)),
             Command::Capabilities => Ok(crate::routing::capabilities()),
+            Command::Link { provider, position } => {
+                crate::geocoding::link(provider, &position.position()?)
+            }
+            Command::Reverse { provider, position } => {
+                let position = position.position()?;
+                let key = keys
+                    .keys
+                    .get(&provider)
+                    .ok_or("missing WebService key for reverse geocoding provider")?;
+                let response = http
+                    .send(crate::geocoding::request(provider, key, &position)?)
+                    .map_err(|_| "reverse geocoding network request failed")?;
+                if response.status != 200 {
+                    return Err(format!(
+                        "reverse geocoding HTTP {}; check API permissions, billing and quota",
+                        response.status
+                    ));
+                }
+                let data = serde_json::from_str(&response.body)
+                    .map_err(|_| "invalid reverse geocoding JSON")?;
+                crate::geocoding::parse(provider, &position, &data)
+            }
             Command::Plan { plan } => {
                 plan.validate()?;
                 let key = keys
@@ -142,7 +168,7 @@ impl MapService {
                     || region.is_empty()
                     || region.len() > 96
                     || query.chars().any(char::is_control)
-                    || region.contains(['(', ')', ','])
+                    || (provider == MapProvider::Tencent && region.contains(['(', ')', ',']))
                     || region.chars().any(char::is_control)
                 {
                     return Err(
@@ -171,20 +197,25 @@ impl MapService {
                 let data: Value =
                     serde_json::from_str(&response.body).map_err(|_| "invalid map service JSON")?;
                 let places = parse_places(provider, &data)?;
-                Ok(json!({"provider":provider,"coordinate_system":"wgs84","places":places}))
+                Ok(
+                    json!({"provider":provider,"coordinate_system":"wgs84","places":places,"attribution":if provider==MapProvider::Google {"Google Maps"} else {""}}),
+                )
             }
         }
     }
 }
 
 fn public_settings(keys: &Keys) -> Value {
-    let providers = [MapProvider::Amap,MapProvider::Tencent,MapProvider::Baidu].map(|provider|
+    let providers = [MapProvider::Amap,MapProvider::Tencent,MapProvider::Baidu,MapProvider::Google].map(|provider|
         json!({"provider":provider,"configured":keys.keys.get(&provider).is_some_and(|key|!key.is_empty()),
             "key_type":"WebService","console_url":provider.console()}));
     json!({"providers":providers})
 }
 
 fn search_request(provider: MapProvider, key: &str, query: &str, region: &str) -> HttpRequest {
+    if provider == MapProvider::Google {
+        return HttpRequest { url: "https://places.googleapis.com/v1/places:searchText".into(), query:vec![("key".into(),key.into()),("fields".into(),"places.id,places.displayName,places.formattedAddress,places.location,places.attributions".into())],body:Some(json!({"textQuery":format!("{query} in {region}"),"pageSize":20})),bearer:None };
+    }
     let (url, params): (&str, Vec<(&str, String)>) = match provider {
         MapProvider::Amap => (
             "https://restapi.amap.com/v3/place/text",
@@ -222,6 +253,7 @@ fn search_request(provider: MapProvider, key: &str, query: &str, region: &str) -
                 ("output", "json".into()),
             ],
         ),
+        MapProvider::Google => unreachable!(),
     };
     HttpRequest {
         url: url.into(),
@@ -232,10 +264,14 @@ fn search_request(provider: MapProvider, key: &str, query: &str, region: &str) -
 }
 
 fn parse_places(provider: MapProvider, data: &Value) -> Result<Vec<Value>, String> {
+    if provider == MapProvider::Google {
+        return crate::geocoding::google_places(data);
+    }
     let (status, items) = match provider {
         MapProvider::Amap => (data["status"] == "1", data.get("pois")),
         MapProvider::Tencent => (data["status"] == 0, data.get("data")),
         MapProvider::Baidu => (data["status"] == 0, data.get("results")),
+        MapProvider::Google => unreachable!(),
     };
     if !status {
         return Err("map service rejected the request; check key permissions and quota".into());
@@ -292,6 +328,36 @@ mod tests {
             self.requests.push(request);
             Ok(HttpResponse { status: 200, body: self.body.to_string() })
         }
+    }
+
+    #[test]
+    fn google_search_uses_its_private_key_explicit_fields_and_text_region() {
+        let directory =
+            std::env::temp_dir().join(format!("jl-google-key-{}", crate::scode::new_id().unwrap()));
+        let service = MapService::new(&directory);
+        let mut http = Mock {
+            requests: vec![],
+            body: json!({"places":[{"id":"x","displayName":{"text":"Sydney"},"location":{"latitude":-33.8568,"longitude":151.2153}}]}),
+        };
+        let configured = service.handle(
+            &mut http,
+            &json!({"version":1,"op":"configure_key","provider":"google","key":"PRIVATE-GOOGLE"})
+                .to_string(),
+        );
+        assert_eq!(configured["ok"], true);
+        assert!(!configured.to_string().contains("PRIVATE"));
+        let result=service.handle(&mut http,&json!({"version":1,"op":"search","provider":"google","query":"opera house","region":"Sydney, Australia"}).to_string());
+        assert_eq!(result["ok"], true, "{result}");
+        assert_eq!(result["attribution"], "Google Maps");
+        let request = http.requests.last().unwrap();
+        assert_eq!(request.url, "https://places.googleapis.com/v1/places:searchText");
+        assert_eq!(request.body.as_ref().unwrap()["textQuery"], "opera house in Sydney, Australia");
+        assert!(request.query.contains(&("key".into(), "PRIVATE-GOOGLE".into())));
+        assert!(request.query.iter().any(|(key, value)| key == "fields"
+            && value.contains("places.attributions")
+            && !value.contains('*')));
+        std::fs::remove_file(directory.join("map-keys.json")).unwrap();
+        std::fs::remove_dir(directory).unwrap();
     }
     #[test]
     fn keys_are_separate_private_and_used_by_the_correct_provider() {
