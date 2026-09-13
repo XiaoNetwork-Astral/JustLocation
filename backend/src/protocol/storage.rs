@@ -4,26 +4,26 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::{fs, io, path::Path};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct Stored {
-    pub(super) version: u32,
-    pub(super) config: Option<Config>,
+pub(crate) struct Stored {
+    pub(crate) version: u32,
+    pub(crate) config: Option<Config>,
     #[serde(default)]
-    pub(super) scopes: Option<crate::scope::Scopes>,
-    pub(super) cell_region: Option<CellRegion>,
+    pub(crate) scopes: Option<crate::scope::Scopes>,
+    pub(crate) cell_region: Option<CellRegion>,
     #[serde(default)]
-    pub(super) telephony: TelephonyConfig,
+    pub(crate) telephony: TelephonyConfig,
     /// Older files default to disabled satellite channels.
     #[serde(default)]
-    pub(super) gnss: GnssConfig,
+    pub(crate) gnss: GnssConfig,
     /// Older files default to disabled Wi-Fi output.
     #[serde(default)]
-    pub(super) wifi: WifiConfig,
+    pub(crate) wifi: WifiConfig,
     #[serde(default)]
-    pub(super) steps: crate::steps::StepConfig,
+    pub(crate) steps: crate::steps::StepConfig,
     #[serde(default)]
-    pub(super) realism: crate::realism::RealismConfig,
+    pub(crate) realism: crate::realism::RealismConfig,
 }
 
 impl Default for Stored {
@@ -43,7 +43,7 @@ impl Default for Stored {
 }
 
 impl Stored {
-    pub(super) fn load(path: &Path) -> io::Result<Self> {
+    pub(crate) fn load(path: &Path) -> io::Result<Self> {
         let bytes = match fs::read(path) {
             Ok(bytes) => bytes,
             Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Self::default()),
@@ -82,7 +82,7 @@ impl Stored {
         Ok(stored)
     }
 
-    pub(super) fn save(&self, path: &Path) -> io::Result<()> {
+    pub(crate) fn save(&self, path: &Path) -> io::Result<()> {
         crate::storage::atomic_save(path, &serde_json::to_vec(self)?)
     }
 }

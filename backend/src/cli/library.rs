@@ -6,98 +6,32 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::{fs, time::Instant};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Library {
-    version: u32,
-    places: Vec<Address>,
-    routes: Vec<SavedRoute>,
+pub(super) struct Library {
+    pub(super) version: u32,
+    pub(super) places: Vec<Address>,
+    pub(super) routes: Vec<SavedRoute>,
 }
 impl Default for Library {
     fn default() -> Self {
         Self { version: 1, places: vec![], routes: vec![] }
     }
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct SavedRoute {
-    id: String,
-    name: String,
+pub(super) struct SavedRoute {
+    pub(super) id: String,
+    pub(super) name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    plan: Option<Route>,
+    pub(super) plan: Option<Route>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    file_id: Option<String>,
+    pub(super) file_id: Option<String>,
     #[serde(default)]
-    point_count: usize,
+    pub(super) point_count: usize,
 }
 
 impl Runtime {
-    pub(super) fn backup(&self, command: BackupCommand) -> Result<()> {
-        match command {
-            BackupCommand::Export { file } => {
-                let mut library = self.library()?;
-                for route in &mut library.routes {
-                    route.plan = Some(self.load_route(route)?);
-                    route.file_id = None;
-                }
-                let mut value = json!(library);
-                value["format"] = json!("justlocation-library");
-                write_output(
-                    file.output.as_deref(),
-                    &(serde_json::to_string_pretty(&value).unwrap() + "\n"),
-                )
-            }
-            BackupCommand::Import { file, replace } => {
-                let mut value = read_large_json(&file.input)?;
-                match value["format"].as_str() {
-                    Some("justlocation-library") => {}
-                    Some("justlocation") => {
-                        for place in
-                            value["places"].as_array_mut().ok_or("backup is missing places")?
-                        {
-                            let position = place
-                                .as_object_mut()
-                                .ok_or("invalid backup place")?
-                                .remove("position")
-                                .ok_or("backup place is missing position")?;
-                            let position: crate::Position =
-                                serde_json::from_value(position).map_err(|e| e.to_string())?;
-                            position.validate()?;
-                            place
-                                .as_object_mut()
-                                .unwrap()
-                                .extend(json!(position).as_object().unwrap().clone());
-                        }
-                    }
-                    _ => return Err("unsupported backup format".into()),
-                }
-                value.as_object_mut().ok_or("invalid backup")?.remove("format");
-                let mut imported: Library =
-                    serde_json::from_value(value).map_err(|e| format!("invalid backup: {e}"))?;
-                validate(&imported)?;
-                if imported.routes.iter().any(|r| r.plan.is_none() || r.file_id.is_some()) {
-                    return Err("backup routes must contain their complete plans".into());
-                }
-                let counts = json!({"places":imported.places.len(),"routes":imported.routes.len(),"replaced":replace});
-                self.edit_library(|library| {
-                    if replace {
-                        *library = imported;
-                    } else {
-                        for place in &mut imported.places {
-                            place.0.insert("id".into(), json!(crate::scode::new_id()?));
-                        }
-                        for route in &mut imported.routes {
-                            route.id = crate::scode::new_id()?;
-                        }
-                        library.places.extend(imported.places);
-                        library.routes.extend(imported.routes);
-                    }
-                    Ok(counts)
-                })
-                .and_then(|value| self.emit(&value))
-            }
-        }
-    }
     pub(super) fn place(&self, command: PlaceCommand) -> Result<()> {
         let value = match command {
             PlaceCommand::List => json!(self.library()?.places),
@@ -392,7 +326,7 @@ impl Runtime {
             Ok(result)
         })
     }
-    fn load_route(&self, saved: &SavedRoute) -> Result<Route> {
+    pub(super) fn load_route(&self, saved: &SavedRoute) -> Result<Route> {
         if let Some(plan) = &saved.plan {
             Ok(plan.clone())
         } else {
@@ -402,7 +336,7 @@ impl Runtime {
             )
         }
     }
-    fn library(&self) -> Result<Library> {
+    pub(super) fn library(&self) -> Result<Library> {
         let path = self.directory.join("library.json");
         let file = match fs::File::open(&path) {
             Ok(file) => file,
@@ -468,7 +402,7 @@ fn valid_name(name: &str) -> Result<()> {
         Ok(())
     }
 }
-fn validate(library: &Library) -> Result<()> {
+pub(super) fn validate(library: &Library) -> Result<()> {
     if library.version != 1 {
         return Err("unsupported library version".into());
     }
@@ -523,6 +457,12 @@ fn route<'a>(library: &'a Library, id: &str) -> Result<&'a SavedRoute> {
     library.routes.iter().find(|r| r.id == id).ok_or_else(|| "route ID not found".into())
 }
 pub(super) fn lock(directory: &Path, name: &str) -> Result<fs::File> {
+    lock_with(directory, name, false)
+}
+pub(super) fn try_lock(directory: &Path, name: &str) -> Result<fs::File> {
+    lock_with(directory, name, true)
+}
+fn lock_with(directory: &Path, name: &str, nonblocking: bool) -> Result<fs::File> {
     fs::create_dir_all(directory).map_err(|e| e.to_string())?;
     let mut options = fs::OpenOptions::new();
     options.write(true).create(true).truncate(false);
@@ -538,12 +478,17 @@ pub(super) fn lock(directory: &Path, name: &str) -> Result<fs::File> {
     {
         use std::os::fd::AsRawFd;
         // SAFETY: the returned File owns the live descriptor and releases flock on close.
-        if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } != 0 {
+        let flags = libc::LOCK_EX | if nonblocking { libc::LOCK_NB } else { 0 };
+        if unsafe { libc::flock(file.as_raw_fd(), flags) } != 0 {
             return Err(io::Error::last_os_error().to_string());
         }
     }
     #[cfg(not(target_os = "android"))]
-    file.lock().map_err(|e| e.to_string())?;
+    if nonblocking {
+        file.try_lock().map_err(|e| e.to_string())?;
+    } else {
+        file.lock().map_err(|e| e.to_string())?;
+    }
     Ok(file)
 }
 

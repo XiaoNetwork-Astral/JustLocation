@@ -21,7 +21,7 @@ pub const MAX_FRAME: u64 = 65_536;
 mod message;
 #[cfg(test)]
 mod scope_tests;
-mod storage;
+pub(crate) mod storage;
 #[cfg(test)]
 mod tests;
 

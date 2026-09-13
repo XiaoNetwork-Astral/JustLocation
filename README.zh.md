@@ -35,6 +35,8 @@ justlocation route --help                              # 查看路线命令
 
 空卡槽的虚拟订阅与配置：[无 SIM 虚拟订阅](docs/virtual-sim.md)。
 
+分类备份、压缩与恢复预览：[备份用法](docs/backups.md)。
+
 ## 构建
 
 - Node.js 22.12+

@@ -6,6 +6,7 @@ fn call(control: &mut Control, request: Value) -> Value {
 }
 fn settings() -> Value {
     json!({"cells_enabled":true,"sim_enabled":true,"radius_m":500.0,
+    "virtual_sim":{"default_slot":null,"subscriptions":[]},
     "subscriptions":[{"id":7,"slot":0,"mcc":"460","mnc":"01","country":"cn","carrier":"Test","enabled":true}]})
 }
 fn configure() -> Value {

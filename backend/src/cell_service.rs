@@ -11,6 +11,7 @@ use std::{
 };
 
 mod settings;
+pub(crate) use settings::{BackupPreferences, backup_preferences, restore_preferences};
 use settings::{Settings, SettingsUpdate};
 
 const FRESH_MS: u64 = 7 * 86_400_000;

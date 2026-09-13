@@ -140,3 +140,65 @@ fn credential(value: String) -> Result<String, String> {
     }
     Ok(value)
 }
+
+/// Portable provider choices; credentials and update history remain local.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct BackupPreferences {
+    primary: ProviderKind,
+    fallback: Option<ProviderKind>,
+    custom_endpoint: String,
+    dataset_auto_update: bool,
+    dataset_mcc: u16,
+}
+
+impl BackupPreferences {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        if !self.custom_endpoint.is_empty() {
+            crate::cell_http::validate_endpoint(&self.custom_endpoint)
+                .map_err(|_| "invalid custom provider endpoint")?;
+        }
+        if self.fallback == Some(self.primary) {
+            return Err("the primary and fallback providers must differ".into());
+        }
+        if self.dataset_mcc != 0 && !(100..=999).contains(&self.dataset_mcc) {
+            return Err("invalid dataset MCC".into());
+        }
+        if self.dataset_auto_update && self.dataset_mcc == 0 {
+            return Err("automatic updates require a dataset MCC".into());
+        }
+        Ok(())
+    }
+}
+
+pub(crate) fn backup_preferences(directory: &Path) -> Result<BackupPreferences, String> {
+    let saved = Settings::load(directory)?;
+    Ok(BackupPreferences {
+        primary: saved.primary,
+        fallback: saved.fallback,
+        custom_endpoint: saved.custom_endpoint,
+        dataset_auto_update: saved.dataset_auto_update,
+        dataset_mcc: saved.dataset_mcc,
+    })
+}
+
+pub(crate) fn restore_preferences(
+    directory: &Path,
+    preferences: &BackupPreferences,
+) -> Result<Vec<u8>, String> {
+    preferences.validate()?;
+    let mut saved = Settings::load(directory)?;
+    // Keep credentials only for the same endpoint; never transfer a token to a different host.
+    if saved.custom_endpoint != preferences.custom_endpoint {
+        saved.custom_token = None;
+    }
+    saved.primary = preferences.primary;
+    saved.fallback = preferences.fallback;
+    saved.custom_endpoint = preferences.custom_endpoint.clone();
+    saved.dataset_auto_update = preferences.dataset_auto_update;
+    if saved.dataset_mcc != preferences.dataset_mcc {
+        saved.dataset_last_check_day = None;
+    }
+    saved.dataset_mcc = preferences.dataset_mcc;
+    serde_json::to_vec(&saved).map_err(|e| e.to_string())
+}

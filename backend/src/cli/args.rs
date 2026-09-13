@@ -66,7 +66,7 @@ pub enum Command {
         #[command(subcommand)]
         command: PlaceCommand,
     },
-    /// Export or restore the saved place/route library, without credentials.
+    /// Export or restore selected data categories, without credentials.
     Backup {
         #[command(subcommand)]
         command: BackupCommand,
@@ -737,14 +737,57 @@ pub enum BackupCommand {
     Export {
         #[command(flatten)]
         file: FileOutput,
+        #[arg(long, value_enum, value_delimiter = ',')]
+        category: Vec<BackupCategory>,
+        /// Export the previous places/routes-only format for older versions.
+        #[arg(long, conflicts_with = "category")]
+        legacy: bool,
+        /// GZIP-compress the portable JSON into an output file.
+        #[arg(long, requires = "output", conflicts_with = "legacy")]
+        gzip: bool,
     },
-    /// Merge with fresh IDs by default; --replace replaces the saved library.
+    /// Restore selected categories while the backend is shut down; preview is read-only.
     Import {
         #[command(flatten)]
         file: FileInput,
         #[arg(long)]
         replace: bool,
+        #[arg(long, value_enum, value_delimiter = ',')]
+        category: Vec<BackupCategory>,
+        #[arg(long)]
+        preview: bool,
+        #[arg(long, value_enum, default_value = "rename")]
+        conflicts: BackupConflict,
     },
+}
+
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    ValueEnum,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum BackupCategory {
+    Places,
+    Routes,
+    Wifi,
+    Scopes,
+    Settings,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BackupConflict {
+    Rename,
+    Skip,
+    Error,
 }
 
 #[cfg(test)]

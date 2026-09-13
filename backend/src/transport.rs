@@ -83,6 +83,7 @@ mod platform {
             .write(true)
             .open(directory.join("service.lock"))?;
         acquire_lock(&lock)?;
+        crate::cli::recover_backup_before_serve(directory).map_err(io::Error::other)?;
         let mut control = Control::open(directory.join("config.json"))?;
         let path = directory.join("control.sock");
         match fs::remove_file(&path) {

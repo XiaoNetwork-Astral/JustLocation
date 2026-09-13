@@ -35,6 +35,8 @@ Separate position, route, Wi-Fi and SIM app lists: [application scopes](docs/sco
 
 Subscription metadata for empty SIM slots: [virtual subscriptions](docs/virtual-sim.md).
 
+Portable data, category selection and restore previews: [backups](docs/backups.md).
+
 ## Build
 
 - Node.js 22.12+

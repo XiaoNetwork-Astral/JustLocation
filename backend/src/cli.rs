@@ -1,5 +1,6 @@
 //! Human-facing commands and stable JSON output over the existing control protocol.
 mod args;
+mod backup;
 mod control;
 mod gpx;
 mod library;
@@ -29,6 +30,14 @@ pub fn entry() -> ExitCode {
             .and_then(|s| serde_json::from_str::<Value>(&s).ok())
             .is_some();
     let result = if legacy {
+        let directory = Path::new(crate::transport::DATA_DIR);
+        let guard = library::lock(directory, "data.lock");
+        let recovered =
+            guard.as_ref().map_err(|e| e.clone()).and_then(|_| backup::recover(directory));
+        if let Err(error) = recovered {
+            eprintln!("error: {error}");
+            return ExitCode::from(1);
+        }
         (if arguments[1] == "cells" {
             crate::cell_service::request(&arguments[2])
         } else {
@@ -55,6 +64,20 @@ struct Runtime {
 }
 impl Runtime {
     fn run(&self, command: Command) -> Result<()> {
+        let _guard = if matches!(
+            &command,
+            Command::Place { .. }
+                | Command::Route { .. }
+                | Command::Backup { .. }
+                | Command::Cells { .. }
+                | Command::Maps { .. }
+        ) {
+            let guard = library::lock(&self.directory, "data.lock")?;
+            backup::recover(&self.directory)?;
+            Some(guard)
+        } else {
+            None
+        };
         match command {
             Command::Serve => {
                 crate::transport::serve_in(&self.directory).map_err(|e| e.to_string())
@@ -158,6 +181,11 @@ impl Runtime {
             std::str::from_utf8(&result).map_err(|e| e.to_string())?,
         )
     }
+}
+#[cfg(unix)]
+pub(crate) fn recover_backup_before_serve(directory: &Path) -> Result<()> {
+    let _guard = library::lock(directory, "data.lock")?;
+    backup::recover_with_service_lock(directory)
 }
 fn check(value: Value) -> Result<Value> {
     if value["ok"] == true {
