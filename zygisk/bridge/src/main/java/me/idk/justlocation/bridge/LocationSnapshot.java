@@ -3,9 +3,6 @@ package me.idk.justlocation.bridge;
 import android.location.Location;
 import android.os.SystemClock;
 
-import java.util.HashSet;
-import java.util.Set;
-
 import org.json.JSONObject;
 
 /** Position, scope and satellite flags from one valid heartbeat. */
@@ -41,14 +38,8 @@ final class LocationSnapshot {
         if (!state.getBoolean("requested_active"))
             return null;
         JSONObject config = state.getJSONObject("config");
-        JSONObject selection = config.getJSONObject("scope");
-        String mode = selection.getString("mode");
-        Set<String> packages = new HashSet<>();
-        if (mode.equals("apps")) {
-            var list = selection.getJSONArray("packages");
-            for (int i = 0; i < list.length(); i++)
-                packages.add(list.getString(i));
-        } else if (!mode.equals("all"))
+        ScopeSelection selection = ScopeSelection.read(state, null);
+        if (selection == null)
             return null;
         // Missing or malformed satellite flags leave system output unchanged.
         boolean gnssEnabled = false, nmeaEnabled = false;
@@ -57,8 +48,7 @@ final class LocationSnapshot {
             gnssEnabled = gnss.optBoolean("gnss_enabled", false);
             nmeaEnabled = gnss.optBoolean("nmea_enabled", false);
         }
-        return new LocationSnapshot(new SessionSnapshot(true, mode.equals("all"), packages,
-                                            SystemClock.elapsedRealtime()),
+        return new LocationSnapshot(selection.snapshot(SystemClock.elapsedRealtime()),
                 config.getJSONObject("position"), gnssEnabled, nmeaEnabled);
     }
     Location location(String provider) {

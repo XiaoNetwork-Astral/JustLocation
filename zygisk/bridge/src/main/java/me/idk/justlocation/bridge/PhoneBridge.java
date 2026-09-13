@@ -54,8 +54,8 @@ public final class PhoneBridge {
                     Class.forName("android.telephony.ICellInfoCallback", false, loader),
                     name -> {
                         TelephonySnapshot current = snapshot;
-                        if (current == null || !current.cellsEnabled
-                                || !current.appliesTo(name, SystemClock.elapsedRealtime()))
+                        if (current == null
+                                || !current.cellsApplyTo(name, SystemClock.elapsedRealtime()))
                             return null;
                         return new TelephonyQueries.Output() {
                             public java.util.List<?> cells(int subId) throws Exception {
@@ -71,11 +71,15 @@ public final class PhoneBridge {
                 if (android.os.Binder.getCallingUid() == android.os.Process.myUid())
                     return original;
                 TelephonySnapshot current = snapshot;
-                if (current == null || !current.cellsEnabled
-                        || !current.appliesTo(name, SystemClock.elapsedRealtime()))
+                if (current == null)
+                    return original;
+                long now = SystemClock.elapsedRealtime();
+                boolean cells = current.cellsApplyTo(name, now),
+                        sim = current.simAppliesTo(name, now);
+                if (!cells && !sim)
                     return original;
                 return current.serviceState(current.resolveSubscription(Integer.MAX_VALUE, slot),
-                        (android.telephony.ServiceState) original);
+                        (android.telephony.ServiceState) original, cells, sim);
             }).install(PhoneBridge::install);
             queriesReady = true;
             Log.i("JustLocation", "Phone cell query hooks installed");
@@ -91,8 +95,7 @@ public final class PhoneBridge {
                 if (android.os.Binder.getCallingUid() == android.os.Process.myUid())
                     return null;
                 TelephonySnapshot current = snapshot;
-                if (current == null || !current.simEnabled
-                        || !current.appliesTo(name, SystemClock.elapsedRealtime()))
+                if (current == null || !current.simAppliesTo(name, SystemClock.elapsedRealtime()))
                     return null;
                 return original
                         -> current.subscription((android.telephony.SubscriptionInfo) original);
@@ -129,7 +132,8 @@ public final class PhoneBridge {
                             reportedEmpty = true;
                             Log.w("JustLocation",
                                     "Phone heartbeat got no reply from the module daemon;"
-                                            + " the cell channels stay unverified until this process is restarted");
+                                            + " the cell channels stay unverified until this process is "
+                                            + "restarted");
                         }
                     } else {
                         reportedEmpty = false;

@@ -7,7 +7,6 @@ import android.telephony.SignalStrength;
 import android.telephony.SubscriptionInfo;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 
 import org.json.JSONObject;
@@ -15,13 +14,15 @@ import org.json.JSONObject;
 /** Immutable heartbeat snapshot shared by cell queries and listener adapters. */
 final class TelephonySnapshot {
     private record Group(int subscriptionId, int slot, List<CellInfo> cells) {}
-    private final SessionSnapshot scope;
+    private final SessionSnapshot cellsScope, simScope;
     final boolean cellsEnabled, simEnabled;
     private final List<Group> groups;
     private final List<SubscriptionInfo> subscriptions;
-    private TelephonySnapshot(SessionSnapshot scope, boolean cellsEnabled, boolean simEnabled,
-            List<Group> groups, List<SubscriptionInfo> subscriptions) {
-        this.scope = scope;
+    private TelephonySnapshot(SessionSnapshot cellsScope, SessionSnapshot simScope,
+            boolean cellsEnabled, boolean simEnabled, List<Group> groups,
+            List<SubscriptionInfo> subscriptions) {
+        this.cellsScope = cellsScope;
+        this.simScope = simScope;
         this.cellsEnabled = cellsEnabled;
         this.simEnabled = simEnabled;
         this.groups = List.copyOf(groups);
@@ -38,15 +39,8 @@ final class TelephonySnapshot {
             return null;
         JSONObject config = state.getJSONObject("telephony"),
                    output = state.getJSONObject("telephony_output");
-        JSONObject selection = state.getJSONObject("config").getJSONObject("scope");
-        String mode = selection.getString("mode");
-        HashSet<String> packages = new HashSet<>();
-        if (mode.equals("apps")) {
-            var names = selection.getJSONArray("packages");
-            for (int i = 0; i < names.length(); i++)
-                packages.add(names.getString(i));
-        } else if (!mode.equals("all"))
-            return null;
+        ScopeSelection cellsScope = ScopeSelection.read(state, null);
+        ScopeSelection simScope = ScopeSelection.read(state, "sim");
         List<Group> groups = new ArrayList<>();
         List<SubscriptionInfo> subscriptions = new ArrayList<>();
         var groupList = output.getJSONArray("groups");
@@ -62,12 +56,16 @@ final class TelephonySnapshot {
         var subs = output.getJSONArray("subscriptions");
         for (int i = 0; i < subs.length(); i++)
             subscriptions.add(TelephonyObjects.subscription(subs.getJSONObject(i)));
-        return new TelephonySnapshot(new SessionSnapshot(true, mode.equals("all"), packages, nowMs),
+        return new TelephonySnapshot(cellsScope == null ? null : cellsScope.snapshot(nowMs),
+                simScope == null ? null : simScope.snapshot(nowMs),
                 config.getBoolean("cells_enabled"), config.getBoolean("sim_enabled"), groups,
                 subscriptions);
     }
-    boolean appliesTo(String packageName, long nowMs) {
-        return scope.appliesTo(packageName, nowMs);
+    boolean cellsApplyTo(String packageName, long nowMs) {
+        return cellsEnabled && cellsScope != null && cellsScope.appliesTo(packageName, nowMs);
+    }
+    boolean simAppliesTo(String packageName, long nowMs) {
+        return simEnabled && simScope != null && simScope.appliesTo(packageName, nowMs);
     }
     int resolveSubscription(int subscriptionId, int slot) {
         if (subscriptionId >= 0 && subscriptionId != Integer.MAX_VALUE)
@@ -109,20 +107,21 @@ final class TelephonySnapshot {
                 return TelephonyObjects.signal(cell.getCellSignalStrength());
         return TelephonyObjects.signal(null);
     }
-    android.telephony.ServiceState serviceState(
-            int subscriptionId, android.telephony.ServiceState original) throws Exception {
+    android.telephony.ServiceState serviceState(int subscriptionId,
+            android.telephony.ServiceState original, boolean replaceCells, boolean replaceSim)
+            throws Exception {
         CellIdentity serving = null;
-        for (CellInfo cell : cells(subscriptionId, 0))
+        for (CellInfo cell : replaceCells ? cells(subscriptionId, 0) : List.<CellInfo>of())
             if (cell.isRegistered()) {
                 serving = cell.getCellIdentity();
                 break;
             }
         String carrier = null;
-        if (simEnabled)
+        if (replaceSim)
             for (SubscriptionInfo sub : subscriptions)
                 if (sub.getSubscriptionId() == subscriptionId)
                     carrier = sub.getCarrierName().toString();
-        return ServiceStateObjects.replace(original, serving, carrier);
+        return ServiceStateObjects.replace(original, serving, carrier, replaceCells, replaceSim);
     }
     List<SubscriptionInfo> subscriptions() {
         return new ArrayList<>(subscriptions);

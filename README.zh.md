@@ -31,6 +31,8 @@ justlocation route --help                              # 查看路线命令
 
 悬浮控件、方向锁定和朝向跟随：[摇杆用法](docs/joystick.md)。
 
+位置、路线、Wi-Fi 和 SIM 的独立应用名单：[作用范围](docs/scopes.md)。
+
 ## 构建
 
 - Node.js 22.12+

@@ -1,7 +1,6 @@
 package me.idk.justlocation.bridge;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -69,23 +68,8 @@ final class WifiSettings {
         List<Object> list = list(wifi.get("targets"));
         if (list == null || list.isEmpty())
             return null;
-        Map<String, Object> config = map(state.get("config"));
-        Map<String, Object> selection = config == null ? null : map(config.get("scope"));
+        ScopeSelection selection = ScopeSelection.read(state, "wifi");
         if (selection == null)
-            return null;
-        Object modeValue = selection.get("mode");
-        String mode = modeValue instanceof String text ? text : null;
-        if (mode == null)
-            return null;
-        HashSet<String> packages = new HashSet<>();
-        if (mode.equals("apps")) {
-            List<Object> names = list(selection.get("packages"));
-            if (names == null)
-                return null;
-            for (Object name : names)
-                if (name instanceof String text)
-                    packages.add(text);
-        } else if (!mode.equals("all"))
             return null;
         List<Target> parsed = new ArrayList<>();
         for (Object entry : list) {
@@ -103,8 +87,7 @@ final class WifiSettings {
         }
         if (parsed.isEmpty())
             return null;
-        return new WifiSettings(
-                new SessionSnapshot(true, mode.equals("all"), packages, nowMs), parsed);
+        return new WifiSettings(selection.snapshot(nowMs), parsed);
     }
 
     SessionSnapshot scope() {

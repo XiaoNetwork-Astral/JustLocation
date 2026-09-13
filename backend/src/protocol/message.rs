@@ -22,6 +22,7 @@ pub(super) enum Command {
     Status,
     SetScope {
         scope: Scope,
+        feature: Option<crate::scope::Feature>,
     },
     SetRealism {
         config: crate::realism::RealismConfig,
@@ -179,6 +180,7 @@ pub struct State {
     pub realism: crate::realism::RealismConfig,
     pub requested_active: bool,
     pub config: Option<Config>,
+    pub scopes: crate::scope::Scopes,
     pub hook_connected: bool,
     pub location_hook_ready: bool,
     pub gnss_hook_ready: bool,

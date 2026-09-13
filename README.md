@@ -31,6 +31,8 @@ Map keys, route planning and candidate selection: [map service guide](docs/maps.
 
 Floating controls, direction lock and compass following: [joystick guide](docs/joystick.md).
 
+Separate position, route, Wi-Fi and SIM app lists: [application scopes](docs/scopes.md).
+
 ## Build
 
 - Node.js 22.12+

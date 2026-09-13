@@ -13,7 +13,6 @@ import android.util.Log;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 /** Supplies native step snapshots and a sensor event clock while simulation is active. */
@@ -77,22 +76,18 @@ final class StepChannel implements SensorEventListener {
             }
             if (!prepare())
                 return;
-            JSONObject scope = state.getJSONObject("config").getJSONObject("scope");
-            boolean all = "all".equals(scope.getString("mode"));
-            if (!all && !"apps".equals(scope.getString("mode"))) {
+            ScopeSelection scope = ScopeSelection.read(state, null);
+            if (scope == null) {
                 stop();
                 return;
             }
-            JSONArray selected = scope.optJSONArray("packages");
-            String[] packages = new String[selected == null ? 0 : selected.length()];
-            for (int i = 0; i < packages.length; i++)
-                packages[i] = selected.getString(i);
+            String[] packages = scope.packages().toArray(new String[0]);
             JSONObject count = state.getJSONObject("step_count");
             // A continuous sensor supplies regular SensorService batches even when the phone is
             // stationary. Its values remain untouched; only subscribed step sensors are replaced.
             if (!registered)
                 registered = manager.registerListener(this, clock, 20_000, 0, handler);
-            BridgeEntry.updateSteps(registered, all, packages, count.getLong("total"),
+            BridgeEntry.updateSteps(registered, scope.all(), packages, count.getLong("total"),
                     count.getLong("epoch"), handles, types);
             received = SystemClock.elapsedRealtime();
         } catch (Exception error) {

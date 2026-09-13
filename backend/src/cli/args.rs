@@ -211,8 +211,17 @@ pub struct ScopeArgs {
 }
 #[derive(Subcommand)]
 pub enum ScopeCommand {
-    Get,
-    Set(ScopeArgs),
+    Get {
+        #[arg(long, value_enum)]
+        feature: Option<crate::scope::Feature>,
+    },
+    /// With no --feature, set all feature scopes for legacy shared-list clients.
+    Set {
+        #[arg(long, value_enum)]
+        feature: Option<crate::scope::Feature>,
+        #[command(flatten)]
+        scope: ScopeArgs,
+    },
 }
 #[derive(Args)]
 pub struct FileInput {
@@ -722,6 +731,10 @@ mod tests {
             vec!["place", "pin", "id", "false"],
             vec!["cells", "dataset", "auto", "false"],
             vec!["steps", "set", "--enabled", "false", "--cadence", "0"],
+            vec!["scope", "get", "--feature", "position"],
+            vec!["scope", "set", "--feature", "route", "--app", "example.route"],
+            vec!["scope", "set", "--feature", "wifi", "--app", "example.wifi"],
+            vec!["scope", "set", "--feature", "sim", "--all"],
         ] {
             assert!(Cli::try_parse_from(std::iter::once("justlocationd").chain(args)).is_ok());
         }

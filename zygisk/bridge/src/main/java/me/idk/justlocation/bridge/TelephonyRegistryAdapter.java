@@ -158,7 +158,7 @@ final class TelephonyRegistryAdapter {
 
     private final class Listener implements InvocationHandler {
         final Object registry, delegate;
-        final String pkg;
+        String pkg;
         int subId, slot = -1;
         final Set<Integer> synthetic = new HashSet<>();
         Listener(Object registry, String pkg, int subId, Object delegate) {
@@ -171,6 +171,8 @@ final class TelephonyRegistryAdapter {
             return TelephonyRegistryAdapter.this;
         }
         void update(Object record) throws IllegalAccessException {
+            // Use the framework registration, whose UID/package pair passed listen checks.
+            pkg = (String) packageName.get(record);
             subId = subscription.getInt(record);
             slot = phoneId.getInt(record);
         }

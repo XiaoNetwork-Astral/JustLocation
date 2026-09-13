@@ -638,6 +638,18 @@ fn operator_properties_follow_the_session_state() {
     assert_eq!(status.state.operator_hook_ready, true);
     assert_eq!(probe.write_count(), writes, "unchanged state must not write the properties again");
 
+    // Android's property getters are global: an app-only SIM scope must restore them immediately.
+    let selective = control.handle(r#"{"version":1,"op":"set_scope","feature":"sim","scope":{"mode":"apps","packages":["example.selected"]}}"#);
+    assert!(selective.ok);
+    assert!(!selective.state.operator_hook_ready);
+    assert_eq!(probe.value(crate::operators::NETWORK_ALPHA).unwrap(), "中国电信");
+    assert!(
+        control
+            .handle(r#"{"version":1,"op":"set_scope","feature":"sim","scope":{"mode":"all"}}"#)
+            .ok
+    );
+    assert_eq!(probe.value(crate::operators::NETWORK_ALPHA).unwrap(), "中国联通");
+
     let stopped = control.handle(r#"{"version":1,"op":"stop"}"#);
     assert_eq!(stopped.state.operator_hook_ready, false);
     assert_eq!(

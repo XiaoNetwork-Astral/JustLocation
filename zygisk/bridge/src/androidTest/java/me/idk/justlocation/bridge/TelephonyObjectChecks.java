@@ -11,9 +11,11 @@ import org.json.*;
 
 /** Runs against real Android framework objects on the dedicated API 35 AVD. */
 public final class TelephonyObjectChecks extends Instrumentation {
+    private boolean scopeOnly;
     @Override
     public void onCreate(Bundle arguments) {
         super.onCreate(arguments);
+        scopeOnly = arguments != null && "true".equals(arguments.getString("scope_only"));
         start();
     }
     @Override
@@ -24,7 +26,8 @@ public final class TelephonyObjectChecks extends Instrumentation {
                     "{\"radio\":\"gsm\",\"mcc\":\"460\",\"mnc\":\"01\",\"lac\":1,\"cid\":11}",
                     "{\"radio\":\"wcdma\",\"mcc\":\"460\",\"mnc\":\"01\",\"lac\":2,\"cid\":268435455}",
                     "{\"radio\":\"lte\",\"mcc\":\"460\",\"mnc\":\"001\",\"tac\":3,\"ci\":268435455}",
-                    "{\"radio\":\"nr\",\"mcc\":\"460\",\"mnc\":\"001\",\"tac\":16777215,\"nci\":68719476735}",
+                    "{\"radio\":\"nr\",\"mcc\":\"460\",\"mnc\":\"001\",\"tac\":16777215,\"nci\":"
+                            + "68719476735}",
                     "{\"radio\":\"cdma\",\"sid\":32767,\"nid\":65535,\"bid\":65535}"};
             JSONArray cells = new JSONArray();
             for (String identity : identities)
@@ -68,11 +71,38 @@ public final class TelephonyObjectChecks extends Instrumentation {
             JSONObject response =
                     new JSONObject().put("version", 1).put("ok", true).put("state", state);
             TelephonySnapshot snapshot = TelephonySnapshot.parse(response.toString(), 1000);
-            check(snapshot != null && snapshot.appliesTo("example.selected", 1001),
+            check(snapshot != null && snapshot.cellsApplyTo("example.selected", 1001),
                     "selected scope");
-            check(!snapshot.appliesTo("example.other", 1001)
-                            && !snapshot.appliesTo("example.selected", 4000),
+            check(!snapshot.cellsApplyTo("example.other", 1001)
+                            && !snapshot.cellsApplyTo("example.selected", 21_000),
                     "scope and expiry");
+            if (scopeOnly) {
+                checkServiceState(snapshot);
+                state.put("scopes",
+                        new JSONObject().put("sim",
+                                new JSONObject()
+                                        .put("mode", "apps")
+                                        .put("packages", new JSONArray().put("example.sim"))));
+                TelephonySnapshot split = TelephonySnapshot.parse(response.toString(), 1000);
+                check(split.cellsApplyTo("example.selected", 1001)
+                                && !split.simAppliesTo("example.selected", 1001),
+                        "cell-only scope");
+                check(split.simAppliesTo("example.sim", 1001)
+                                && !split.cellsApplyTo("example.sim", 1001),
+                        "SIM-only scope");
+                check(!split.simAppliesTo("example.sim", 21_000) && !split.simAppliesTo(null, 1001),
+                        "SIM expiry and unknown caller");
+                state.put("scopes", new JSONObject());
+                check(!TelephonySnapshot.parse(response.toString(), 1000)
+                                .simAppliesTo("example.selected", 1001),
+                        "missing new scope does not inherit");
+                state.put("requested_active", false);
+                check(TelephonySnapshot.parse(response.toString(), 1000) == null, "stop");
+                result.putString("stream",
+                        "PASS: independent cell/SIM scopes, legacy fallback, malformed scope, expiry, unknown caller, ServiceState isolation/redaction/parcel, stop\n");
+                finish(-1, result);
+                return;
+            }
             List<CellInfo> output = snapshot.cells(7, 1234567890L);
             check(output.size() == 5, "five radio types");
             for (CellInfo cell : output) {
@@ -191,7 +221,9 @@ public final class TelephonyObjectChecks extends Instrumentation {
             state.put("requested_active", false);
             check(TelephonySnapshot.parse(response.toString(), 1000) == null, "stop");
             result.putString("stream",
-                    "PASS: five radios, parcel round trips, NR ID, missing metadata, SIM operator and redaction, scope, expiry, stop, serving signal, ServiceState identity/operator/redaction, phone, subscription and registry signatures\n");
+                    "PASS: five radios, parcel round trips, NR ID, missing metadata, SIM operator and "
+                            + "redaction, scope, expiry, stop, serving signal, ServiceState "
+                            + "identity/operator/redaction, phone, subscription and registry signatures\n");
             finish(-1, result);
         } catch (Throwable error) {
             result.putString("stream", android.util.Log.getStackTraceString(error));
@@ -216,7 +248,7 @@ public final class TelephonyObjectChecks extends Instrumentation {
         Object registration = builderType.getMethod("build").invoke(builder);
         ServiceState.class.getMethod("addNetworkRegistrationInfo", NetworkRegistrationInfo.class)
                 .invoke(original, registration);
-        ServiceState changed = snapshot.serviceState(7, original);
+        ServiceState changed = snapshot.serviceState(7, original, true, true);
         check(changed.getOperatorNumeric().equals("46001"), "ServiceState serving PLMN");
         check(changed.getOperatorAlphaLong().equals("Test"), "ServiceState configured carrier");
         check(registration(changed).getCellIdentity().equals(snapshot.identity(7, 0)),
@@ -229,14 +261,23 @@ public final class TelephonyObjectChecks extends Instrumentation {
                     (ServiceState) ServiceState
                             .class.getMethod("createLocationInfoSanitizedCopy", boolean.class)
                             .invoke(original, coarse);
-            ServiceState replaced = snapshot.serviceState(7, sanitized);
+            ServiceState replaced = snapshot.serviceState(7, sanitized, true, true);
             check(registration(replaced).getCellIdentity() == null,
                     "ServiceState fine redaction preserved");
             check(coarse ? replaced.getOperatorNumeric() == null
                          : replaced.getOperatorNumeric().equals("46001"),
                     "ServiceState coarse redaction preserved");
         }
-        ServiceState empty = snapshot.serviceState(999, original);
+        ServiceState cellsOnly = snapshot.serviceState(7, original, true, false);
+        check(cellsOnly.getOperatorAlphaLong().equals("Real")
+                        && cellsOnly.getOperatorNumeric().equals("46001"),
+                "cells cannot change out-of-scope carrier");
+        ServiceState simOnly = snapshot.serviceState(7, original, false, true);
+        check(simOnly.getOperatorAlphaLong().equals("Test")
+                        && simOnly.getOperatorNumeric().equals("310260")
+                        && registration(simOnly).getCellIdentity().equals(real),
+                "SIM cannot change out-of-scope cell identity");
+        ServiceState empty = snapshot.serviceState(999, original, true, true);
         check(registration(empty).getCellIdentity() == null && empty.getOperatorNumeric().isEmpty(),
                 "no real cell outside coverage");
         Parcel parcel = Parcel.obtain();

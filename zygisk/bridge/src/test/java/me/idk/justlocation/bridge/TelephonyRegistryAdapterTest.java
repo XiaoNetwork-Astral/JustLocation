@@ -97,11 +97,12 @@ public class TelephonyRegistryAdapterTest {
     static class Fixture {
         final Registry registry = new Registry();
         boolean active = true;
+        String selected = "selected";
         final TelephonyRegistryAdapter adapter;
         Fixture() throws Exception {
             adapter = new TelephonyRegistryAdapter(Registry.class, Record.class, Listener.class,
                     Events.class, (pkg, sub, slot, name, authorized) -> {
-                        if (!active || !pkg.equals("selected"))
+                        if (!active || !selected.equals(pkg))
                             return null;
                         if (name.equals("onServiceStateChanged")) {
                             State state = (State) authorized;
@@ -160,6 +161,23 @@ public class TelephonyRegistryAdapterTest {
         f.registry.mRecords.clear();
         f.adapter.dispatch();
         assertEquals(2, sink.values.size());
+    }
+    @Test
+    public void liveScopeEditsReachExistingRegistrationsAndRestoreRemovedApps() throws Exception {
+        Fixture f = new Fixture();
+        Sink first = new Sink(), second = new Sink();
+        Record a = f.add("selected", first), b = f.add("other", second);
+        a.events = b.events = Set.of(1);
+        f.adapter.dispatch();
+        first.values.clear();
+        f.selected = "other";
+        f.adapter.dispatch();
+        assertEquals(List.of(List.of("real cells")), first.values);
+        assertEquals(List.of(List.of("synthetic:7:0")), second.values);
+        a.callback.onCellInfoChanged(List.of("new real"));
+        b.callback.onCellInfoChanged(List.of("new real"));
+        assertEquals(List.of("new real"), first.values.get(1));
+        assertEquals(List.of("synthetic:7:0"), second.values.get(1));
     }
     @Test
     public void stopRestoresLatestRealCacheOnceAndDoesNotBypassRevokedPermission()

@@ -26,6 +26,7 @@ pub mod route;
 pub mod route_store;
 pub mod routing;
 pub mod scode;
+pub mod scope;
 pub mod smoothing;
 pub mod steps;
 pub mod telephony;
@@ -80,6 +81,15 @@ impl Scope {
     pub fn apps<const N: usize>(packages: [&str; N]) -> Self {
         Self::Apps(packages.into_iter().map(str::to_owned).collect())
     }
+
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if let Self::Apps(packages) = self {
+            if packages.is_empty() || packages.iter().any(|name| name.trim().is_empty()) {
+                return Err("select at least one application");
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -97,11 +107,7 @@ pub struct Engine {
 
 impl Engine {
     pub fn set_scope(&mut self, scope: Scope) -> Result<(), &'static str> {
-        if let Scope::Apps(packages) = &scope {
-            if packages.is_empty() || packages.iter().any(|name| name.trim().is_empty()) {
-                return Err("select at least one application");
-            }
-        }
+        scope.validate()?;
         self.config
             .get_or_insert_with(|| Config { position: Position::new(0., 0.), scope: Scope::All })
             .scope = scope;
@@ -112,11 +118,7 @@ impl Engine {
             return Err("already running; stop before starting another session");
         }
         config.position.validate()?;
-        if let Scope::Apps(packages) = &config.scope {
-            if packages.is_empty() || packages.iter().any(|name| name.trim().is_empty()) {
-                return Err("select at least one application");
-            }
-        }
+        config.scope.validate()?;
         self.config = Some(config);
         self.running = true;
         Ok(())
@@ -140,7 +142,7 @@ impl Engine {
     }
 
     pub fn output_for(&self, package: &str) -> Option<&Position> {
-        if !self.running {
+        if !self.running || package.trim().is_empty() {
             return None;
         }
         let config = self.config.as_ref()?;

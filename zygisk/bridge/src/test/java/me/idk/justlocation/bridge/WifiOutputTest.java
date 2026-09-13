@@ -73,6 +73,18 @@ public class WifiOutputTest {
         assertNotNull("Settings parsing must not depend on runtime APIs",
                 WifiSettings.parse(state(twoTargets(), all(), true), NOW));
     }
+    @Test
+    @SuppressWarnings("unchecked")
+    public void independentWifiSelectionOverridesTheActiveLocationScope() {
+        Map<String, Object> response = state(twoTargets(), all(), true);
+        Map<String, Object> status = (Map<String, Object>) response.get("state");
+        status.put("scopes", map("wifi", apps("example.wifi")));
+        WifiSettings selected = WifiSettings.parse(response, NOW);
+        assertTrue(selected.scope().appliesTo("example.wifi", NOW));
+        assertFalse(selected.scope().appliesTo("example.other", NOW));
+        status.put("scopes", map());
+        assertNull(WifiSettings.parse(response, NOW));
+    }
 
     @Test
     public void disabledOrEmptyConfigurationDoesNotTakeOver() {

@@ -26,7 +26,7 @@ impl Runtime {
                 return Ok(());
             }
             Command::Start { position, scope } => {
-                json!({"op":"start","config":{"position":position.position()?,"scope":self.scope(scope)?}})
+                json!({"op":"start","config":{"position":position.position()?,"scope":self.scope(scope, crate::scope::Feature::Position)?}})
             }
             Command::Update(position) => json!({"op":"update","position":position.position()?}),
             Command::Stop => json!({"op":"stop"}),
@@ -58,12 +58,23 @@ impl Runtime {
                 return Ok(());
             }
             Command::Scope { command } => match command {
-                ScopeCommand::Get => return self.emit(&self.status()?["config"]["scope"]),
-                ScopeCommand::Set(scope) => {
+                ScopeCommand::Get { feature } => {
+                    let state = self.status()?;
+                    return self.emit(match feature {
+                        Some(feature) if state.get("scopes").is_some() => {
+                            &state["scopes"][feature.key()]
+                        }
+                        _ => &state["config"]["scope"],
+                    });
+                }
+                ScopeCommand::Set { scope, feature } => {
+                    if feature.is_some() && self.status()?.get("scopes").is_none() {
+                        return Err("the running service does not support feature scopes; update and restart it first".into());
+                    }
                     if !scope.all && scope.app.is_empty() {
                         return Err("scope set requires --app PACKAGE or --all".into());
                     }
-                    json!({"op":"set_scope","scope":self.scope(scope)?})
+                    json!({"op":"set_scope","scope":self.scope(scope, feature.unwrap_or(crate::scope::Feature::Position))?,"feature":feature})
                 }
             },
             Command::Steps { command } => match command {

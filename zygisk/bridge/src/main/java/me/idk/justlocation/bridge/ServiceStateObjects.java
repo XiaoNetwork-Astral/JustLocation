@@ -7,32 +7,41 @@ import java.util.List;
 /** Copy the caller's authorized state, preserving identity and operator redactions. */
 final class ServiceStateObjects {
     private ServiceStateObjects() {}
-    static ServiceState replace(ServiceState original, CellIdentity serving, String carrier)
-            throws Exception {
+    static ServiceState replace(ServiceState original, CellIdentity serving, String carrier,
+            boolean replaceCells, boolean replaceSim) throws Exception {
         ServiceState result = new ServiceState(original);
-        String numeric = serving == null
+        String numeric = !replaceCells ? original.getOperatorNumeric()
+                : serving == null
                 ? ""
                 : (String) CellIdentity.class.getMethod("getPlmn").invoke(serving);
         if (numeric == null)
             numeric = "";
-        result.setOperatorName(original.getOperatorAlphaLong() == null ? null : carrier,
-                original.getOperatorAlphaShort() == null ? null : carrier,
+        result.setOperatorName(!replaceSim                        ? original.getOperatorAlphaLong()
+                        : original.getOperatorAlphaLong() == null ? null
+                                                                  : carrier,
+                !replaceSim ? original.getOperatorAlphaShort()
+                        : original.getOperatorAlphaShort() == null ? null
+                                                                   : carrier,
                 original.getOperatorNumeric() == null ? null : numeric);
         // AOSP's location sanitizer leaves raw alpha names and radio metadata intact.
-        call(result, "setOperatorAlphaLongRaw", String.class,
-                original.getOperatorNumeric() == null
-                                || ServiceState.class.getMethod("getOperatorAlphaLongRaw")
-                                                .invoke(original)
-                                        == null
-                        ? null
-                        : carrier);
-        call(result, "setOperatorAlphaShortRaw", String.class,
-                original.getOperatorNumeric() == null
-                                || ServiceState.class.getMethod("getOperatorAlphaShortRaw")
-                                                .invoke(original)
-                                        == null
-                        ? null
-                        : carrier);
+        if (replaceSim) {
+            call(result, "setOperatorAlphaLongRaw", String.class,
+                    original.getOperatorNumeric() == null
+                                    || ServiceState.class.getMethod("getOperatorAlphaLongRaw")
+                                                    .invoke(original)
+                                            == null
+                            ? null
+                            : carrier);
+            call(result, "setOperatorAlphaShortRaw", String.class,
+                    original.getOperatorNumeric() == null
+                                    || ServiceState.class.getMethod("getOperatorAlphaShortRaw")
+                                                    .invoke(original)
+                                            == null
+                            ? null
+                            : carrier);
+        }
+        if (!replaceCells)
+            return result;
         call(result, "setChannelNumber", int.class,
                 serving == null ? CellInfo.UNAVAILABLE
                                 : CellIdentity.class.getMethod("getChannelNumber").invoke(serving));

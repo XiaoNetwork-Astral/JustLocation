@@ -109,7 +109,7 @@ impl Runtime {
     fn status(&self) -> Result<Value> {
         self.request(json!({"op":"status"}))
     }
-    fn scope(&self, args: ScopeArgs) -> Result<Value> {
+    fn scope(&self, args: ScopeArgs, feature: crate::scope::Feature) -> Result<Value> {
         if args.all {
             Ok(json!({"mode":"all"}))
         } else if !args.app.is_empty() {
@@ -121,7 +121,14 @@ impl Runtime {
             )
         } else {
             let state = self.status()?;
-            let scope = &state["config"]["scope"];
+            if state["config"].is_null() {
+                return Err("select apps with --app PACKAGE or explicitly use --all".into());
+            }
+            let scope = if state.get("scopes").is_some() {
+                &state["scopes"][feature.key()]
+            } else {
+                &state["config"]["scope"]
+            };
             if scope.is_null() {
                 Err("select apps with --app PACKAGE or explicitly use --all".into())
             } else {

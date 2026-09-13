@@ -28,6 +28,7 @@ final class WifiServiceImplHooks {
     private final Method connectionInfo;
     private final Method scanResults;
     private final Constructor<?> slice;
+    private final WifiPermissions permissions;
     private final Function<String, WifiOutput> source;
     private volatile boolean scanReady, connectionReady;
 
@@ -59,6 +60,7 @@ final class WifiServiceImplHooks {
         scanResults = service.getDeclaredMethod("getScanResults", String.class, String.class);
         // Constructor lookup throws when unavailable.
         slice = Class.forName(APEX_SLICE, false, serviceLoader).getConstructor(List.class);
+        permissions = new WifiPermissions(service);
     }
 
     /**
@@ -120,12 +122,26 @@ final class WifiServiceImplHooks {
                 return call.original();
             // Run the system implementation first to retain its permission and state checks.
             Object original = call.original();
+            int uid = android.os.Binder.getCallingUid();
+            long token = android.os.Binder.clearCallingIdentity();
             try {
+                if (original == null
+                        || !permissions.scanAllowed(
+                                call.arguments[0], packageName, (String) call.arguments[2], uid))
+                    return original;
+                output = current(packageName);
+                if (output == null)
+                    return original;
                 WifiInfo replacement = output.connectionInfo();
-                return replacement == null ? original : replacement;
+                return replacement == null
+                        ? original
+                        : replacement.makeCopy(permissions.redactions(
+                                  call.arguments[0], uid, replacement.getApplicableRedactions()));
             } catch (Exception error) {
                 android.util.Log.w("JustLocation", "Cannot build Wi-Fi connection info", error);
                 return original;
+            } finally {
+                android.os.Binder.restoreCallingIdentity(token);
             }
         });
         connectionReady = true;
@@ -136,12 +152,23 @@ final class WifiServiceImplHooks {
             if (output == null)
                 return call.original();
             Object original = call.original();
+            int uid = android.os.Binder.getCallingUid();
+            long token = android.os.Binder.clearCallingIdentity();
             try {
+                if (original == null
+                        || !permissions.scanAllowed(
+                                call.arguments[0], packageName, (String) call.arguments[2], uid))
+                    return original;
+                output = current(packageName);
+                if (output == null)
+                    return original;
                 // Construct the APEX-specific ParceledListSlice with the service classloader.
                 return slice.newInstance(output.scanResults(SystemClock.elapsedRealtimeNanos()));
             } catch (Exception error) {
                 android.util.Log.w("JustLocation", "Cannot build Wi-Fi scan results", error);
                 return original;
+            } finally {
+                android.os.Binder.restoreCallingIdentity(token);
             }
         });
         scanReady = true;

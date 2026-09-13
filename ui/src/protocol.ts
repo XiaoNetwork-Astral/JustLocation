@@ -17,6 +17,8 @@ export interface RealismConfig {
   seed?: number | null;
 }
 export type Scope = { mode: 'all' } | { mode: 'apps'; packages: string[] };
+export type ScopeFeature = 'position' | 'route' | 'wifi' | 'sim';
+export type FeatureScopes = Record<ScopeFeature, Scope>;
 export interface Config {
   position: Position;
   scope: Scope;
@@ -82,6 +84,8 @@ export interface StepConfig {
   daily_reset: boolean;
 }
 export interface State {
+  /** Absent on older daemons; config.scope is the currently effective location scope. */
+  scopes?: FeatureScopes;
   realism?: RealismConfig;
   requested_active: boolean;
   config: Config | null;
@@ -122,7 +126,7 @@ export type Command =
   | { op: 'start_route'; route: RoutePlan; scope: Scope }
   | { op: 'set_telephony'; config: TelephonyConfig }
   | { op: 'set_gnss'; config: GnssConfig }
-  | { op: 'set_scope'; scope: Scope }
+  | { op: 'set_scope'; scope: Scope; feature?: ScopeFeature }
   | { op: 'set_wifi'; config: WifiConfig }
   | { op: 'set_steps'; config: StepConfig }
   | { op: 'set_realism'; config: RealismConfig }

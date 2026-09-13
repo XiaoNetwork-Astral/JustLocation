@@ -19,6 +19,8 @@ pub const VERSION: u32 = 1;
 pub const MAX_FRAME: u64 = 65_536;
 
 mod message;
+#[cfg(test)]
+mod scope_tests;
 mod storage;
 #[cfg(test)]
 mod tests;
@@ -31,6 +33,7 @@ use storage::Stored;
 #[derive(Clone, Default)]
 struct Session {
     engine: Engine,
+    scopes: crate::scope::Scopes,
     route: Option<Playback>,
     motion: Option<Motion>,
     cell_region: Option<CellRegion>,
@@ -135,7 +138,7 @@ impl Control {
             .and(self.live_operators.clone());
         if let Err(error) = self.operators.apply(
             &self.session.telephony,
-            self.session.engine.is_running(),
+            self.session.engine.is_running() && self.session.scopes.sim == crate::Scope::All,
             live.as_ref(),
         ) {
             eprintln!("operator properties: {error}");
@@ -154,6 +157,7 @@ impl Control {
         let path = path.as_ref();
         let mut engine = Engine::default();
         let stored = Stored::load(path)?;
+        let scopes = stored.scopes.clone().expect("validated feature scopes");
         let step_path = path.with_extension("steps.json");
         let step_count: StepCount = match std::fs::read(step_path) {
             Ok(bytes) => serde_json::from_slice(&bytes)?,
@@ -161,13 +165,15 @@ impl Control {
             Err(error) => return Err(error),
         };
         step_count.validate().map_err(io::Error::other)?;
-        if let Some(config) = stored.config {
+        if let Some(mut config) = stored.config {
+            config.scope = scopes.position.clone();
             engine.start(config).map_err(io::Error::other)?;
             engine.stop();
         }
         Ok(Self {
             session: Session {
                 engine,
+                scopes,
                 cell_region: stored.cell_region,
                 telephony: stored.telephony,
                 gnss: stored.gnss,
@@ -238,8 +244,17 @@ impl Control {
                     Some(crate::route_store::page(&plan.points, &plan.breaks, offset, limit)?);
                 Ok(())
             }
-            Command::SetScope { scope } => {
-                self.session.engine.set_scope(scope).map_err(str::to_owned)
+            Command::SetScope { scope, feature } => {
+                self.session.scopes.set(feature, scope).map_err(str::to_owned)?;
+                if self.session.engine.config().is_none()
+                    && matches!(feature, None | Some(crate::scope::Feature::Position))
+                {
+                    self.session
+                        .engine
+                        .set_scope(self.session.scopes.position.clone())
+                        .map_err(str::to_owned)?;
+                }
+                self.refresh_scope()
             }
             Command::SetRealism { config } => {
                 config.validate().map_err(str::to_owned)?;
@@ -409,7 +424,9 @@ impl Control {
                 if self.records.active.is_some() {
                     return Err("stop recording before starting the simulation".into());
                 }
+                let scope = config.scope.clone();
                 self.session.engine.start(config).map_err(str::to_owned)?;
+                self.session.scopes.position = scope;
                 self.session.realism.reset(now);
                 Ok(())
             }
@@ -426,8 +443,9 @@ impl Control {
                 .map_err(str::to_owned)?;
                 self.session
                     .engine
-                    .start(Config { position: route.position(), scope })
+                    .start(Config { position: route.position(), scope: scope.clone() })
                     .map_err(str::to_owned)?;
+                self.session.scopes.route = scope;
                 self.session.route = Some(route);
                 self.session.realism.reset(now);
                 Ok(())
@@ -477,6 +495,7 @@ impl Control {
                 self.session.engine.stop();
                 self.session.route = None;
                 self.session.motion = None;
+                self.refresh_scope()?;
                 if self.records.active.as_ref().is_some_and(|r| !r.paused) {
                     self.record_event(RecordEvent::Pause)?;
                 }
@@ -486,6 +505,7 @@ impl Control {
                 self.session.engine.stop();
                 self.session.route = None;
                 self.session.motion = None;
+                self.refresh_scope()?;
                 Ok(())
             }
         };
@@ -503,8 +523,9 @@ impl Control {
 
     fn save(&self, path: &Path) -> io::Result<()> {
         Stored {
-            version: 3,
+            version: 4,
             config: self.session.engine.config().cloned(),
+            scopes: Some(self.session.scopes.clone()),
             cell_region: self.session.cell_region.clone(),
             telephony: self.session.telephony.clone(),
             gnss: self.session.gnss,
@@ -518,6 +539,18 @@ impl Control {
     fn record_event(&mut self, event: RecordEvent) -> Result<(), String> {
         let path = self.storage.as_ref().map(|p| p.with_extension("recording.jsonl"));
         self.records.execute(path.as_deref(), event)
+    }
+
+    fn refresh_scope(&mut self) -> Result<(), String> {
+        if self.session.engine.config().is_none() {
+            return Ok(());
+        }
+        let scope = if self.session.route.is_some() {
+            &self.session.scopes.route
+        } else {
+            &self.session.scopes.position
+        };
+        self.session.engine.set_scope(scope.clone()).map_err(str::to_owned)
     }
     fn response(&self, error: Option<String>) -> Response {
         let now = self.step_updated.unwrap_or_else(Instant::now);
@@ -561,6 +594,7 @@ impl Control {
             state: State {
                 requested_active: self.session.engine.is_running(),
                 config: output,
+                scopes: self.session.scopes.clone(),
                 realism: self.session.realism.config,
                 hook_connected,
                 location_hook_ready: hook_connected && self.hook_installed,

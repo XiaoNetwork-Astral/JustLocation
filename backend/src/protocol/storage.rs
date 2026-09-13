@@ -9,6 +9,8 @@ use std::{fs, io, path::Path};
 pub(super) struct Stored {
     pub(super) version: u32,
     pub(super) config: Option<Config>,
+    #[serde(default)]
+    pub(super) scopes: Option<crate::scope::Scopes>,
     pub(super) cell_region: Option<CellRegion>,
     #[serde(default)]
     pub(super) telephony: TelephonyConfig,
@@ -27,8 +29,9 @@ pub(super) struct Stored {
 impl Default for Stored {
     fn default() -> Self {
         Self {
-            version: 3,
+            version: 4,
             config: None,
+            scopes: Some(crate::scope::Scopes::default()),
             cell_region: None,
             telephony: TelephonyConfig::default(),
             gnss: GnssConfig::default(),
@@ -48,12 +51,26 @@ impl Stored {
         };
         let value: serde_json::Value = serde_json::from_slice(&bytes)?;
         if value.get("version").is_none() {
-            return Ok(Self { config: Some(serde_json::from_value(value)?), ..Self::default() });
+            let config: Config = serde_json::from_value(value)?;
+            return Ok(Self {
+                scopes: Some(crate::scope::Scopes::shared(config.scope.clone())),
+                config: Some(config),
+                ..Self::default()
+            });
         }
-        let stored: Self = serde_json::from_value(value)?;
-        if stored.version != 2 && stored.version != 3 {
+        let mut stored: Self = serde_json::from_value(value)?;
+        if !matches!(stored.version, 2..=4) {
             return Err(io::Error::other("unsupported configuration version"));
         }
+        if stored.scopes.is_none() {
+            if stored.version == 4 {
+                return Err(io::Error::other("configuration is missing feature scopes"));
+            }
+            stored.scopes = Some(crate::scope::Scopes::shared(
+                stored.config.as_ref().map_or(crate::Scope::All, |c| c.scope.clone()),
+            ));
+        }
+        stored.scopes.as_ref().unwrap().validate().map_err(io::Error::other)?;
         if let Some(region) = &stored.cell_region {
             region.validate().map_err(io::Error::other)?;
         }

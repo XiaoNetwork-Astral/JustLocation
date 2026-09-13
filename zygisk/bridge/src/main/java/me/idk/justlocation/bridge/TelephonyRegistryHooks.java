@@ -23,8 +23,12 @@ final class TelephonyRegistryHooks {
                     listener, Class.forName("android.telephony.TelephonyCallback", false, loader),
                     (pkg, sub, slot, callback, authorized) -> {
                         TelephonySnapshot current = snapshot.get();
-                        if (current == null || !current.cellsEnabled
-                                || !current.appliesTo(pkg, SystemClock.elapsedRealtime()))
+                        if (current == null)
+                            return null;
+                        long now = SystemClock.elapsedRealtime();
+                        boolean cells = current.cellsApplyTo(pkg, now),
+                                sim = current.simAppliesTo(pkg, now);
+                        if (!cells && !(sim && callback.equals("onServiceStateChanged")))
                             return null;
                         int selected = current.resolveSubscription(sub, slot);
                         long timestamp = SystemClock.elapsedRealtimeNanos();
@@ -35,7 +39,8 @@ final class TelephonyRegistryHooks {
                                 authorized == null
                                         ? null
                                         : current.serviceState(selected,
-                                                  (android.telephony.ServiceState) authorized);
+                                                  (android.telephony.ServiceState) authorized,
+                                                  cells, sim);
                             case "onSignalStrengthsChanged" -> current.signal(selected, timestamp);
                             case "onSignalStrengthChanged" -> {
                                 int strength = (int) android.telephony.SignalStrength

@@ -148,7 +148,7 @@ impl Runtime {
                 }
                 position.validate()?;
                 self.request(
-                    json!({"op":"start","config":{"position":position,"scope":self.scope(scope)?}}),
+                    json!({"op":"start","config":{"position":position,"scope":self.scope(scope, crate::scope::Feature::Position)?}}),
                 )?
             }
             PlaceCommand::Rename { id, name } => {
@@ -212,7 +212,11 @@ impl Runtime {
                 if plan.geometry.is_none() {
                     return Err("candidate has no provider geometry metadata".into());
                 }
-                let scope = if start { Some(self.scope(scope)?) } else { None };
+                let scope = if start {
+                    Some(self.scope(scope, crate::scope::Feature::Route)?)
+                } else {
+                    None
+                };
                 let mut saved = self.save_route(name, plan)?;
                 if let Some(scope) = scope {
                     let library = self.library()?;
@@ -323,7 +327,7 @@ impl Runtime {
                         (crate::route_store::save(&self.directory, &self.load_route(saved)?)?, true)
                     }
                 };
-                let result = self.scope(scope).and_then(|scope| {
+                let result = self.scope(scope, crate::scope::Feature::Route).and_then(|scope| {
                     self.request(json!({"op":"start_route_ref","id":file_id,"scope":scope}))
                 });
                 if temporary {
