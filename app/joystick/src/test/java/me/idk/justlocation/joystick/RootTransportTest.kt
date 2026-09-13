@@ -14,6 +14,24 @@ import org.junit.Test
 
 class RootTransportTest {
     @Test
+    fun cliQuotesEachArgumentWithoutExpandingNames() {
+        val process = FakeProcess(ByteArrayInputStream("{}".toByteArray()))
+        var command = ""
+        val transport =
+            RootTransport(
+                start = {
+                    command = it
+                    process
+                }
+            )
+        assertEquals("{}", transport.cli(listOf("place", "save", "name ' ; \$PATH")))
+        assertEquals(
+            "/data/adb/modules/justlocation/bin/justlocationd --json 'place' 'save' 'name '\\'' ; \$PATH'",
+            command,
+        )
+    }
+
+    @Test
     fun encodesOneUtf8ArgumentAndClosesTheProcess() {
         val frame = "{\"op\":\"status\",\"text\":\"测试 ' ; $\"}"
         val process = FakeProcess(ByteArrayInputStream("reply\n".toByteArray()))

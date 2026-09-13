@@ -29,6 +29,8 @@ Coordinates default to WGS84. Replace `--all` with `--app PACKAGE` to select an 
 
 Map keys, route planning and candidate selection: [map service guide](docs/maps.md).
 
+Floating controls, direction lock and compass following: [joystick guide](docs/joystick.md).
+
 ## Build
 
 - Node.js 22.12+

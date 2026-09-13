@@ -14,9 +14,19 @@ internal class RootTransport(
 ) {
     fun exchange(frame: String): String {
         val encoded = Base64.getEncoder().encodeToString(frame.toByteArray(Charsets.UTF_8))
+        return execute("/data/adb/modules/justlocation/bin/justlocationd request $encoded")
+    }
+
+    fun cli(arguments: List<String>): String =
+        execute(
+            "/data/adb/modules/justlocation/bin/justlocationd --json " +
+                arguments.joinToString(" ") { "'" + it.replace("'", "'\\''") + "'" }
+        )
+
+    private fun execute(command: String): String {
         val process =
             try {
-                start("/data/adb/modules/justlocation/bin/justlocationd request $encoded")
+                start(command)
             } catch (error: IOException) {
                 throw IllegalStateException(ROOT_HELP, error)
             }
@@ -31,7 +41,9 @@ internal class RootTransport(
                 )
                     ROOT_HELP
                 else
-                    "cannot reach the module; check that JustLocation is enabled and its service is running. $ROOT_HELP"
+                    reply.trim().take(800).ifEmpty {
+                        "cannot reach the module; check that JustLocation is enabled and its service is running. $ROOT_HELP"
+                    }
             }
             return reply
         } finally {

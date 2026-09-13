@@ -8,24 +8,30 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.Configuration
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.widget.Toast
 import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicReference
+import org.json.JSONObject
 
 /** Foreground lifetime and serialized movement requests for the floating joystick. */
 class JoystickService : Service() {
     private val main = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadScheduledExecutor()
-    private val desired = AtomicReference(StickInput.Still)
+    private val controller = MotionController()
+    private lateinit var heading: HeadingTracker
+    private var lastState: JSONObject? = null
+    private var lastPoll = 0L
     @Volatile private var maximumSpeed = 1.5
     @Volatile private var closed = false
     private var moving = false // Worker thread only.
     private var starting = false // Main thread only.
+    private var lastRejectedAt = 0L
     private var overlay: JoystickOverlay? = null
     private val screenOff =
         object : BroadcastReceiver() {
@@ -38,6 +44,7 @@ class JoystickService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        heading = HeadingTracker(this, controller::heading)
         val notifications = getSystemService(NotificationManager::class.java)
         notifications.createNotificationChannel(
             NotificationChannel(CHANNEL, "Floating joystick", NotificationManager.IMPORTANCE_LOW)
@@ -48,7 +55,7 @@ class JoystickService : Service() {
                 .setSmallIcon(android.R.drawable.ic_menu_mylocation)
                 .setContentTitle("Floating joystick is open")
                 .setContentText(
-                    "Release to hold position. Closing the joystick keeps simulation running."
+                    "Closing stops joystick movement. Route playback continues independently."
                 )
                 .setOngoing(true)
                 .build(),
@@ -57,8 +64,17 @@ class JoystickService : Service() {
         worker.scheduleWithFixedDelay(
             {
                 if (!closed) {
-                    val input = desired.get()
+                    val now = SystemClock.elapsedRealtime()
+                    val input = controller.output(now)
                     if (input.strength > 0 || moving) send(input)
+                    else if (now - lastPoll >= 1000) {
+                        lastPoll = now
+                        try {
+                            publish(RootControl.request("status"))
+                        } catch (error: Exception) {
+                            disconnected(error)
+                        }
+                    }
                 }
             },
             0,
@@ -75,12 +91,13 @@ class JoystickService : Service() {
             return START_NOT_STICKY
         }
         maximumSpeed = speed
-        overlay?.setLabel(speedLabel())
+        render()
         if (overlay == null && !starting) {
             starting = true
             worker.execute {
                 try {
-                    RootControl.requireStaticSession()
+                    val state = RootControl.requireReady()
+                    publish(state)
                     main.post {
                         if (!closed) showOverlay()
                     }
@@ -102,10 +119,15 @@ class JoystickService : Service() {
 
     private fun showOverlay() {
         starting = false
-        val window = JoystickOverlay(this, ::change, ::release)
+        val window =
+            JoystickOverlay(this, ::change, ::release, ::action) { speed ->
+                maximumSpeed = speed
+                render()
+            }
         try {
-            window.show(speedLabel())
+            window.show(maximumSpeed)
             overlay = window
+            render()
         } catch (error: Exception) {
             window.close()
             report(
@@ -120,37 +142,232 @@ class JoystickService : Service() {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 
-    private fun speedLabel() = String.format(Locale.ROOT, "Max %.1f km/h", maximumSpeed * 3.6)
-
-    private fun send(input: StickInput) {
-        try {
-            RootControl.request("drive", input.strength * maximumSpeed, input.bearing)
-            moving = input.strength > 0
-            main.post { if (!closed) overlay?.setLabel(speedLabel()) }
-        } catch (error: Exception) {
-            moving = false
-            desired.set(StickInput.Still)
-            main.post {
-                if (!closed) overlay?.reset(error.message ?: "Connection lost; movement stopped")
+    private fun publish(state: JSONObject) {
+        main.post {
+            if (!closed) {
+                lastState = state
+                if (!state.optBoolean("requested_active")) {
+                    controller.stop()
+                    heading.stop()
+                }
+                render()
             }
         }
     }
 
-    private fun change(input: StickInput) {
-        desired.set(input)
-        if (input.strength == 0.0 && !closed) {
-            worker.execute { if (moving) send(StickInput.Still) }
+    private fun render() {
+        val mode = controller.mode()
+        val state = lastState
+        val route = state?.optJSONObject("route")
+        val details =
+            when {
+                state?.optBoolean("requested_active") != true ->
+                    getString(R.string.simulation_stopped)
+                route != null ->
+                    getString(
+                        R.string.route_progress,
+                        getString(
+                            if (route.optBoolean("paused")) R.string.pause_route
+                            else if (route.optBoolean("completed")) R.string.route_arrived
+                            else R.string.route_running
+                        ),
+                        route.optDouble("distance"),
+                        route.optDouble("total_distance"),
+                    )
+                mode == MotionController.Mode.LOCKED -> getString(R.string.direction_locked)
+                mode == MotionController.Mode.FOLLOW ->
+                    if (controller.output(SystemClock.elapsedRealtime()).strength > 0)
+                        getString(R.string.follow_moving)
+                    else getString(R.string.compass_unavailable)
+                else -> ""
+            }
+        overlay?.render(
+            mode,
+            controller.output(SystemClock.elapsedRealtime()),
+            maximumSpeed,
+            state?.optBoolean("requested_active") == true,
+            state?.optJSONObject("steps")?.optBoolean("enabled") == true,
+            state?.optJSONObject("gnss")?.optBoolean("gnss_enabled") == true,
+            route != null,
+            route?.optBoolean("paused") == true,
+            route?.optBoolean("completed") == true,
+            details,
+        )
+    }
+
+    private fun disconnected(error: Exception) {
+        moving = false
+        controller.stop()
+        main.post {
+            heading.stop()
+            if (!closed) {
+                render()
+                overlay?.reset(error.message ?: "Connection lost; movement stopped")
+            }
         }
     }
 
+    private fun send(input: StickInput) {
+        try {
+            val state = RootControl.request("drive", input.strength * maximumSpeed, input.bearing)
+            moving = input.strength > 0
+            publish(state)
+        } catch (error: Exception) {
+            disconnected(error)
+        }
+    }
+
+    private fun change(input: StickInput) {
+        if (input.strength > 0 && !canMove()) {
+            overlay?.reset()
+            return
+        }
+        controller.touch(input)
+        if (controller.mode() != MotionController.Mode.FOLLOW) heading.stop()
+        if (controller.output(SystemClock.elapsedRealtime()).strength == 0.0 && !closed) {
+            worker.execute { if (moving) send(StickInput.Still) }
+        }
+        render()
+    }
+
     private fun release() {
-        change(StickInput.Still)
+        controller.stop()
+        heading.stop()
+        if (!closed) worker.execute { if (moving) send(StickInput.Still) }
         overlay?.reset()
+        render()
+    }
+
+    private fun canMove(): Boolean {
+        val reason =
+            when {
+                lastState?.optBoolean("requested_active") != true -> R.string.start_first
+                lastState?.optJSONObject("route") != null -> R.string.stop_route_first
+                else -> return true
+            }
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastRejectedAt >= 2000) {
+            lastRejectedAt = now
+            report(getString(reason))
+        }
+        return false
+    }
+
+    private fun perform(releaseMovement: Boolean = true, operation: () -> Unit) {
+        if (closed) return
+        if (releaseMovement) release()
+        worker.execute {
+            if (closed) return@execute
+            try {
+                operation()
+                publish(RootControl.request("status"))
+            } catch (error: Exception) {
+                try {
+                    publish(RootControl.request("status"))
+                } catch (_: Exception) {
+                    disconnected(error)
+                }
+                main.post { if (!closed) report(error.message ?: "Operation failed") }
+            }
+        }
+    }
+
+    private fun library(routes: Boolean) {
+        overlay?.loading(routes)
+        perform {
+            val entries = RootControl.library(routes)
+            val items =
+                (0 until entries.length()).map { index ->
+                    val entry = entries.getJSONObject(index)
+                    JoystickOverlay.Entry(
+                        entry.getString("id"),
+                        entry.optString("name", getString(R.string.unnamed)),
+                        if (routes)
+                            getString(
+                                R.string.route_summary,
+                                entry.optInt(
+                                    "point_count",
+                                    entry.optJSONObject("plan")?.optJSONArray("points")?.length()
+                                        ?: 0,
+                                ),
+                            )
+                        else
+                            String.format(
+                                Locale.ROOT,
+                                "%.6f, %.6f",
+                                entry.optDouble("latitude"),
+                                entry.optDouble("longitude"),
+                            ),
+                    )
+                }
+            main.post {
+                if (!closed)
+                    overlay?.choices(routes, items) { id ->
+                        perform {
+                            RootControl.useSaved(routes, id)
+                            main.post { if (!closed) overlay?.showSettings() }
+                        }
+                    }
+            }
+        }
+    }
+
+    private fun action(action: JoystickOverlay.Action) {
+        when (action) {
+            JoystickOverlay.Action.LOCK -> {
+                if (!canMove()) return
+                heading.stop()
+                controller.lock()
+                if (controller.mode() == MotionController.Mode.MANUAL) release()
+                render()
+            }
+            JoystickOverlay.Action.FOLLOW -> {
+                if (!canMove()) return
+                controller.follow()
+                if (controller.mode() == MotionController.Mode.FOLLOW) {
+                    if (!heading.start()) {
+                        release()
+                        report(getString(R.string.compass_missing))
+                    }
+                } else release()
+                render()
+            }
+            JoystickOverlay.Action.PLACES -> library(false)
+            JoystickOverlay.Action.ROUTES -> library(true)
+            JoystickOverlay.Action.SAVE -> {
+                release()
+                overlay?.askName { name ->
+                    perform {
+                        RootControl.saveCurrent(name)
+                        main.post {
+                            if (!closed)
+                                Toast.makeText(this, R.string.saved, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+            JoystickOverlay.Action.PAUSE -> perform { RootControl.request("pause_route") }
+            JoystickOverlay.Action.RESUME -> perform { RootControl.request("resume_route") }
+            JoystickOverlay.Action.STOP -> perform { RootControl.request("stop") }
+            JoystickOverlay.Action.START -> perform { RootControl.startCurrent() }
+            JoystickOverlay.Action.STEPS ->
+                perform(false) { RootControl.toggleSetting("steps", "enabled") }
+            JoystickOverlay.Action.GNSS ->
+                perform(false) { RootControl.toggleSetting("gnss", "gnss_enabled") }
+            JoystickOverlay.Action.CLOSE -> stopSelf()
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        release()
+        overlay?.configurationChanged()
     }
 
     override fun onDestroy() {
         closed = true
-        desired.set(StickInput.Still)
+        controller.stop()
+        heading.stop()
         unregisterReceiver(screenOff)
         overlay?.close()
         overlay = null

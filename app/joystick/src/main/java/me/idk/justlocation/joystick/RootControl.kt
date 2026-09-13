@@ -1,6 +1,7 @@
 package me.idk.justlocation.joystick
 
 import android.location.Location
+import org.json.JSONArray
 import org.json.JSONObject
 
 /** Calls are made from the controller worker, never the main thread. */
@@ -19,11 +20,76 @@ internal object RootControl {
         }
     }
 
-    fun requireStaticSession() {
+    fun requireReady(): JSONObject {
         val state = request("status")
-        check(state.optBoolean("requested_active")) { "start the location simulation first" }
-        check(state.isNull("route")) { "stop the route playback first" }
         check(state.optBoolean("location_hook_ready")) { "the location hook is not ready" }
+        return state
+    }
+
+    fun library(routes: Boolean): JSONArray =
+        JSONArray(transport.cli(listOf(if (routes) "route" else "place", "list")))
+
+    fun useSaved(routes: Boolean, id: String): JSONObject {
+        // Check that the selected entry still exists before ending the current session.
+        val entries = library(routes)
+        check((0 until entries.length()).any { entries.getJSONObject(it).optString("id") == id }) {
+            "saved entry no longer exists"
+        }
+        if (request("status").optBoolean("requested_active")) request("stop")
+        return JSONObject(
+            transport.cli(
+                if (routes) listOf("route", "start", "--id", id) else listOf("place", "start", id)
+            )
+        )
+    }
+
+    fun startCurrent(): JSONObject {
+        val state = requireReady()
+        val config = state.optJSONObject("config") ?: error("select a saved position first")
+        return request(JSONObject().put("version", 1).put("op", "start").put("config", config)) {
+            it
+        }
+    }
+
+    fun toggleSetting(group: String, key: String): JSONObject {
+        require(group == "steps" || group == "gnss")
+        val state = request("status")
+        val config = state.getJSONObject(group)
+        config.put(key, !config.optBoolean(key))
+        return request(
+            JSONObject().put("version", 1).put("op", "set_$group").put("config", config)
+        ) {
+            it
+        }
+    }
+
+    fun saveCurrent(name: String): JSONObject {
+        val state = request("status")
+        check(state.optBoolean("requested_active")) {
+            "start simulation before saving its position"
+        }
+        val position = state.getJSONObject("config").getJSONObject("position")
+        return JSONObject(
+            transport.cli(
+                listOf(
+                    "place",
+                    "save",
+                    name,
+                    "--lat",
+                    position.getDouble("latitude").toString(),
+                    "--lon",
+                    position.getDouble("longitude").toString(),
+                    "--altitude",
+                    position.getDouble("altitude").toString(),
+                    "--accuracy",
+                    position.getDouble("accuracy").toString(),
+                    "--speed",
+                    position.getDouble("speed").toString(),
+                    "--bearing",
+                    position.getDouble("bearing").toString(),
+                )
+            )
+        )
     }
 
     /** The backend owns distance filtering, point limits and the completed track. */

@@ -29,6 +29,8 @@ justlocation route --help                              # 查看路线命令
 
 地图 Key、自动路线规划与候选选择：[地图服务用法](docs/maps.md)。
 
+悬浮控件、方向锁定和朝向跟随：[摇杆用法](docs/joystick.md)。
+
 ## 构建
 
 - Node.js 22.12+
