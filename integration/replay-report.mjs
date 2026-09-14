@@ -125,16 +125,25 @@ export function report(captures, options = {}) {
         ages.length > 0
           ? { min: Math.min(...ages), max: Math.max(...ages), negative: ages.filter((age) => age < 0).length }
           : null;
-      for (let index = 1; index < fixes.length; index += 1) {
-        const gap = fixes[index].time - fixes[index - 1].time;
-        if (gap > gapMs)
-          summary.gaps.push({
-            ms: gap,
-            after: fixes[index - 1].time,
-            source: capture.name,
-            provider: fixes[index].provider,
-          });
+      // Gaps are per provider: two providers alternating every second would otherwise hide the
+      // fact that one of them stopped delivering.
+      const byProvider = new Map();
+      for (const row of fixes) {
+        const key = row.provider ?? '(none)';
+        if (!byProvider.has(key)) byProvider.set(key, []);
+        byProvider.get(key).push(row);
       }
+      for (const [provider, rows] of byProvider)
+        for (let index = 1; index < rows.length; index += 1) {
+          const gap = rows[index].time - rows[index - 1].time;
+          if (gap > gapMs)
+            summary.gaps.push({
+              ms: gap,
+              provider,
+              after: rows[index - 1].time,
+              source: capture.name,
+            });
+        }
     }
     sources.push(summary);
     rows.push(...normalised);

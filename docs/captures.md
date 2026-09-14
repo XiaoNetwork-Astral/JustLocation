@@ -37,7 +37,8 @@ The report contains, per capture:
 
 - how many rows were fixes, and how many carried a non-zero SDK error code;
 - the providers and SDK location types that appeared;
-- gaps longer than ten seconds between consecutive fixes of that capture;
+- gaps longer than ten seconds between consecutive fixes, measured per provider, so one provider
+  falling silent cannot be hidden by another that keeps reporting;
 - the fix-age range and how many ages were negative, which is what a wrong time base looks like;
 - the satellite values that were seen, including the `-1` that means the field was absent.
 
@@ -48,6 +49,9 @@ points at the source that took a different path, while a matching pair rules the
 
 Runs are self-tested: `node integration/replay-report.test.mjs` builds a fixture with a known gap, a
 known divergent capture and one error row, and checks that the report describes exactly those.
+`node integration/replay-report-long.test.mjs` builds a ten-minute timeline with a minute-long
+interruption, which is the shape the intermittent-subscription check needs; it pins the report's
+behaviour for that case before any device run.
 
 ## Boundaries
 
