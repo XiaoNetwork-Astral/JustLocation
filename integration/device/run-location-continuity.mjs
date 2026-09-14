@@ -147,6 +147,30 @@ try {
     assert.ok(maxError < 10, `${provider}: diverged from backend by ${maxError.toFixed(2)}m`);
     assert.ok(maxGap < 10000, `${provider}: callback gap ${maxGap}ms`);
     assert.ok(active.at(-1).received_ms > stoppedAt - 10000, `${provider}: delivery ended early`);
+    // A GPS fix must state how many satellites solved it; without the extra, a consumer reads -1
+    // and treats the fix as simulated. A network fix is not a satellite solution, so it must never
+    // claim one.
+    const extras = active.map((s) => s.extras_satellites);
+    if (provider === 'gps') {
+      assert.ok(
+        extras.some((count) => count > 0),
+        `gps: no simulated fix carried Location.extras satellites (values: ${[
+          ...new Set(extras),
+        ].join(', ')})`,
+      );
+      assert.ok(
+        extras.every((count) => count !== 0),
+        'gps: a simulated fix reported zero satellites',
+      );
+      console.log(
+        `gps satellites extra: ${[...new Set(extras)].sort((a, b) => a - b).join(', ')}`,
+      );
+    } else {
+      assert.ok(
+        extras.every((count) => count <= 0),
+        `network: a fix claimed satellites (values: ${[...new Set(extras)].join(', ')})`,
+      );
+    }
     const after = callbacks.filter(
       (s) => s.provider === provider && s.received_ms > stoppedAt + 22000,
     );

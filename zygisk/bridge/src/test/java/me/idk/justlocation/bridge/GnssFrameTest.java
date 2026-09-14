@@ -38,6 +38,32 @@ public class GnssFrameTest {
     }
 
     @Test
+    public void sentenceCountsFollowTheEpochInsteadOfAFixedNumber() {
+        var frame = new GnssFrame(31.2, 121.5, 10, 3, 45,
+                Instant.parse("2026-09-10T12:00:00Z").toEpochMilli());
+        int used = frame.satellites().size();
+        var lines = frame.nmea();
+        String gga = lines.stream().filter(line -> line.startsWith("$GPGGA")).findFirst().get();
+        assertTrue(gga, gga.contains(",1," + String.format(Locale.ROOT, "%02d", used) + ","));
+        // GSV pages carry exactly the reported number of satellite entries: four comma-separated
+        // fields per entry, with the checksum suffix counted as the trailing token.
+        var gsv = lines.stream().filter(line -> line.startsWith("$GPGSV")).toList();
+        for (String line : gsv)
+            assertTrue(line, line.contains("," + String.format(Locale.ROOT, "%02d", used) + ","));
+        int entries = gsv.stream()
+                              .mapToInt(line
+                                      -> (line.substring(0, line.indexOf('*')).split(",", -1).length
+                                                 - 4)
+                                                 / 4)
+                              .sum();
+        assertEquals(used, entries);
+        // The same epoch answers the Location extra, so neither can drift from the NMEA count.
+        assertEquals(used,
+                LocationSnapshot.satelliteCount(31.2, 121.5, 10, 3, 45,
+                        Instant.parse("2026-09-10T12:00:00Z").toEpochMilli()));
+    }
+
+    @Test
     public void roundedMinutesCarryIntoDegreesAndMidnightChangesTheDate() {
         var frame = new GnssFrame(89.999999999, 179.999999999, 0, 0, 0,
                 Instant.parse("2026-09-11T00:00:00Z").toEpochMilli());

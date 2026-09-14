@@ -65,19 +65,26 @@ final class GnssFrame {
         String point = coordinate(latitude, 2) + "," + (latitude < 0 ? "S" : "N") + ","
                 + coordinate(longitude, 3) + "," + (longitude < 0 ? "W" : "E");
         ArrayList<String> result = new ArrayList<>();
+        // One epoch defines the satellite count for every channel, so NMEA cannot claim more
+        // satellites than the model solved with.
+        int used = satellites.size();
+        int pages = (used + 3) / 4;
         // Without a geoid model, use a documented synthetic zero separation. Thus ellipsoid
         // altitude = MSL altitude + separation remains consistent with Location.getAltitude().
-        result.add(
-                sentence(format("GPGGA,%s,%s,1,08,1.0,%.3f,M,0.000,M,,", time, point, altitude)));
+        result.add(sentence(format("GPGGA,%s,%s,1,%02d,1.0,%.3f,M,0.000,M,,", time, point, used,
+                altitude)));
         result.add(sentence(format("GPRMC,%s,A,%s,%.3f,%.3f,%s,,,A", time, point,
                 speed / 0.5144444444444445, bearing, DATE.format(instant))));
         StringBuilder gsa = new StringBuilder("GPGSA,A,3");
         for (Satellite satellite : satellites)
             gsa.append(format(",%02d", satellite.id()));
         result.add(sentence(gsa + ",,,,,1.5,1.0,1.1"));
-        for (int page = 0; page < 2; page++) {
-            StringBuilder body = new StringBuilder("GPGSV,2," + (page + 1) + ",08");
-            for (Satellite satellite : satellites.subList(page * 4, page * 4 + 4)) {
+        for (int page = 0; page < pages; page++) {
+            int first = page * 4;
+            int last = Math.min(first + 4, used);
+            StringBuilder body =
+                    new StringBuilder(format("GPGSV,%d,%d,%02d", pages, page + 1, used));
+            for (Satellite satellite : satellites.subList(first, last)) {
                 body.append(format(",%02d,%02.0f,%03.0f,%02.0f", satellite.id, satellite.elevation,
                         satellite.azimuth, satellite.cn0));
             }

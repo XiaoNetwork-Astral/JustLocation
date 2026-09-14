@@ -1,6 +1,8 @@
 package me.idk.justlocation.bridge;
 
 import android.location.Location;
+import android.location.LocationManager;
+import android.os.Bundle;
 import android.os.SystemClock;
 
 import org.json.JSONObject;
@@ -51,6 +53,27 @@ final class LocationSnapshot {
         return new LocationSnapshot(selection.snapshot(SystemClock.elapsedRealtime()),
                 config.getJSONObject("position"), gnssEnabled, nmeaEnabled);
     }
+
+    /**
+     * Whether a fix from this provider carries a satellite count.
+     *
+     * Only a GPS fix from the running satellite model does. A network, fused or passive fix is not
+     * a satellite solution, so it carries no count at all instead of borrowing the GPS one; the
+     * same absence applies while the satellite model is off, where the platform itself reports no
+     * satellites either.
+     */
+    static boolean carriesSatellites(String provider, boolean gnssEnabled) {
+        return gnssEnabled && provider != null
+                && provider.equalsIgnoreCase(LocationManager.GPS_PROVIDER);
+    }
+
+    /** Modeled satellites used in the fix, shared with NMEA and GnssStatus. */
+    static int satelliteCount(double latitude, double longitude, double altitude, double speed,
+            double bearing, long timestampMs) {
+        return new GpsEpoch(latitude, longitude, altitude, speed, bearing, timestampMs)
+                .observations.size();
+    }
+
     Location location(String provider) {
         Location result = new Location(provider);
         result.setLatitude(latitude);
@@ -59,8 +82,21 @@ final class LocationSnapshot {
         result.setAccuracy(accuracy);
         result.setSpeed(speed);
         result.setBearing(bearing);
-        result.setTime(System.currentTimeMillis());
+        long now = System.currentTimeMillis();
+        result.setTime(now);
         result.setElapsedRealtimeNanos(SystemClock.elapsedRealtimeNanos());
+        if (carriesSatellites(provider, gnssEnabled))
+            extras(result, satelliteCount(latitude, longitude, altitude, speed, bearing, now));
         return result;
+    }
+
+    /**
+     * Android 15 returns a new Bundle from `Location.getExtras()` until one is supplied, so the
+     * satellite extra is set through a fresh bundle and an explicit setter.
+     */
+    private static void extras(Location location, int satellites) {
+        Bundle bundle = new Bundle();
+        bundle.putInt("satellites", satellites);
+        location.setExtras(bundle);
     }
 }

@@ -8,6 +8,7 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.location.OnNmeaMessageListener
+import android.os.Bundle
 import android.os.CancellationSignal
 import android.os.Handler
 import android.os.Parcel
@@ -309,6 +310,46 @@ internal class LocationChecks(private val manager: LocationManager, private val 
                 "types ${nmea.map { it.substringAfter('$').take(5) }.distinct().joinToString(" ")}"
             )
             nmea.take(2).forEach { report.line(it) }
+        }
+
+        report.section("location extras")
+        report.line(satelliteExtrasRoundTrip())
+    }
+
+    /**
+     * Whether a `Location.extras` satellite count survives the platform's parceling.
+     *
+     * The bridge states the solved satellite count through `Location.setExtras`; this checks the
+     * platform side of that mechanism on the real ROM, independently of the installed module.
+     */
+    @SuppressLint("SoonBlockedPrivateApi")
+    private fun satelliteExtrasRoundTrip(): String {
+        val source = Location(LocationManager.GPS_PROVIDER).apply {
+            latitude = 31.2
+            longitude = 121.5
+            altitude = 0.0
+            accuracy = 5f
+            speed = 1.2f
+            bearing = 87f
+            time = System.currentTimeMillis()
+            elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+            val bundle = Bundle()
+            bundle.putInt("satellites", 8)
+            extras = bundle
+        }
+        val parcel = Parcel.obtain()
+        return try {
+            val direct = source.extras?.getInt("satellites", -1) ?: -1
+            parcel.writeParcelable(source, 0)
+            parcel.setDataPosition(0)
+            val restored = parcel.readParcelable<Location>(Location::class.java.classLoader)
+            val after = restored?.extras?.getInt("satellites", -1) ?: -1
+            val provider = restored?.provider
+            "set=$direct parceled=$after provider=$provider"
+        } catch (error: Throwable) {
+            "failed=${error.javaClass.simpleName}: ${error.message}"
+        } finally {
+            parcel.recycle()
         }
     }
 

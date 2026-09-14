@@ -37,6 +37,8 @@ justlocation route --help                              # 查看路线命令
 
 分类备份、压缩与恢复预览：[备份用法](docs/backups.md)。
 
+实测地点及其基站／Wi-Fi 环境，以及模拟定位中的卫星字段：[地点用法](docs/places.md)。
+
 ## 构建
 
 - Node.js 22.12+

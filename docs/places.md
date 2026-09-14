@@ -58,8 +58,40 @@ Wi-Fi attachments carry everything the Wi-Fi channel needs, so a measured Wi-Fi 
 - A cell region describes the area that was acquired, not complete real-world coverage, and a recorded cell identity is not proof that a tower was measured from the simulated device.
 - Applying an environment changes the simulation switches (`cells_enabled`, Wi-Fi `enabled`). It does not touch the application scope of those channels; a place start sets the position scope only.
 
+## What a measured location carries
+
+The probe records the fields a consumer actually reads from a fix, so a stored place can be compared with what an application saw:
+
+| Field | Recorded as |
+| ----- | ----------- |
+| position and quality | coordinates, altitude, accuracy, speed, bearing, provider |
+| time | `fix_time_ms` (wall clock), `fix_elapsed_ms` (monotonic) and the receiving time |
+| freshness | `from_last_known` distinguishes a requested fix from a cached one |
+| mock flag | `mock`, plus the snapshot-wide `simulated` flag |
+| satellites | `extras_satellites`, the platform's `Location.extras` count, or `-1` when the fix carried none |
+| permissions | location, Wi-Fi and phone permission results, and whether location was enabled |
+
+A count of `-1` is an absent field, not a zero: it means the fix did not carry `extras.satellites` at all. That distinction matters because a consumer can reject a fix whose satellite extra is missing or zero.
+
+## Satellites in simulated fixes
+
+A location simulated for a GPS request states how many satellites solved it, through the same
+`Location.extras` field a real fix uses. The count and the satellite list are the same epoch, so
+these always agree with each other:
+
+- `Location.extras.getInt("satellites")` on a simulated GPS fix;
+- `GnssStatus.getSatelliteCount()` for a listening app;
+- the used-satellite count in the spoken NMEA sentences (`GPGGA` and `GPGSV`).
+
+A network, fused or passive fix is not a satellite solution and carries no satellite extra, and
+neither does any fix while the satellite output is switched off. The field is absent rather than
+zero in those cases, matching how the platform reports no satellites: a consumer that rejects a
+missing or zero count is not being told something the position does not support.
+
 ## Validation
 
-Host tests cover snapshot acceptance and rejection (simulated, cached, non-WGS84, over-sized), attachment storage, empty-versus-missing attachments, legacy and measured cell conversion, per-attachment modes and the refusal of an identity-only cell.
+Host tests cover snapshot acceptance and rejection (simulated, cached, non-WGS84, over-sized), attachment storage, empty-versus-missing attachments, legacy and measured cell conversion, per-attachment modes and the refusal of an identity-only cell. Bridge tests cover which fixes carry a satellite count and that the NMEA counts follow the modeled epoch instead of a fixed number.
 
 `integration/device/run-environment.mjs ADB SERIAL ARM64_BINARY` collects once on the device, stores the place through an isolated daemon, checks the stored attachments and metadata, verifies that an identity-only attachment is refused, and removes the test place. It does not modify the installed module's configuration.
+
+`integration/device/run-location-continuity.mjs` also asserts, while simulating, that delivered GPS fixes carry a positive satellite count and that network fixes never claim one. That check needs the matching module installed.

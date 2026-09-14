@@ -37,6 +37,8 @@ Subscription metadata for empty SIM slots: [virtual subscriptions](docs/virtual-
 
 Portable data, category selection and restore previews: [backups](docs/backups.md).
 
+Measured places with their cells and Wi-Fi, and the satellite field on simulated fixes: [places](docs/places.md).
+
 ## Build
 
 - Node.js 22.12+
