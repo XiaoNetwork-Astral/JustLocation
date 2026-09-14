@@ -45,6 +45,41 @@ fn the_step_channel_switch_is_reachable_from_the_command_line() {
 }
 
 #[test]
+fn a_config_field_an_older_daemon_does_not_know_is_refused_loudly() {
+    // Configuration structs deny unknown fields, so a newer client cannot silently write a setting
+    // an older daemon would ignore: the request fails and the operator updates the module. This
+    // test pins that behaviour so it is not quietly relaxed into a silent no-op.
+    let directory =
+        std::env::temp_dir().join(format!("justlocation-cli-unknown-{}", std::process::id()));
+    fs::create_dir_all(&directory).unwrap();
+    let config = directory.join("steps.json");
+    fs::write(
+        &config,
+        br#"{"enabled":true,"cadence":2.0,"movement_linked":true,"stride_m":0.75,"daily_reset":false,"a_field_from_the_future":true}"#,
+    )
+    .unwrap();
+    // The in-process daemon is the one that parses configuration, so the unknown field is sent to
+    // it directly. A daemon that does not know the field must say so rather than accept a config it
+    // only partly understands.
+    let output = run(
+        &directory,
+        &["stdio"],
+        Some(
+            "{\"version\":1,\"op\":\"set_steps\",\"config\":{\"enabled\":true,\"cadence\":2.0,\"movement_linked\":true,\"stride_m\":0.75,\"daily_reset\":false,\"a_field_from_the_future\":true}}\n",
+        ),
+    );
+    assert!(output.status.success(), "stdio mode reports the refusal in its own reply");
+    let reply: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(reply["ok"], false, "an unknown config field must be refused: {reply}");
+    let error = reply["error"].as_str().unwrap_or_default();
+    assert!(
+        error.contains("a_field_from_the_future"),
+        "the refusal must name the field so the cause is obvious: {error}"
+    );
+    fs::remove_dir_all(&directory).unwrap();
+}
+
+#[test]
 fn long_gpx_and_json_preserve_all_points_and_segments_in_small_catalogs() {
     let directory =
         std::env::temp_dir().join(format!("justlocation-cli-long-{}", std::process::id()));
