@@ -1,6 +1,6 @@
 {
-  "version": "0.1.0-alpha.1+locdiag.1",
-  "versionCode": 4,
+  "version": "0.1.0-alpha.1+locenv.2",
+  "versionCode": 5,
   "ndkVer": "29.0.14206865",
   "cmakeVer": "4.0.3",
   "ninjaSdkVer": "3.31.6",

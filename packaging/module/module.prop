@@ -1,6 +1,6 @@
 id=justlocation
 name=Zygisk - JustLocation
-version=0.1.0-alpha.1+locdiag.1
-versionCode=4
+version=0.1.0-alpha.1+locenv.2
+versionCode=5
 author=BlueFunny19
 description=Make Your Location Great Again！
