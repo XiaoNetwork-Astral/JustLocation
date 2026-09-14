@@ -297,6 +297,70 @@ fn the_raw_motion_channel_mirrors_the_delivered_motion_state() {
 }
 
 #[test]
+fn steps_follow_the_same_motion_as_the_position_and_stop_when_it_does() {
+    let mut control = Control::default();
+    let start = Instant::now();
+    assert!(control.handle_at(&static_start(), start).ok);
+    assert!(
+        control
+            .handle_at(
+                r#"{"version":1,"op":"set_steps","config":{"enabled":true,"cadence":2.0,"movement_linked":true,"stride_m":0.75,"daily_reset":false}}"#,
+                start
+            )
+            .ok
+    );
+    // Standing still counts nothing, however long the session runs.
+    let idle = control.handle_at(r#"{"version":1,"op":"status"}"#, start + Duration::from_secs(30));
+    assert_eq!(idle.state.step_count.total, 0, "a standstill must not count steps");
+
+    // Movement counts steps and moves the position: two metres per second at a 0.75 m stride would
+    // be 2.67 steps per second, capped by the configured cadence of two.
+    assert!(control.handle_at(r#"{"version":1,"op":"drive","speed":2,"bearing":0}"#, start + Duration::from_secs(30)).ok);
+    let after = control.handle_at(r#"{"version":1,"op":"status"}"#, start + Duration::from_secs(31));
+    let counted = after.state.step_count.total;
+    assert_eq!(counted, 2, "one second of movement at the cadence cap must count two steps");
+    let travelled = crate::cells::Coordinate { latitude: 31.0, longitude: 121.0 }.distance_to(
+        crate::cells::Coordinate {
+            latitude: after.state.config.clone().unwrap().position.latitude,
+            longitude: after.state.config.clone().unwrap().position.longitude,
+        },
+    );
+    assert!(travelled > 1.5, "the position must move as the steps are counted: {travelled}m");
+
+    // The lease lasts two seconds from the command, so the whole movement is two metres per second
+    // for two seconds. Counting it in one late tick must give the same result as counting it tick by
+    // tick: the travelled distance cannot depend on how often the state is read.
+    let idle = control.handle_at(r#"{"version":1,"op":"status"}"#, start + Duration::from_secs(60));
+    assert_eq!(idle.state.step_count.total, 4, "the expired lease is counted once, not per sample");
+    assert_eq!(idle.state.config.clone().unwrap().position.speed, 0.0);
+    // A further read long after the lease adds neither distance nor steps.
+    let later = control.handle_at(r#"{"version":1,"op":"status"}"#, start + Duration::from_secs(120));
+    assert_eq!(later.state.step_count.total, 4, "a finished lease must stop the count");
+    assert_eq!(
+        later.state.config.clone().unwrap().position.longitude,
+        idle.state.config.clone().unwrap().position.longitude,
+        "a finished lease must stop the movement"
+    );
+
+    // A full route counts as it plays, and a late tick that crosses a break cannot invent steps for
+    // the interval it skipped.
+    let mut route = Control::default();
+    let route_start_at = Instant::now();
+    assert!(route.handle_at(&set_steps(true), route_start_at).ok);
+    assert!(route.handle_at(&route_start(&[(31.0, 121.0), (31.002, 121.0)], 1.5), route_start_at).ok);
+    let playing = route.handle_at(r#"{"version":1,"op":"status"}"#, route_start_at + Duration::from_secs(2));
+    assert!(playing.state.step_count.total > 0, "a playing route must count steps");
+    assert!(playing.state.step_count.total <= 4, "two seconds at a 1.5 m/s stride is about four steps");
+    // A tick far beyond the route's end adds nothing further once the route has finished.
+    let finished = route.handle_at(r#"{"version":1,"op":"status"}"#, route_start_at + Duration::from_secs(600));
+    let stable = route.handle_at(r#"{"version":1,"op":"status"}"#, route_start_at + Duration::from_secs(900));
+    assert_eq!(
+        finished.state.step_count.total, stable.state.step_count.total,
+        "a finished route must not keep counting"
+    );
+}
+
+#[test]
 fn a_delivered_moving_fix_reports_the_speed_and_heading_its_coordinates_show() {
     let mut control = Control::default();
     let start = Instant::now();

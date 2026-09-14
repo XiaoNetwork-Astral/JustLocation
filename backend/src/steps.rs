@@ -47,6 +47,20 @@ impl StepConfig {
             self.cadence
         }
     }
+
+    /// Steps earned by one interval, from the distance the position actually advanced.
+    ///
+    /// Deriving them from the distance keeps the count tied to the same integral as the
+    /// coordinates: a late sample cannot add steps for a lease that has already expired, and a
+    /// finished route cannot keep counting. `elapsed_seconds` caps the result so a very long gap
+    /// between samples cannot produce a burst of steps either.
+    pub fn steps_for(&self, active: bool, metres: f64, elapsed_seconds: f64) -> f64 {
+        if !active || !self.enabled || !self.movement_linked {
+            return 0.0;
+        }
+        let capped = metres.max(0.0) / self.stride_m;
+        capped.min(self.cadence * elapsed_seconds.max(0.0))
+    }
 }
 
 /// One raw motion sample derived from the same motion state as the position and the step count.

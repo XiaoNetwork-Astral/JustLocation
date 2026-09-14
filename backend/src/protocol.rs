@@ -106,11 +106,14 @@ impl Control {
         let elapsed = now.saturating_duration_since(from).as_secs_f64();
         let mut moving_seconds = 0.0;
         let mut speed = 0.0;
+        // Distance the position advanced in this interval; the step count is derived from it so the
+        // two can never disagree about how far the device moved.
+        let mut advanced = 0.0;
         // A new position was computed for this response, so its sample time is this moment.
         // Reading the same position again must not make it look newly sampled.
         let mut sampled = false;
         if let Some(motion) = &mut self.session.motion {
-            moving_seconds = motion.moving_seconds(from, now);
+            moving_seconds = motion.movement(from, now);
             let travelled = motion.travelled();
             let average = self.session.realism.average_factor(from, now.min(motion.expires()));
             self.session
@@ -121,11 +124,8 @@ impl Control {
                     self.session.realism.factor(now),
                 ))
                 .expect("validated movement position");
-            speed = if moving_seconds > 0.0 {
-                (motion.travelled() - travelled) / moving_seconds
-            } else {
-                0.0
-            };
+            advanced = (motion.travelled() - travelled).max(0.0);
+            speed = if moving_seconds > 0.0 { advanced / moving_seconds } else { 0.0 };
             sampled = true;
         }
         if let Some(route) = &mut self.session.route {
@@ -135,11 +135,8 @@ impl Control {
                 .update_position(route.advance_varied(now, &self.session.realism))
                 .expect("validated route position");
             moving_seconds = route.moving_seconds();
-            speed = if moving_seconds > 0.0 {
-                (route.travelled() - travelled).max(0.0) / moving_seconds
-            } else {
-                0.0
-            };
+            advanced = (route.travelled() - travelled).max(0.0);
+            speed = if moving_seconds > 0.0 { advanced / moving_seconds } else { 0.0 };
             sampled = true;
         }
         if sampled {
@@ -147,8 +144,12 @@ impl Control {
         }
         self.step_updated = Some(now);
         let config = self.session.steps;
-        let amount = config.rate(self.session.engine.is_running(), speed)
-            * if config.movement_linked { moving_seconds } else { elapsed };
+        let running = self.session.engine.is_running();
+        let amount = if config.movement_linked {
+            config.steps_for(running, advanced, moving_seconds)
+        } else {
+            config.rate(running, speed) * elapsed
+        };
         let previous = self.step_count.clone();
         if amount > 0.0 || (config.daily_reset && self.step_count.total > 0) {
             self.step_count.advance(amount, crate::steps::local_day(), config.daily_reset);

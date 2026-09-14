@@ -11,11 +11,17 @@ pub struct Motion {
 }
 
 impl Motion {
-    pub fn moving_seconds(&self, from: Instant, to: Instant) -> f64 {
-        let elapsed = |time: Instant| {
-            time.saturating_duration_since(self.started).min(Duration::from_secs(2)).as_secs_f64()
-        };
-        (elapsed(to) - elapsed(from)).max(0.0)
+    /// Seconds of the interval `from..to` that fall inside the two-second lease.
+    ///
+    /// This is the intersection of the interval with the lease window, not a clamped subtraction:
+    /// a sample that arrives long after the lease expired must contribute only the part of the
+    /// interval that was still inside it. Otherwise the travelled distance would depend on how
+    /// often the caller reads the state, and a late tick would move the position past the moment the
+    /// controller stopped renewing.
+    pub fn movement(&self, from: Instant, to: Instant) -> f64 {
+        let start = from.max(self.started);
+        let end = to.min(self.expires());
+        if to <= from || end <= start { 0.0 } else { (end - start).as_secs_f64() }
     }
 
     pub fn speed(&self) -> f64 {
@@ -47,7 +53,7 @@ impl Motion {
 
     pub fn advance_scaled(&mut self, now: Instant, average: f64, factor: f64) -> Position {
         let elapsed = now.saturating_duration_since(self.started);
-        self.distance += self.origin.speed * self.moving_seconds(self.updated, now) * average;
+        self.distance += self.origin.speed * self.movement(self.updated, now) * average;
         self.updated = now;
         let mut position = translate(&self.origin, self.distance, self.origin.bearing);
         position.speed =
@@ -77,6 +83,23 @@ pub fn translate(origin: &Position, distance: f64, heading: f64) -> Position {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_late_tick_does_not_move_the_position_past_the_lease() {
+        let start = Instant::now();
+        let mut motion = Motion::new(Position::new(0.0, 0.0), 2.0, 90.0, start).unwrap();
+        // One tick inside the lease, and one long after it expired.
+        let during = motion.advance(start + Duration::from_secs(1));
+        let travelled_then = motion.travelled();
+        let late = motion.advance(start + Duration::from_secs(60));
+        assert!((motion.travelled() - travelled_then - 2.0).abs() < 1e-6,
+                "the late tick moved {}m past the lease", motion.travelled() - travelled_then - 2.0);
+        assert!(late.longitude > during.longitude, "the final position must include the lease");
+        // A further tick long after the lease adds nothing at all.
+        let after = motion.advance(start + Duration::from_secs(120));
+        assert_eq!(after.longitude, late.longitude, "movement continued after the lease");
+        assert_eq!(motion.movement(start + Duration::from_secs(60), start + Duration::from_secs(120)), 0.0);
+    }
 
     #[test]
     fn moves_by_elapsed_time_and_stops_when_controller_disappears() {
