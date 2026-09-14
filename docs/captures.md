@@ -15,6 +15,11 @@ report states what the captures contain, so a finding can be re-checked later wi
 A capture is only as good as its labels: a `collection_start` row states when the app began, which is
 what separates a slow app start from late delivery.
 
+The fields of each capture are declared in `integration/captures.manifest.json`, which names the
+probe source that writes them. `node integration/captures-manifest.test.mjs` checks that declaration
+against the probe sources in both directions and against the scripts that read the captures, so a
+renamed field is caught on the host instead of during a device run.
+
 ## Offline replay
 
 ```sh
