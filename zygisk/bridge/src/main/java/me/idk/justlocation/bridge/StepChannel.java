@@ -13,6 +13,7 @@ import android.util.Log;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 /** Supplies native step snapshots and a sensor event clock while simulation is active. */
@@ -26,6 +27,10 @@ final class StepChannel implements SensorEventListener {
     private boolean installed;
     private long received;
     private long lastError;
+    private final float[] motionAccelerometer = new float[3];
+    private final float[] motionGyroscope = new float[3];
+    private double motionCadence;
+    private boolean motionActive;
 
     private boolean prepare() throws Exception {
         if (installed)
@@ -46,7 +51,10 @@ final class StepChannel implements SensorEventListener {
         boolean counter = false, detector = false;
         for (Sensor sensor : manager.getSensorList(Sensor.TYPE_ALL)) {
             int type = sensor.getType();
-            if (type != Sensor.TYPE_STEP_COUNTER && type != Sensor.TYPE_STEP_DETECTOR)
+            // Raw motion sensors are routed only while the daemon says the channel is generating;
+            // the native side keeps the real events otherwise.
+            if (type != Sensor.TYPE_STEP_COUNTER && type != Sensor.TYPE_STEP_DETECTOR
+                    && type != Sensor.TYPE_ACCELEROMETER && type != Sensor.TYPE_GYROSCOPE)
                 continue;
             ids.add((Integer) getHandle.invoke(sensor));
             kinds.add(type);
@@ -83,12 +91,16 @@ final class StepChannel implements SensorEventListener {
             }
             String[] packages = scope.packages().toArray(new String[0]);
             JSONObject count = state.getJSONObject("step_count");
+            // The raw six-axis block comes from the daemon's motion model; this side only passes it
+            // through, so the delivered samples cannot describe a different motion than the fix.
+            readMotion(state.optJSONObject("motion_output"));
             // A continuous sensor supplies regular SensorService batches even when the phone is
             // stationary. Its values remain untouched; only subscribed step sensors are replaced.
             if (!registered)
                 registered = manager.registerListener(this, clock, 20_000, 0, handler);
             BridgeEntry.updateSteps(registered, scope.all(), packages, count.getLong("total"),
-                    count.getLong("epoch"), handles, types);
+                    count.getLong("epoch"), handles, types, motionActive, motionCadence,
+                    motionAccelerometer, motionGyroscope);
             received = SystemClock.elapsedRealtime();
         } catch (Exception error) {
             stop();
@@ -100,13 +112,35 @@ final class StepChannel implements SensorEventListener {
         }
     }
 
+    /** Read one heartbeat's raw motion block; a missing or malformed block disables the channel. */
+    private void readMotion(JSONObject motion) {
+        motionActive = false;
+        motionCadence = 0.0;
+        if (motion == null)
+            return;
+        JSONArray accelerometer = motion.optJSONArray("accelerometer");
+        JSONArray gyroscope = motion.optJSONArray("gyroscope");
+        if (accelerometer == null || gyroscope == null || accelerometer.length() != 3
+                || gyroscope.length() != 3)
+            return;
+        for (int axis = 0; axis < 3; axis++) {
+            motionAccelerometer[axis] = (float) accelerometer.optDouble(axis, 0.0);
+            motionGyroscope[axis] = (float) gyroscope.optDouble(axis, 0.0);
+        }
+        motionCadence = motion.optDouble("cadence", 0.0);
+        motionActive = true;
+    }
+
     void tick() {
         if (registered && SystemClock.elapsedRealtime() - received >= 20_000)
             stop();
     }
 
     void stop() {
-        BridgeEntry.updateSteps(false, false, null, 0, 0, null, null);
+        motionActive = false;
+        motionCadence = 0.0;
+        BridgeEntry.updateSteps(false, false, null, 0, 0, null, null, false, 0.0,
+                motionAccelerometer, motionGyroscope);
         if (registered) {
             manager.unregisterListener(this);
             registered = false;

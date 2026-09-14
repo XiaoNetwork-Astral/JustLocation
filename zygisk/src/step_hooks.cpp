@@ -45,6 +45,18 @@ struct Sensor {
     int handle;
     int type;
 };
+/**
+ * Motion state behind the raw six-axis channel. The daemon supplies the ground truth (gravity,
+ * forward lean, footfall amplitude and the heading-rotated axes); this side only advances the gait
+ * waveform so it stays continuous between heartbeats.
+ */
+struct Motion {
+    bool active = false;
+    double cadence = 0.0;
+    double accelerometer[3]{};
+    double gyroscope[3]{};
+    int64_t updated = 0;
+};
 struct Snapshot {
     bool active = false;
     bool all = false;
@@ -54,6 +66,7 @@ struct Snapshot {
     uint64_t epoch = 0;
     uint64_t revision = 0;
     int64_t received = 0;
+    Motion motion;
 } state;
 struct Cursor {
     uint64_t total;
@@ -64,6 +77,33 @@ std::unordered_map<void*, Cursor> cursors;
 
 bool is_step(const ASensorEvent& event) {
     return event.type == ASENSOR_TYPE_STEP_DETECTOR || event.type == ASENSOR_TYPE_STEP_COUNTER;
+}
+
+bool is_motion_sensor(int type) {
+    return type == ASENSOR_TYPE_ACCELEROMETER || type == ASENSOR_TYPE_GYROSCOPE;
+}
+
+/**
+ * One six-axis sample for a gait phase. `phase` is in turns: 0 is mid-stride, 0.25 a footfall.
+ * The values are the daemon's ground truth modulated by that waveform, so the axes, units and
+ * carriage come from one model rather than from a second one implemented here.
+ */
+void motion_sample(const Motion& motion, double phase, float accelerometer[3],
+                   float gyroscope[3]) {
+    if (!motion.active || motion.cadence <= 0.0) {
+        // A standstill: gravity and no rotation, whichever way the device is carried.
+        for (int axis = 0; axis < 3; ++axis) {
+            accelerometer[axis] = static_cast<float>(motion.accelerometer[axis]);
+            gyroscope[axis] = static_cast<float>(motion.gyroscope[axis]);
+        }
+        return;
+    }
+    const double wave = __builtin_sin(phase * 6.283185307179586);
+    for (int axis = 0; axis < 3; ++axis) {
+        // The stored sample is mid-gait at full amplitude; scale every axis by the same wave.
+        accelerometer[axis] = static_cast<float>(motion.accelerometer[axis] * (1.0 + 0.2 * wave));
+        gyroscope[axis] = static_cast<float>(motion.gyroscope[axis] * (1.0 + 0.2 * wave));
+    }
 }
 
 void destroy(void* connection) {
@@ -129,6 +169,14 @@ int send(void* connection, const ASensorEvent* input, size_t count, ASensorEvent
             cursors[connection] = {current.total, current.revision, now};
     }
     const auto added = current.total >= previous.total ? current.total - previous.total : 0;
+    // Gait phase at delivery time: turns since the daemon reported this motion, advanced by the
+    // cadence, so the waveform stays continuous instead of restarting on every heartbeat.
+    double motion_phase = 0.0;
+    if (current.motion.active && current.motion.cadence > 0.0 && current.motion.updated > 0) {
+        const double seconds = static_cast<double>(now - current.motion.updated) / 1e9;
+        motion_phase = seconds * current.motion.cadence;
+        motion_phase -= __builtin_floor(motion_phase);
+    }
     bool flushed = false;
     bool activation = false;
     for (size_t i = 0; i < count; ++i)
@@ -160,6 +208,22 @@ int send(void* connection, const ASensorEvent* input, size_t count, ASensorEvent
             event.type = sensor.type;
             event.timestamp = now;
             event.u64.step_counter = current.total;
+            synthetic.push_back(event);
+        } else if (is_motion_sensor(sensor.type) && current.motion.active) {
+            // One raw sample per delivered batch, at the current gait phase. The daemon owns the
+            // physics; the phase advances with the cadence so the waveform is continuous.
+            float accelerometer[3];
+            float gyroscope[3];
+            motion_sample(current.motion, motion_phase, accelerometer, gyroscope);
+            ASensorEvent event{};
+            event.version = sizeof(event);
+            event.sensor = sensor.handle;
+            event.type = sensor.type;
+            event.timestamp = now;
+            const float* values = sensor.type == ASENSOR_TYPE_ACCELEROMETER ? accelerometer
+                                                                            : gyroscope;
+            for (int axis = 0; axis < 3; ++axis)
+                event.data[axis] = values[axis];
             synthetic.push_back(event);
         }
     }
@@ -227,13 +291,30 @@ uint64_t step_event_count() {
 }
 
 void update_step_state(JNIEnv* env, bool active, bool all, jobjectArray packages, jlong total,
-                       jlong epoch, jintArray handles, jintArray types) {
+                       jlong epoch, jintArray handles, jintArray types, bool motion_active,
+                       jdouble motion_cadence, jfloatArray motion_accelerometer,
+                       jfloatArray motion_gyroscope) {
     Snapshot next;
     next.active = active;
     next.all = all;
     next.total = total < 0 ? 0 : static_cast<uint64_t>(total);
     next.epoch = static_cast<uint64_t>(epoch);
     next.received = elapsed_ns();
+    if (motion_active && motion_cadence > 0.0 && motion_accelerometer && motion_gyroscope &&
+        env->GetArrayLength(motion_accelerometer) == 3 &&
+        env->GetArrayLength(motion_gyroscope) == 3) {
+        float accelerometer[3];
+        float gyroscope[3];
+        env->GetFloatArrayRegion(motion_accelerometer, 0, 3, accelerometer);
+        env->GetFloatArrayRegion(motion_gyroscope, 0, 3, gyroscope);
+        next.motion.active = true;
+        next.motion.cadence = motion_cadence;
+        next.motion.updated = next.received;
+        for (int axis = 0; axis < 3; ++axis) {
+            next.motion.accelerometer[axis] = accelerometer[axis];
+            next.motion.gyroscope[axis] = gyroscope[axis];
+        }
+    }
     if (packages) {
         for (int i = 0; i < env->GetArrayLength(packages); ++i) {
             auto name = static_cast<jstring>(env->GetObjectArrayElement(packages, i));
@@ -252,14 +333,17 @@ void update_step_state(JNIEnv* env, bool active, bool all, jobjectArray packages
         env->GetIntArrayRegion(handles, 0, count, ids.data());
         env->GetIntArrayRegion(types, 0, count, kinds.data());
         for (int i = 0; i < count; ++i) {
-            if (kinds[i] == ASENSOR_TYPE_STEP_DETECTOR || kinds[i] == ASENSOR_TYPE_STEP_COUNTER)
+            // Step events always route; raw motion only when the channel is actually generating.
+            if (kinds[i] == ASENSOR_TYPE_STEP_DETECTOR || kinds[i] == ASENSOR_TYPE_STEP_COUNTER ||
+                (is_motion_sensor(kinds[i]) && next.motion.active))
                 next.sensors.push_back({ids[i], kinds[i]});
         }
     }
     std::lock_guard lock(state_mutex);
     next.revision = state.revision + (next.active != state.active || next.epoch != state.epoch ||
                                       next.all != state.all || next.packages != state.packages ||
-                                      next.total < state.total);
+                                      next.total < state.total ||
+                                      next.motion.active != state.motion.active);
     if (!next.active)
         cursors.clear();
     state = std::move(next);
