@@ -40,7 +40,9 @@ What has to be checked on a device:
 - an ordinary app subscribing to `TYPE_ACCELEROMETER` and `TYPE_GYROSCOPE` receives samples while
   simulation runs, with gravity and a gait that matches the step count it also receives;
 - a standstill reports gravity and no rotation;
-- apps outside the scope keep receiving the real sensors;
+- apps outside the scope keep receiving the real sensors, and the scope the channel follows is the
+  delivered one — the position list for a static session and the route list while a route plays, not
+  a list of its own;
 - unregistering mid-run and losing the bridge both restore real output;
 - two apps at different sampling rates see the same motion, not two independent signals.
 

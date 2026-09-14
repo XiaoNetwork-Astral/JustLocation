@@ -297,6 +297,38 @@ fn the_raw_motion_channel_mirrors_the_delivered_motion_state() {
 }
 
 #[test]
+fn the_delivered_scope_follows_the_running_source_not_the_last_one_configured() {
+    let mut control = Control::default();
+    let start = Instant::now();
+    // A static position for one app, then a route for another: the engine has to publish the route
+    // scope, because subscribers of the raw motion channel read the delivered scope to decide who
+    // receives samples.
+    assert!(control.handle_at(&static_start(), start).ok);
+    assert_eq!(
+        control.handle_at(r#"{"version":1,"op":"status"}"#, start).state.config.clone().unwrap().scope,
+        Scope::apps(["example.selected"])
+    );
+    assert!(control.handle(r#"{"version":1,"op":"stop"}"#).ok);
+    let route = json!({"version":1,"op":"start_route",
+        "scope":{"mode":"apps","packages":["example.route"]},
+        "route":{"points":[Position::new(31.0, 121.0), Position::new(31.001, 121.0)],"speed":2.0}})
+    .to_string();
+    let started = control.handle_at(&route, start);
+    assert!(started.ok, "{:?}", started.error);
+    assert_eq!(
+        started.state.config.clone().unwrap().scope,
+        Scope::apps(["example.route"]),
+        "a running route must publish its own scope"
+    );
+    // Stopping clears the route, so the published scope returns to the position list.
+    assert!(control.handle(r#"{"version":1,"op":"stop"}"#).ok);
+    assert_eq!(
+        control.handle(r#"{"version":1,"op":"status"}"#).state.config.clone().unwrap().scope,
+        Scope::apps(["example.selected"])
+    );
+}
+
+#[test]
 fn a_segment_break_moves_without_counting_the_gap_as_travel() {
     let mut control = Control::default();
     let start = Instant::now();
