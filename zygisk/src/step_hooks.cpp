@@ -271,6 +271,19 @@ uint64_t step_event_count() {
     return events.load(std::memory_order_relaxed);
 }
 
+StepStateSummary step_state_summary() {
+    std::lock_guard lock(state_mutex);
+    return StepStateSummary{
+            state.active,
+            state.all,
+            static_cast<int>(state.packages.size()),
+            static_cast<int>(state.sensors.size()),
+            state.motion.active,
+            state.total,
+            !state.active || state.received == 0 || elapsed_ns() - state.received >= 20'000'000'000LL,
+    };
+}
+
 void update_step_state(JNIEnv* env, bool active, bool all, jobjectArray packages, jlong total,
                        jlong epoch, jintArray handles, jintArray types, bool motion_active,
                        jfloatArray motion_accelerometer, jfloatArray motion_gyroscope) {

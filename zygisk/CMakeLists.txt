@@ -56,6 +56,14 @@ target_link_options(justlocation_runtime PRIVATE -Wl,-z,max-page-size=16384)
 
 # Explicit device-test target only; not built by default or included in module ZIPs.
 add_executable(justlocation_loader_probe EXCLUDE_FROM_ALL tests/loader.cpp)
+# Links the production step state machine, so the probe exercises the shipped code. The include
+# directory provides shadowhook.h; the probe never reaches the installation path.
+add_executable(justlocation_step_state_probe EXCLUDE_FROM_ALL tests/step_state.cpp
+    src/step_hooks.cpp)
+target_include_directories(justlocation_step_state_probe PRIVATE src
+    ${shadowhook_SOURCE_DIR}/shadowhook/src/main/cpp/include)
+target_compile_features(justlocation_step_state_probe PRIVATE cxx_std_23)
+target_link_libraries(justlocation_step_state_probe PRIVATE log)
 add_executable(justlocation_veneer_probe EXCLUDE_FROM_ALL tests/veneer.cpp)
 target_include_directories(justlocation_veneer_probe PRIVATE ${shadowhook_SOURCE_DIR}/shadowhook/src/main/cpp/include)
 target_link_libraries(justlocation_veneer_probe PRIVATE shadowhook)

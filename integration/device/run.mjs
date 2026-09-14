@@ -31,6 +31,7 @@ const files = [
   ['build/probe/backend-tests', 'backend-tests'],
   ['build/native/justlocation_loader_probe', 'loader-probe'],
   ['build/native/justlocation_veneer_probe', 'veneer-probe'],
+  ['build/native/justlocation_step_state_probe', 'step-state-probe'],
   ['build/native/libjustlocation_bootstrap_probe.so', 'libjustlocation_bootstrap_probe.so'],
   ['build/native/libjustlocation_probe.so', 'libjustlocation_probe.so'],
   ['build/native/libjustlocation_runtime.so', 'libjustlocation_runtime.so'],
@@ -43,11 +44,19 @@ try {
   for (const [source, name] of files) run(['push', join(root, source), `${remote}/${name}`]);
   run([
     'shell',
-    `chmod 500 ${remote}/justlocationd ${remote}/backend-tests ${remote}/loader-probe ${remote}/veneer-probe; chmod 400 ${remote}/probe.zip ${remote}/classes.dex`,
+    `chmod 500 ${remote}/justlocationd ${remote}/backend-tests ${remote}/loader-probe ${remote}/veneer-probe ${remote}/step-state-probe; chmod 400 ${remote}/probe.zip ${remote}/classes.dex`,
   ]);
   console.log(run(['shell', `env -u LD_LIBRARY_PATH timeout 15 ${remote}/loader-probe ${remote}`]));
   console.log(run(['shell', `LD_LIBRARY_PATH=${remote} timeout 10 ${remote}/veneer-probe`]));
   console.log(run(['shell', `TMPDIR=${remote} timeout 15 ${remote}/backend-tests --nocapture`]));
+  // The step state machine: routing, the raw-motion switch and the restore path, without the
+  // platform around them.
+  const stepState = run(['shell', `timeout 15 ${remote}/step-state-probe`]);
+  console.log(stepState);
+  assert.ok(
+    stepState.includes('JUSTLOCATION_STEP_PROBE_OK'),
+    `the step state probe did not pass:\n${stepState}`,
+  );
   const position = {
     latitude: 31.2,
     longitude: 121.5,

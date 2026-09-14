@@ -98,6 +98,8 @@ function bridgeDex() {
 export function probe() {
   bridge();
   native('justlocation_probe');
+  // The step state probe exercises the shipped state machine without the platform around it.
+  native('justlocation_step_state_probe');
   const probeDir = join(output, 'probe');
   const classes = join(probeDir, 'classes');
   if (dirname(resolve(classes)) !== resolve(output, 'probe'))
