@@ -141,10 +141,10 @@ jboolean install_steps(JNIEnv*, jclass) {
 
 void update_steps(JNIEnv* env, jclass, jboolean active, jboolean all, jobjectArray packages,
                   jlong total, jlong epoch, jintArray handles, jintArray types,
-                  jboolean motion_active, jdouble motion_cadence, jfloatArray motion_accelerometer,
+                  jboolean motion_active, jfloatArray motion_accelerometer,
                   jfloatArray motion_gyroscope) {
     update_step_state(env, active, all, packages, total, epoch, handles, types, motion_active,
-                      motion_cadence, motion_accelerometer, motion_gyroscope);
+                      motion_accelerometer, motion_gyroscope);
 }
 jstring read_phone_state(JNIEnv* env, jclass, jint installed, jint wifi_calls, jbyteArray metadata,
                          jstring extra) {
@@ -213,7 +213,7 @@ bool register_bridge_natives(JNIEnv* env, jclass entry, int companion, bool phon
                 {const_cast<char*>("installSteps"), const_cast<char*>("()Z"),
                  reinterpret_cast<void*>(install_steps)},
                 {const_cast<char*>("updateSteps"),
-                 const_cast<char*>("(ZZ[Ljava/lang/String;JJ[I[IZD[F[F)V"),
+                 const_cast<char*>("(ZZ[Ljava/lang/String;JJ[I[IZ[F[F)V"),
                  reinterpret_cast<void*>(update_steps)},
         };
         return env->RegisterNatives(entry, steps, 3) == JNI_OK;

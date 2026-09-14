@@ -29,7 +29,6 @@ final class StepChannel implements SensorEventListener {
     private long lastError;
     private final float[] motionAccelerometer = new float[3];
     private final float[] motionGyroscope = new float[3];
-    private double motionCadence;
     private boolean motionActive;
 
     private boolean prepare() throws Exception {
@@ -99,8 +98,8 @@ final class StepChannel implements SensorEventListener {
             if (!registered)
                 registered = manager.registerListener(this, clock, 20_000, 0, handler);
             BridgeEntry.updateSteps(registered, scope.all(), packages, count.getLong("total"),
-                    count.getLong("epoch"), handles, types, motionActive, motionCadence,
-                    motionAccelerometer, motionGyroscope);
+                    count.getLong("epoch"), handles, types, motionActive, motionAccelerometer,
+                    motionGyroscope);
             received = SystemClock.elapsedRealtime();
         } catch (Exception error) {
             stop();
@@ -112,10 +111,14 @@ final class StepChannel implements SensorEventListener {
         }
     }
 
-    /** Read one heartbeat's raw motion block; a missing or malformed block disables the channel. */
+    /**
+     * Read one heartbeat's raw motion block; a missing or malformed block disables the channel.
+     *
+     * The cadence in the block describes the motion for diagnostics only: the samples are delivered
+     * as computed instead of being reshaped here, so the physics stays in one place.
+     */
     private void readMotion(JSONObject motion) {
         motionActive = false;
-        motionCadence = 0.0;
         if (motion == null)
             return;
         JSONArray accelerometer = motion.optJSONArray("accelerometer");
@@ -127,7 +130,6 @@ final class StepChannel implements SensorEventListener {
             motionAccelerometer[axis] = (float) accelerometer.optDouble(axis, 0.0);
             motionGyroscope[axis] = (float) gyroscope.optDouble(axis, 0.0);
         }
-        motionCadence = motion.optDouble("cadence", 0.0);
         motionActive = true;
     }
 
@@ -138,9 +140,8 @@ final class StepChannel implements SensorEventListener {
 
     void stop() {
         motionActive = false;
-        motionCadence = 0.0;
-        BridgeEntry.updateSteps(false, false, null, 0, 0, null, null, false, 0.0,
-                motionAccelerometer, motionGyroscope);
+        BridgeEntry.updateSteps(false, false, null, 0, 0, null, null, false, motionAccelerometer,
+                motionGyroscope);
         if (registered) {
             manager.unregisterListener(this);
             registered = false;

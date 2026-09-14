@@ -11,5 +11,4 @@ uint64_t step_event_count();
 /// the raw sensors on system output while the step events continue.
 void update_step_state(JNIEnv* env, bool active, bool all, jobjectArray packages, jlong total,
                        jlong epoch, jintArray handles, jintArray types, bool motion_active,
-                       jdouble motion_cadence, jfloatArray motion_accelerometer,
-                       jfloatArray motion_gyroscope);
+                       jfloatArray motion_accelerometer, jfloatArray motion_gyroscope);

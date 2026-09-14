@@ -31,7 +31,7 @@ public final class BridgeEntry {
     private static native String companionDiagnostics();
     static native boolean installSteps();
     static native void updateSteps(boolean active, boolean all, String[] packages, long total,
-            long epoch, int[] handles, int[] types, boolean motionActive, double motionCadence,
+            long epoch, int[] handles, int[] types, boolean motionActive,
             float[] motionAccelerometer, float[] motionGyroscope);
 
     public static void start(ClassLoader systemServerLoader) throws Exception {
