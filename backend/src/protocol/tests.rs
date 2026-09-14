@@ -297,6 +297,74 @@ fn the_raw_motion_channel_mirrors_the_delivered_motion_state() {
 }
 
 #[test]
+fn a_segment_break_moves_without_counting_the_gap_as_travel() {
+    let mut control = Control::default();
+    let start = Instant::now();
+    assert!(control.handle_at(&set_steps(true), start).ok);
+    // Two segments a kilometre apart: sixty metres in the first, a break, then sixty metres in the
+    // second. The distance between the segments is a gap in the recording, not travel.
+    let route = json!({"version":1,"op":"start_route",
+        "scope":{"mode":"apps","packages":["example.selected"]},
+        "route":{
+            "points":[
+                Position::new(31.0, 121.0),
+                Position::new(31.00054, 121.0),
+                Position::new(31.00900, 121.0),
+                Position::new(31.00954, 121.0)
+            ],
+            "speed":6.0,
+            "breaks":[2]
+        }})
+    .to_string();
+    assert!(control.handle_at(&route, start).ok);
+    let planned = control
+        .handle_at(r#"{"version":1,"op":"status"}"#, start)
+        .state
+        .route
+        .as_ref()
+        .unwrap()
+        .total_distance;
+    // Sixty metres per segment, so about a hundred and twenty in total, not a kilometre more.
+    assert!(
+        (planned - 120.0).abs() < 5.0,
+        "a break must not add the gap to the route distance: {planned}m"
+    );
+
+    let mut previous_steps = 0;
+    let mut previous_distance = 0.0;
+    for tenth in 1..=200 {
+        let at = start + Duration::from_millis(100 * tenth);
+        let state = control.handle_at(r#"{"version":1,"op":"status"}"#, at);
+        let route = state.state.route.as_ref().unwrap();
+        let steps = state.state.step_count.total;
+        assert!(steps >= previous_steps, "the count dropped inside a segment");
+        assert!(steps - previous_steps <= 1, "the cadence allowed at most one step per 100ms");
+        // The route distance advances inside a segment and never jumps by the gap between them.
+        assert!(
+            route.distance >= previous_distance - 1e-6,
+            "the route distance went backwards at {}ms",
+            tenth * 100
+        );
+        assert!(
+            route.distance - previous_distance <= 5.0,
+            "a single 100ms sample advanced the route by {}m",
+            route.distance - previous_distance
+        );
+        previous_steps = steps;
+        previous_distance = route.distance;
+    }
+    let finished = control.handle_at(r#"{"version":1,"op":"status"}"#, start + Duration::from_secs(200));
+    let total_steps = finished.state.step_count.total;
+    assert!(total_steps > 0, "the route must count steps");
+    // Two hundred and forty metres at a 0.75 m stride would be three hundred and twenty steps,
+    // capped at two per second over the forty seconds the route is actually moving.
+    assert!(
+        total_steps <= 80,
+        "the count followed the clock rather than the travel: {total_steps} steps"
+    );
+}
+
+#[test]
 fn laps_roll_over_without_stalling_the_position_or_the_count() {
     let mut control = Control::default();
     let start = Instant::now();
