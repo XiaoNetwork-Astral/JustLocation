@@ -71,7 +71,12 @@ class AmapCapture(private val context: Context) : AutoCloseable {
                             .put("event", "start")
                             .put("mode", mode)
                             .put("cache", cache)
-                        .put("sdk_version", active.version)
+                            .put("sdk_version", active.version)
+                            // The consumer identity matters when a result is compared with what the
+                            // system providers delivered to the same ordinary application.
+                            .put("app_package", context.packageName)
+                            .put("app_version", appVersion())
+                            .put("api_level", android.os.Build.VERSION.SDK_INT)
                     )
                     active.startLocation()
                 }
@@ -87,6 +92,14 @@ class AmapCapture(private val context: Context) : AutoCloseable {
             row.put("received_ms", SystemClock.elapsedRealtime()).toString() + "\n"
         )
     }
+
+    private fun appVersion(): String =
+        try {
+            val info = context.packageManager.getPackageInfo(context.packageName, 0)
+            "${info.versionName} (${info.longVersionCode})"
+        } catch (_: Exception) {
+            "unknown"
+        }
 
     override fun close() {
         client?.stopLocation()
