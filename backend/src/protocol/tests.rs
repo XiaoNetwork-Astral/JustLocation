@@ -252,6 +252,163 @@ fn step_counters_survive_restart_and_disk_failure_cannot_prevent_stop() {
 }
 
 #[test]
+fn a_delivered_moving_fix_reports_the_speed_and_heading_its_coordinates_show() {
+    let mut control = Control::default();
+    let start = Instant::now();
+    assert!(control.handle_at(&static_start(), start).ok);
+    // A joystick command moves the target eastward at 2 m/s.
+    assert!(control.handle_at(r#"{"version":1,"op":"drive","speed":2,"bearing":90}"#, start).ok);
+    let first = control.handle_at(r#"{"version":1,"op":"status"}"#, start + Duration::from_secs(1));
+    let a = first.state.config.clone().unwrap().position;
+    assert!((a.speed - 2.0).abs() < 1e-9, "delivered speed {}", a.speed);
+    assert!((a.bearing - 90.0).abs() < 1e-9, "delivered bearing {}", a.bearing);
+    // One more second of movement: the displacement has to match the reported speed.
+    let second = control.handle_at(r#"{"version":1,"op":"status"}"#, start + Duration::from_secs(2));
+    let b = second.state.config.clone().unwrap().position;
+    let metres = crate::cells::Coordinate { latitude: a.latitude, longitude: a.longitude }
+        .distance_to(crate::cells::Coordinate { latitude: b.latitude, longitude: b.longitude });
+    assert!((metres - a.speed).abs() < 0.5, "travelled {metres}m in one second at {}m/s", a.speed);
+    // The lease expires after two seconds, so a later fix reports a standstill instead of a speed
+    // that no longer matches the coordinates.
+    let idle = control.handle_at(r#"{"version":1,"op":"status"}"#, start + Duration::from_secs(40));
+    let c = idle.state.config.clone().unwrap().position;
+    assert_eq!(c.speed, 0.0, "an expired lease must not keep declaring movement");
+    assert!((c.bearing - 90.0).abs() < 1e-9, "the heading of the last movement is retained");
+}
+
+#[test]
+fn a_route_fix_reports_geometry_speed_and_heading() {
+    let mut control = Control::default();
+    let start = Instant::now();
+    // Northward: bearing must follow the segment direction, not a default.
+    assert!(control.handle_at(&route_start(&[(31.0, 121.0), (31.01, 121.0)], 3.0), start).ok);
+    let first = control.handle_at(r#"{"version":1,"op":"status"}"#, start + Duration::from_secs(1));
+    let a = first.state.config.clone().unwrap().position;
+    assert!(a.speed > 0.0, "a playing route must report its speed");
+    assert!(a.bearing < 1.0 || a.bearing > 359.0, "northward bearing was {}", a.bearing);
+    assert!(a.latitude > 31.0, "the route must have advanced northwards");
+    // Pausing stops the reported movement as well.
+    assert!(control.handle(r#"{"version":1,"op":"pause_route"}"#).ok);
+    let paused = control.handle(r#"{"version":1,"op":"status"}"#);
+    assert_eq!(paused.state.config.clone().unwrap().position.speed, 0.0);
+}
+
+#[test]
+fn realism_variation_reaches_the_reported_speed_as_well_as_the_coordinates() {
+    let mut control = Control::default();
+    let start = Instant::now();
+    // Realism only applies to a stopped session, so it is configured before the start.
+    assert!(
+        control
+            .handle_at(
+                r#"{"version":1,"op":"set_realism","config":{"enabled":true,"seed":7}}"#,
+                start
+            )
+            .ok
+    );
+    assert!(control.handle_at(&static_start(), start).ok);
+    assert!(control.handle_at(r#"{"version":1,"op":"drive","speed":10,"bearing":0}"#, start).ok);
+    let mut varied = 0;
+    let mut previous: Option<f64> = None;
+    for step in 0..12 {
+        let at = start + Duration::from_millis(150 * step);
+        let state = control.handle_at(r#"{"version":1,"op":"status"}"#, at);
+        let position = state.state.config.clone().unwrap().position;
+        // The allowed speed variation is ±10%, and it must be applied exactly once.
+        assert!(
+            (9.0..=11.0).contains(&position.speed),
+            "speed outside the configured variation: {}",
+            position.speed
+        );
+        if let Some(last) = previous {
+            if (position.speed - last).abs() > 1e-9 {
+                varied += 1;
+            }
+        }
+        previous = Some(position.speed);
+    }
+    assert!(varied > 0, "the variation never reached the delivered speed");
+    // Reported speed and travelled distance have to agree: one second of movement at the reported
+    // speed covers the reported distance.
+    let first = control.handle_at(r#"{"version":1,"op":"status"}"#, start + Duration::from_secs(1));
+    let a = first.state.config.clone().unwrap().position;
+    let second = control.handle_at(r#"{"version":1,"op":"status"}"#, start + Duration::from_secs(2));
+    let b = second.state.config.clone().unwrap().position;
+    let metres = crate::cells::Coordinate { latitude: a.latitude, longitude: a.longitude }
+        .distance_to(crate::cells::Coordinate { latitude: b.latitude, longitude: b.longitude });
+    assert!(metres > 0.0, "a moving session must cover ground");
+    // Drift is bounded by the configured radius, so the displacement stays near the speed.
+    assert!(
+        metres <= 11.0 + 2.0 * 2.0_f64.sqrt() + 1.0,
+        "displacement {metres}m does not match the reported speed {}m/s",
+        a.speed
+    );
+    // With realism off the delivered speed is exactly the commanded one.
+    let mut plain = Control::default();
+    assert!(plain.handle_at(&static_start(), Instant::now()).ok);
+    assert!(plain.handle(r#"{"version":1,"op":"drive","speed":10,"bearing":0}"#).ok);
+    assert_eq!(
+        plain.handle(r#"{"version":1,"op":"status"}"#).state.config.unwrap().position.speed,
+        10.0
+    );
+}
+
+#[test]
+fn a_stationary_session_shows_drift_without_accumulating_distance_or_speed() {
+    let mut control = Control::default();
+    let start = Instant::now();
+    assert!(
+        control
+            .handle_at(
+                r#"{"version":1,"op":"set_realism","config":{"enabled":true,"seed":11,"drift_radius_m":20,"speed_variation":0.5}}"#,
+                start
+            )
+            .ok
+    );
+    assert!(control.handle_at(&static_start(), start).ok);
+    let mut points = Vec::new();
+    for step in 0..40 {
+        let at = start + Duration::from_millis(250 * step);
+        let state = control.handle_at(r#"{"version":1,"op":"status"}"#, at);
+        let position = state.state.config.clone().unwrap().position;
+        // A static session never declares movement, whatever the drift does to the coordinates.
+        assert_eq!(position.speed, 0.0, "a static session reported movement");
+        points.push(crate::cells::Coordinate {
+            latitude: position.latitude,
+            longitude: position.longitude,
+        });
+    }
+    // Drift is bounded by its radius and does not walk away from the anchor.
+    let anchor = crate::cells::Coordinate { latitude: 31.0, longitude: 121.0 };
+    let furthest = points.iter().map(|point| anchor.distance_to(*point)).fold(0.0, f64::max);
+    assert!(furthest <= 20.0 + 1e-6, "drift reached {furthest}m");
+    // The point-to-point wander is observation error, not travel: it stays within a small multiple
+    // of the drift radius instead of growing with the number of samples.
+    let wander: f64 = points.windows(2).map(|pair| pair[0].distance_to(pair[1])).sum();
+    assert!(wander <= 5.0 * 20.0, "stationary drift accumulated {wander}m of apparent travel");
+    // Halving the sampling interval does not double the apparent travel, so the error is bounded
+    // rather than accumulating per sample.
+    let mut coarse = Control::default();
+    assert!(coarse.handle_at(&static_start(), start).ok);
+    let mut coarse_points = Vec::new();
+    for step in 0..10 {
+        let at = start + Duration::from_millis(1000 * step);
+        let state = coarse.handle_at(r#"{"version":1,"op":"status"}"#, at);
+        let position = state.state.config.unwrap().position;
+        coarse_points.push(crate::cells::Coordinate {
+            latitude: position.latitude,
+            longitude: position.longitude,
+        });
+    }
+    let coarse_wander: f64 =
+        coarse_points.windows(2).map(|pair| pair[0].distance_to(pair[1])).sum();
+    assert!(
+        coarse_wander <= 5.0 * 20.0,
+        "stationary drift accumulated {coarse_wander}m of apparent travel"
+    );
+}
+
+#[test]
 fn a_delivered_position_states_when_it_was_sampled_and_reading_it_again_does_not_refresh_it() {
     let mut control = Control::default();
     let start = control.handle_at(&static_start(), Instant::now());

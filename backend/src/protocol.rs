@@ -643,6 +643,9 @@ impl Control {
             if let Some(config) = &mut output {
                 let anchor = config.position.clone();
                 config.position = self.session.realism.output(&anchor, now);
+                // Speed and heading already describe the advanced position: movement scales them
+                // once, route playback derives them from the geometry. Drift must not alter them,
+                // because the reported speed has to match the distance the coordinates show.
                 if self.session.route.as_ref().is_some_and(|r| r.plan().geometry.is_some()) {
                     config.position.latitude = anchor.latitude;
                     config.position.longitude = anchor.longitude;
