@@ -44,7 +44,13 @@ internal class LocationChecks(private val manager: LocationManager, private val 
                 if (provider in manager.allProviders) providers.add(provider)
             }
         }
-        destination.writeText("")
+        // The app states when its own collection began. A device test that measured from its own
+        // launch would otherwise count this app's startup as a late delivery.
+        destination.writeText(
+            "{\"event\":\"collection_start\",\"received_ms\":" +
+                SystemClock.elapsedRealtime() +
+                "}\n"
+        )
         try {
             for (provider in providers) {
                 val listener = LocationListener { fix ->

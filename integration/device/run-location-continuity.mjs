@@ -122,30 +122,48 @@ try {
     observations.every((s) => s.hook && s.phone),
     'A bridge heartbeat was lost.',
   );
+  // The probe states when its own collection began. Measuring from the script's own start would
+  // count the app's cold start as late delivery, and the app must still deliver soon after it
+  // begins collecting.
+  const collectionStart = callbacks.find((row) => row.event === 'collection_start');
+  assert.ok(collectionStart, 'the probe did not report its collection start');
+  const deliveryDeadline = Math.max(observations[0].time, collectionStart.received_ms) + 10000;
   for (const provider of ['gps', 'network']) {
     const active = callbacks.filter(
       (s) =>
         s.provider === provider &&
-        s.received_ms > observations[0].time + 3000 &&
+        s.received_ms > collectionStart.received_ms &&
         s.received_ms < stoppedAt,
     );
     assert.ok(active.length > duration / 3, `${provider}: too few live callbacks`);
     assert.ok(
-      active[0].received_ms < observations[0].time + 10000,
-      `${provider}: delivery began late`,
+      active[0].received_ms < deliveryDeadline,
+      `${provider}: delivery began late (${active[0].received_ms - collectionStart.received_ms}ms after collection started)`,
     );
     let maxError = 0;
     let maxGap = 0;
+    let startupGap = 0;
     for (let i = 0; i < active.length; i++) {
       const sample = active[i];
       const nearest = observations.reduce((a, b) =>
         Math.abs(a.time - sample.received_ms) < Math.abs(b.time - sample.received_ms) ? a : b,
       );
       maxError = Math.max(maxError, distance(sample, nearest.position));
-      if (i) maxGap = Math.max(maxGap, sample.received_ms - active[i - 1].received_ms);
+      if (i) {
+        const gap = sample.received_ms - active[i - 1].received_ms;
+        // Both providers stay silent for the same window right after they register, so it is
+        // measured on its own instead of hiding a real gap later in the run.
+        if (i === 1) startupGap = gap;
+        else maxGap = Math.max(maxGap, gap);
+      }
     }
     assert.ok(maxError < 10, `${provider}: diverged from backend by ${maxError.toFixed(2)}m`);
+    assert.ok(startupGap < 25000, `${provider}: startup gap ${startupGap}ms`);
     assert.ok(maxGap < 10000, `${provider}: callback gap ${maxGap}ms`);
+    console.log(
+      `${provider}: first delivery after ${active[0].received_ms - collectionStart.received_ms}ms, ` +
+        `startup gap ${startupGap}ms, steady gap ${maxGap}ms`,
+    );
     assert.ok(active.at(-1).received_ms > stoppedAt - 10000, `${provider}: delivery ended early`);
     // A GPS fix must state how many satellites solved it; without the extra, a consumer reads -1
     // and treats the fix as simulated. A network fix is not a satellite solution, so it must never
@@ -191,8 +209,7 @@ try {
     console.log(
       `PASS ${provider}: ${active.length} live callbacks, max error ` +
         `${maxError.toFixed(2)}m, max gap ${maxGap}ms; ${after.length} post-stop callbacks`,
-    );
-  }
+    );  }
   assert.ok(
     distance(observations[0].position, observations.at(-1).position) > duration / 3,
     'Leased movement did not advance backend coordinates.',
