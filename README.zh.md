@@ -39,6 +39,8 @@ justlocation route --help                              # 查看路线命令
 
 实测地点及其基站／Wi-Fi 环境，以及模拟定位中的卫星字段：[地点用法](docs/places.md)。
 
+定位采集与离线时间轴报告：[采集与重放](docs/captures.md)。
+
 ## 构建
 
 - Node.js 22.12+

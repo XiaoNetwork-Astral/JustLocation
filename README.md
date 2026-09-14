@@ -39,6 +39,8 @@ Portable data, category selection and restore previews: [backups](docs/backups.m
 
 Measured places with their cells and Wi-Fi, and the satellite field on simulated fixes: [places](docs/places.md).
 
+Location captures and the offline timeline report: [captures](docs/captures.md).
+
 ## Build
 
 - Node.js 22.12+
