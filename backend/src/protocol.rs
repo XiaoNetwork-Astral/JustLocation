@@ -34,7 +34,7 @@ pub(crate) mod storage;
 #[cfg(test)]
 mod tests;
 
-pub use message::{CellQuery, RecordProgress, RecordedTrack, Response, State};
+pub use message::{CellQuery, MotionOutput, RecordProgress, RecordedTrack, Response, State};
 use message::{Command, Request};
 use storage::Stored;
 
@@ -89,6 +89,11 @@ pub struct Control {
     step_seen: Option<Instant>,
     step_installed: bool,
     step_events: u64,
+    /// Raw motion state the bridge repeats to the sensor channel, last reported by the phone.
+    motion_sensors: bool,
+    motion_cadence: f64,
+    motion_speed: f64,
+    motion_bearing: f64,
     /// Wall-clock instant the current position was computed, reported so a consumer can tell a
     /// fresh fix from a cached one.
     position_sampled_ms: Option<u64>,
@@ -311,10 +316,32 @@ impl Control {
                 }
                 Ok(())
             }
-            Command::StepHookStatus { installed, events } => {
+            Command::StepHookStatus {
+                installed,
+                events,
+                motion_sensors,
+                motion_cadence,
+                motion_speed,
+                motion_bearing,
+            } => {
+                // Invalid motion values are refused instead of being forwarded to the sensor
+                // channel, which would produce impossible raw samples.
+                for (name, value, maximum) in [
+                    ("cadence", motion_cadence, 50.0),
+                    ("speed", motion_speed, 1000.0),
+                    ("bearing", motion_bearing, 360.0),
+                ] {
+                    if !value.is_finite() || value < 0.0 || value > maximum {
+                        return Err(format!("invalid step motion {name}"));
+                    }
+                }
                 self.step_seen = Some(Instant::now());
                 self.step_installed = installed;
                 self.step_events = events;
+                self.motion_sensors = motion_sensors;
+                self.motion_cadence = motion_cadence;
+                self.motion_speed = motion_speed;
+                self.motion_bearing = motion_bearing;
                 Ok(())
             }
             Command::SetWifi { config } => {
@@ -652,6 +679,25 @@ impl Control {
                 }
             }
         }
+        // The raw sensor channel repeats the motion state of the delivered position: its cadence is
+        // the same rate that advances the step count, and its samples come from one model, so the
+        // six axes cannot contradict the coordinates or the steps.
+        let motion_output = (self.session.steps.motion_sensors
+            && self.session.steps.enabled
+            && self.session.engine.is_running())
+        .then(|| {
+            let speed = output.as_ref().map_or(0.0, |config| config.position.speed);
+            let bearing = output.as_ref().map_or(0.0, |config| config.position.bearing);
+            let cadence = self.session.steps.rate(true, speed);
+            let sample = crate::steps::motion_sample(speed, cadence, bearing, 0.0);
+            MotionOutput {
+                cadence,
+                speed,
+                bearing,
+                accelerometer: sample.accelerometer.map(f64::from),
+                gyroscope: sample.gyroscope.map(f64::from),
+            }
+        });
         let hook_connected =
             self.hook_seen_at.is_some_and(|time| time.elapsed() < Duration::from_secs(3));
         let phone_connected =
@@ -770,6 +816,8 @@ impl Control {
                     None
                 },
                 active_modem_count: if phone_connected { self.active_modem_count } else { None },
+                // The channel is only offered while the bridge that delivers it is alive.
+                motion_output: if hook_connected { motion_output } else { None },
             },
         }
     }

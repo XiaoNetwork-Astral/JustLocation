@@ -105,6 +105,15 @@ pub(super) enum Command {
     StepHookStatus {
         installed: bool,
         events: u64,
+        /// Motion state the raw sensor channel has to reproduce. Older bridges omit these fields.
+        #[serde(default)]
+        motion_sensors: bool,
+        #[serde(default)]
+        motion_cadence: f64,
+        #[serde(default)]
+        motion_speed: f64,
+        #[serde(default)]
+        motion_bearing: f64,
     },
     /// Collect real positions without producing simulated output.
     RecordStart,
@@ -241,8 +250,21 @@ pub struct State {
     pub phone_connected: bool,
     pub detected_subscriptions: Option<Vec<DetectedSubscription>>,
     pub active_modem_count: Option<u8>,
+    /// Raw motion output the bridge has to reproduce, absent while the channel is off or stale.
+    pub motion_output: Option<MotionOutput>,
 }
 
+/// One motion state for the raw sensor channel, taken from the state that already drives the
+/// position and the step count so the six-axis output cannot disagree with them.
+#[derive(Serialize)]
+pub struct MotionOutput {
+    pub cadence: f64,
+    pub speed: f64,
+    pub bearing: f64,
+    /// Android device axes and units are documented with the model that produces the samples.
+    pub accelerometer: [f64; 3],
+    pub gyroscope: [f64; 3],
+}
 #[derive(Serialize)]
 pub struct Response {
     pub version: u32,

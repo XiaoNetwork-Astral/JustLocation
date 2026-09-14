@@ -252,6 +252,51 @@ fn step_counters_survive_restart_and_disk_failure_cannot_prevent_stop() {
 }
 
 #[test]
+fn the_raw_motion_channel_mirrors_the_delivered_motion_state() {
+    let mut control = Control::default();
+    let now = Instant::now();
+    assert!(control.handle_at(&static_start(), now).ok);
+    // The channel is only offered while the bridge that would deliver it is alive.
+    assert!(
+        control
+            .handle(
+                r#"{"version":1,"op":"hook_status","installed":true,"gnss":false,"nmea":false,"cell_callbacks":false,"virtual_sim_callbacks":false,"wifi_scan":false,"wifi_connection":false,"wifi_calls":0,"gnss_raw":false}"#
+            )
+            .ok
+    );
+    // Step events alone do not offer a raw sensor channel.
+    assert!(control.handle(r#"{"version":1,"op":"set_steps","config":{"enabled":true,"cadence":2.0,"movement_linked":true,"stride_m":0.75,"daily_reset":false}}"#).ok);
+    assert!(control.handle(r#"{"version":1,"op":"status"}"#).state.motion_output.is_none());
+    // Turning the raw channel on offers gravity while standing still: no gait, no rotation.
+    assert!(control.handle(r#"{"version":1,"op":"set_steps","config":{"enabled":true,"cadence":2.0,"movement_linked":true,"stride_m":0.75,"daily_reset":false,"motion_sensors":true}}"#).ok);
+    let idle = control.handle(r#"{"version":1,"op":"status"}"#).state.motion_output.unwrap();
+    assert_eq!(idle.cadence, 0.0);
+    assert_eq!(idle.speed, 0.0);
+    assert!((idle.accelerometer[1] - crate::steps::GRAVITY).abs() < 1e-6);
+    assert_eq!(idle.gyroscope, [0.0, 0.0, 0.0]);
+    // Movement reaches the raw channel: cadence follows the speed and stride, and the sample is a
+    // gait rather than a standstill.
+    assert!(control.handle(r#"{"version":1,"op":"drive","speed":1.5,"bearing":90}"#).ok);
+    let moving = control.handle(r#"{"version":1,"op":"status"}"#).state.motion_output.unwrap();
+    assert_eq!(moving.speed, 1.5);
+    assert_eq!(moving.bearing, 90.0);
+    assert!((moving.cadence - 2.0).abs() < 1e-9, "cadence {}", moving.cadence);
+    assert!(
+        (moving.accelerometer[1] - crate::steps::GRAVITY).abs() > 1e-6
+            || moving.accelerometer[0].abs() > 1e-6,
+        "a moving device must not report a pure standstill"
+    );
+    // The channel disappears when the step simulation is switched off.
+    assert!(control.handle(r#"{"version":1,"op":"set_steps","config":{"enabled":false,"cadence":2.0,"movement_linked":true,"stride_m":0.75,"daily_reset":false,"motion_sensors":true}}"#).ok);
+    assert!(control.handle(r#"{"version":1,"op":"status"}"#).state.motion_output.is_none());
+    // Invalid motion values from the bridge are refused instead of producing impossible samples.
+    let invalid = control.handle(
+        r#"{"version":1,"op":"step_hook_status","installed":true,"events":1,"motion_cadence":-1.0}"#,
+    );
+    assert!(!invalid.ok);
+}
+
+#[test]
 fn a_delivered_moving_fix_reports_the_speed_and_heading_its_coordinates_show() {
     let mut control = Control::default();
     let start = Instant::now();
