@@ -67,6 +67,8 @@ node build.mjs test:android # Android JVM tests
 node build.mjs help         # All build and test commands
 ```
 
+Implemented work that still needs a device, with the command for each step: [remaining verification](docs/roadmap.md).
+
 ## Credits
 
 Built with the following projects:

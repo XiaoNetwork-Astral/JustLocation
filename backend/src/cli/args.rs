@@ -472,6 +472,9 @@ pub struct StepArgs {
     pub stride_m: Option<f64>,
     #[arg(long)]
     pub daily_reset: Option<bool>,
+    /// Generate accelerometer and gyroscope events from the same motion as the steps.
+    #[arg(long)]
+    pub motion_sensors: Option<bool>,
 }
 #[derive(Subcommand)]
 pub enum RealismCommand {

@@ -28,6 +28,23 @@ fn json_output(output: Output) -> Value {
 }
 
 #[test]
+fn the_step_channel_switch_is_reachable_from_the_command_line() {
+    // The raw six-axis channel is only usable if it can be switched on without editing a config
+    // file by hand, so the flag is checked through the real binary's help output.
+    let directory =
+        std::env::temp_dir().join(format!("justlocation-cli-steps-{}", std::process::id()));
+    fs::create_dir_all(&directory).unwrap();
+    let output = run(&directory, &["steps", "set", "--help"], None);
+    assert!(output.status.success());
+    let help = String::from_utf8_lossy(&output.stdout);
+    for flag in ["--enabled", "--cadence", "--movement-linked", "--stride-m", "--daily-reset",
+        "--motion-sensors"] {
+        assert!(help.contains(flag), "steps set is missing {flag}:\n{help}");
+    }
+    fs::remove_dir_all(&directory).unwrap();
+}
+
+#[test]
 fn long_gpx_and_json_preserve_all_points_and_segments_in_small_catalogs() {
     let directory =
         std::env::temp_dir().join(format!("justlocation-cli-long-{}", std::process::id()));
