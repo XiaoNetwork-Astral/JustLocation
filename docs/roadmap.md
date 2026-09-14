@@ -27,7 +27,9 @@ SDK has to be supplied as an artifact before that comparison exists.
 ## Phase 9.5 — raw motion sensors
 
 Implemented: the six-axis model, the `motion_sensors` switch, the bridge pass-through and native
-event synthesis. Verified on the host: the model's physics and its coupling to the step cadence.
+event synthesis. Verified on the host: the model's physics and its coupling to the step cadence, and
+now also the state machine's routing and restore paths through `justlocation_step_state_probe`,
+which the device test run executes and must pass.
 
 ```sh
 # Enable the channel on the device, then subscribe from an ordinary app.
