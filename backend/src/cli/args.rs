@@ -257,8 +257,27 @@ pub enum PlaceCommand {
     },
     Start {
         id: String,
+        /// Keep current cells, apply saved cells, or explicitly clear them.
+        #[arg(long, value_enum, default_value = "keep")]
+        cells: crate::place::AttachmentAction,
+        /// Keep current Wi-Fi, apply saved targets, or explicitly clear them.
+        #[arg(long, value_enum, default_value = "keep")]
+        wifi: crate::place::AttachmentAction,
         #[command(flatten)]
         scope: ScopeArgs,
+    },
+    /// Save one measured place with its real current environment; never starts the simulation.
+    Collect {
+        name: String,
+        /// Snapshot written by the probe app; defaults to launching a fresh on-device capture.
+        #[command(flatten)]
+        file: FileInput,
+        /// Do not store the measured cells with the place.
+        #[arg(long)]
+        without_cells: bool,
+        /// Do not store the measured Wi-Fi records with the place.
+        #[arg(long)]
+        without_wifi: bool,
     },
     Rename {
         id: String,

@@ -82,12 +82,36 @@ class ChannelCheckActivity : Activity() {
         val movementOnly = intent?.getBooleanExtra("movement_only", false) == true
         val continuityOnly = intent?.getBooleanExtra("continuity_only", false) == true
         val gnssOnly = intent?.getBooleanExtra("gnss_only", false) == true
+        val envOnly = intent?.getBooleanExtra("env_only", false) == true
         val gnssDuration = intent?.getLongExtra("gnss_duration_ms", 65000) ?: 65000
         val permission =
             if (stepsOnly) Manifest.permission.ACTIVITY_RECOGNITION
             else Manifest.permission.ACCESS_FINE_LOCATION
         if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(permission), 1)
+            return
+        }
+        if (envOnly) {
+            summary.text = "正在采集真实环境…"
+            output.text = ""
+            val context = applicationContext
+            val destination = File(filesDir, ENVIRONMENT_SNAPSHOT)
+            worker.execute {
+                val text =
+                    try {
+                        EnvironmentCollector(context, handler).collect(destination)
+                        destination.readText()
+                    } catch (error: Throwable) {
+                        Log.w(TAG, "environment collection failed", error)
+                        "environment collection failed: $error"
+                    }
+                handler.post {
+                    if (!isDestroyed) {
+                        summary.text = "环境采集完成"
+                        output.text = text
+                    }
+                }
+            }
             return
         }
         if (continuityOnly) {
@@ -193,5 +217,6 @@ class ChannelCheckActivity : Activity() {
         const val BEGIN = "CHECK_REPORT_BEGIN"
         const val END = "CHECK_REPORT_END"
         const val EXTRA_AUTORUN = "autorun"
+        const val ENVIRONMENT_SNAPSHOT = "environment-snapshot.json"
     }
 }

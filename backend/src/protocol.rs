@@ -229,6 +229,7 @@ impl Control {
         let mutates_config = matches!(
             request.command,
             Command::Start { .. }
+                | Command::StartPlace { .. }
                 | Command::SetScope { .. }
                 | Command::StartRoute { .. }
                 | Command::Update { .. }
@@ -434,6 +435,38 @@ impl Control {
                 self.wifi_hook_calls = wifi_calls;
                 self.gnss_raw_installed = gnss_raw;
                 self.gnss_raw_detail = gnss_raw_detail;
+                Ok(())
+            }
+            Command::StartPlace { config, environment } => {
+                if self.records.active.is_some() {
+                    return Err("stop recording before starting the simulation".into());
+                }
+                environment.validate()?;
+                let mut next = self.session.clone();
+                next.engine.stop();
+                next.scopes.position = config.scope.clone();
+                next.engine.start(config).map_err(str::to_owned)?;
+                next.route = None;
+                next.motion = None;
+                next.realism.reset(now);
+                use crate::place::Change;
+                match environment.cells {
+                    Change::Keep => {}
+                    Change::Apply(region) => {
+                        next.cell_region = Some(region);
+                        next.telephony.cells_enabled = true;
+                    }
+                    Change::Clear => {
+                        next.cell_region = None;
+                        next.telephony.cells_enabled = false;
+                    }
+                }
+                match environment.wifi {
+                    Change::Keep => {}
+                    Change::Apply(wifi) => next.wifi = wifi,
+                    Change::Clear => next.wifi = WifiConfig::default(),
+                }
+                self.session = next;
                 Ok(())
             }
             Command::Start { config } => {

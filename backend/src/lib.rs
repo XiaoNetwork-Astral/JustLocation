@@ -18,6 +18,7 @@ pub mod jitter;
 pub mod maps;
 pub mod motion;
 pub mod operators;
+pub mod place;
 pub mod protocol;
 pub mod realism;
 pub mod record;

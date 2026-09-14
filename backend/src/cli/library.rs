@@ -65,24 +65,34 @@ impl Runtime {
                     &crate::scode::encode(place(&library, &id)?)?,
                 );
             }
-            PlaceCommand::Start { id, scope } => {
+            PlaceCommand::Collect { name, file, without_cells, without_wifi } => {
+                valid_name(&name)?;
+                let text = if file.input == Path::new("-") {
+                    super::platform::collect_environment()?
+                } else {
+                    read_input(&file.input)?
+                };
+                let snapshot = crate::place::Snapshot::parse(&text)?;
+                let address = crate::place::collected(
+                    &snapshot,
+                    &name,
+                    &crate::scode::new_id()?,
+                    !without_cells,
+                    !without_wifi,
+                )?;
+                self.edit_library(|library| {
+                    let value = json!(address);
+                    library.places.push(address);
+                    Ok(value)
+                })?
+            }
+            PlaceCommand::Start { id, scope, cells, wifi } => {
                 let library = self.library()?;
                 let address = place(&library, &id)?;
-                let mut position = address.position()?;
-                for (key, target) in [
-                    ("accuracy", &mut position.accuracy),
-                    ("speed", &mut position.speed),
-                    ("bearing", &mut position.bearing),
-                ] {
-                    if let Some(value) = address.0.get(key) {
-                        *target = value
-                            .as_f64()
-                            .ok_or_else(|| format!("address.{key} must be a number"))?;
-                    }
-                }
-                position.validate()?;
+                let position = crate::place::position(address)?;
+                let environment = crate::place::prepare(address, cells, wifi)?;
                 self.request(
-                    json!({"op":"start","config":{"position":position,"scope":self.scope(scope, crate::scope::Feature::Position)?}}),
+                    json!({"op":"start_place","config":{"position":position,"scope":self.scope(scope, crate::scope::Feature::Position)?},"environment":environment}),
                 )?
             }
             PlaceCommand::Rename { id, name } => {

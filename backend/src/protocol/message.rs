@@ -30,6 +30,11 @@ pub(super) enum Command {
     Start {
         config: Config,
     },
+    StartPlace {
+        config: Config,
+        #[serde(default)]
+        environment: crate::place::Environment,
+    },
     StartRoute {
         route: Route,
         scope: Scope,

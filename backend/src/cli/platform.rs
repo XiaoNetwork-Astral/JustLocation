@@ -2,9 +2,12 @@ use super::*;
 use std::{
     fs,
     process::{Command as Process, Stdio},
-    time::Duration,
+    time::{Duration, Instant},
 };
 const PACKAGE: &str = "me.idk.justlocation.joystick";
+const PROBE: &str = "me.idk.justlocation.probe";
+const PROBE_SNAPSHOT: &str = "environment-snapshot.json";
+const PROBE_TIMEOUT: Duration = Duration::from_secs(40);
 
 fn android() -> Result<()> {
     if cfg!(target_os = "android") {
@@ -152,6 +155,91 @@ pub(super) fn record(action: &str) -> Result<PathBuf> {
     }
     Ok(report)
 }
+/// Ask the probe app for one measured environment snapshot and return its JSON text.
+/// The probe is a separate normal app: this only launches its collection activity, grants the
+/// runtime permissions the capture needs and reads the file it writes.
+pub(super) fn collect_environment() -> Result<String> {
+    android()?;
+    let user = am(&["get-current-user"])?
+        .trim()
+        .parse::<u32>()
+        .map_err(|_| "cannot determine the current Android user")?
+        .to_string();
+    let path = PathBuf::from(format!("/data/user/{user}/{PROBE}/files/{PROBE_SNAPSHOT}"));
+    match fs::remove_file(&path) {
+        Ok(()) => {}
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e.to_string()),
+    }
+    if probe_installed(user.as_str()).is_err() {
+        return Err(format!("the probe app {PROBE} is not installed"));
+    }
+    for permission in [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_WIFI_STATE",
+        "android.permission.READ_PHONE_STATE",
+    ] {
+        // A permission the platform refuses is reported by the snapshot itself.
+        let _ = Process::new("pm")
+            .args(["grant", "--user", &user, PROBE, permission])
+            .output()
+            .map_err(|e| e.to_string())?;
+    }
+    // The probe collects from onCreate, so a leftover activity would be resumed without
+    // collecting anything; stop the app first and always start a fresh instance.
+    let _ = Process::new("am")
+        .args(["force-stop", PROBE])
+        .output()
+        .map_err(|e| e.to_string())?;
+    am(&[
+        "start",
+        "-W",
+        "-n",
+        &format!("{PROBE}/.ChannelCheckActivity"),
+        "--ez",
+        "autorun",
+        "true",
+        "--ez",
+        "env_only",
+        "true",
+    ])?;
+    // The probe waits up to 12s for a fresh fix, so allow for its own timeout plus startup.
+    let start = Instant::now();
+    while start.elapsed() < PROBE_TIMEOUT {
+        if path.is_file() {
+            let text = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+            // The probe writes through a temporary file, so a partial read is unexpected; an
+            // unreadable snapshot is reported instead of being treated as a capture.
+            if !text.trim().is_empty() {
+                return Ok(text);
+            }
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    Err(format!(
+        "the probe did not write {PROBE_SNAPSHOT} within {}s; unlock the device, keep the probe installed and check that location is enabled",
+        PROBE_TIMEOUT.as_secs()
+    ))
+}
+
+/// `pm list packages` is the supported existence check; `am list` does not exist on Android 15.
+fn probe_installed(user: &str) -> Result<()> {
+    let output = Process::new("pm")
+        .args(["list", "packages", "--user", user, PROBE])
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_owned());
+    }
+    if String::from_utf8_lossy(&output.stdout).lines().any(|line| line.trim() == format!("package:{PROBE}"))
+    {
+        Ok(())
+    } else {
+        Err("not installed".into())
+    }
+}
+
 pub(super) fn discard_recording() -> Result<()> {
     am(&["stopservice", "-n", &format!("{PACKAGE}/.RouteRecordService")])?;
     Ok(())
