@@ -297,6 +297,73 @@ fn the_raw_motion_channel_mirrors_the_delivered_motion_state() {
 }
 
 #[test]
+fn laps_roll_over_without_stalling_the_position_or_the_count() {
+    let mut control = Control::default();
+    let start = Instant::now();
+    assert!(control.handle_at(&set_steps(true), start).ok);
+    // A hundred-metre route at ten metres per second: ten seconds of travel, then a five-second
+    // gap, then the next lap from the start.
+    let route = json!({"version":1,"op":"start_route",
+        "scope":{"mode":"apps","packages":["example.selected"]},
+        "route":{"points":[
+            Position::new(31.0, 121.0),
+            Position::new(31.0009, 121.0)
+        ],"speed":10.0,"repeat_count":3,"repeat_delay":5.0}})
+    .to_string();
+    assert!(control.handle_at(&route, start).ok);
+
+    let mut previous_steps = 0;
+    let mut previous_lap = 0;
+    let mut longest_pause = 0.0_f64;
+    let mut since_count = 0.0_f64;
+    let mut saw_gap = false;
+    // Thirty-two seconds covers two full laps plus the gap between them.
+    for second in 1..=32 {
+        let state = control.handle_at(
+            r#"{"version":1,"op":"status"}"#,
+            start + Duration::from_secs_f64(second as f64),
+        );
+        let route = state.state.route.as_ref().unwrap();
+        let steps = state.state.step_count.total;
+        // The count never goes backwards and never jumps by more than the cadence allows.
+        assert!(steps >= previous_steps, "the step count dropped at {second}s");
+        assert!(steps - previous_steps <= 2, "the count jumped by {} at {second}s", steps - previous_steps);
+        if steps == previous_steps {
+            since_count += 1.0;
+            longest_pause = longest_pause.max(since_count);
+        } else {
+            since_count = 0.0;
+        }
+        if route.waiting_seconds > 0.0 {
+            saw_gap = true;
+        } else if since_count == 0.0 {
+            // A moving second advances the lap distance; the whole point is that a lap boundary does
+            // not freeze it while the route is still playing.
+            previous_lap = route.lap;
+        }
+        previous_steps = steps;
+    }
+    assert!(previous_steps > 0, "three laps must count steps");
+    assert!(saw_gap, "the repeat gap between laps was never observed");
+    // Counting may only pause for the configured gap, not for a whole lap or beyond.
+    assert!(
+        longest_pause <= 6.0,
+        "the count stalled for {longest_pause}s, longer than the repeat gap"
+    );
+    assert!(previous_lap >= 2, "only {previous_lap} lap boundaries were reached in 32 seconds");
+
+    // Finish the route: after arrival nothing moves and nothing counts.
+    let arrived = control.handle_at(r#"{"version":1,"op":"status"}"#, start + Duration::from_secs(400));
+    assert!(arrived.state.route.as_ref().unwrap().completed);
+    let settled = control.handle_at(r#"{"version":1,"op":"status"}"#, start + Duration::from_secs(900));
+    assert_eq!(settled.state.step_count.total, arrived.state.step_count.total);
+    assert_eq!(
+        settled.state.config.clone().unwrap().position.latitude,
+        arrived.state.config.clone().unwrap().position.latitude
+    );
+}
+
+#[test]
 fn a_paused_route_keeps_its_distance_and_does_not_count_the_pause_as_movement() {
     let mut control = Control::default();
     let start = Instant::now();
