@@ -92,16 +92,19 @@ internal class LocationChecks(private val manager: LocationManager, private val 
     }
 
     private fun locationRow(event: String, provider: String, fix: Location?): JSONObject {
+        val received = SystemClock.elapsedRealtime()
         val row =
             JSONObject()
                 .put("event", event)
                 .put("provider", provider)
-                .put("received_ms", SystemClock.elapsedRealtime())
+                .put("received_ms", received)
                 .put("present", fix != null)
         if (fix != null) {
             row.put("fix_provider", fix.provider)
                 .put("fix_time_ms", fix.time)
                 .put("fix_elapsed_ms", fix.elapsedRealtimeNanos / 1_000_000)
+                // How old the fix says it is, so a delivery cannot be mistaken for a new sample.
+                .put("fix_age_ms", received - fix.elapsedRealtimeNanos / 1_000_000)
                 .put("latitude", fix.latitude)
                 .put("longitude", fix.longitude)
                 .put("accuracy", fix.accuracy)

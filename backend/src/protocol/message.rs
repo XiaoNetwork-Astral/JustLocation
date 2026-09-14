@@ -193,6 +193,9 @@ pub struct State {
     pub realism: crate::realism::RealismConfig,
     pub requested_active: bool,
     pub config: Option<Config>,
+    /// Wall-clock time the current position was computed, absent when nothing is being delivered.
+    /// A consumer that reads the same position again must not treat it as newly sampled.
+    pub position_sampled_ms: Option<u64>,
     pub scopes: crate::scope::Scopes,
     pub hook_connected: bool,
     pub location_hook_ready: bool,

@@ -7,8 +7,11 @@ public final class SessionSnapshot {
     /**
      * The 20-second expiry window tolerates delayed socket round trips. Explicit stop responses
      * take effect on the next successful heartbeat without waiting for expiry.
+     *
+     * This is the one place the window is defined: a fix may only claim a sample age inside it,
+     * and a second copy of the value could drift away from the snapshot it describes.
      */
-    private static final long MAX_AGE_MS = 20_000;
+    static final long MAX_AGE_MS = 20_000;
     private final boolean active;
     private final boolean all;
     private final Set<String> packages;

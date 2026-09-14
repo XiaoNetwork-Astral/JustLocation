@@ -38,4 +38,35 @@ public class LocationSnapshotTest {
             assertTrue("speed " + speed + " produced " + count, count > 0);
         }
     }
+
+    @Test
+    public void aFixReportsItsSampleTimeInsteadOfTheReadTime() {
+        long sampled = 1_789_000_000_000L;
+        // Reading the same heartbeat twice must report one fix time, however late the read is.
+        assertEquals(sampled, LocationSnapshot.fixTime(sampled, sampled + 50));
+        assertEquals(sampled, LocationSnapshot.fixTime(sampled, sampled + 4_000));
+        // A heartbeat without a sample time falls back to the read time and never to zero.
+        assertEquals(sampled, LocationSnapshot.fixTime(null, sampled));
+        assertEquals(sampled, LocationSnapshot.fixTime(0L, sampled));
+        assertEquals(sampled, LocationSnapshot.fixTime(-1L, sampled));
+        // A sample older than the heartbeat window describes no delivered fix.
+        long now = sampled + SessionSnapshot.MAX_AGE_MS;
+        assertEquals(now, LocationSnapshot.fixTime(sampled, now));
+        // A clock step must not produce a fix from the future.
+        assertEquals(sampled, LocationSnapshot.fixTime(sampled + 5_000, sampled));
+    }
+
+    @Test
+    public void theMonotonicTimestampCarriesTheSameAgeAsTheFixTime() {
+        long sampled = 1_789_000_000_000L;
+        long now = sampled + 2_500;
+        long elapsed = 900_000_000_000L;
+        assertEquals(
+                elapsed - 2_500_000_000L, LocationSnapshot.fixElapsedNanos(sampled, now, elapsed));
+        // A freshly sampled position reports exactly the current monotonic clock.
+        assertEquals(elapsed, LocationSnapshot.fixElapsedNanos(now, now, elapsed));
+        // Repeated reads of one heartbeat stay identical.
+        assertEquals(LocationSnapshot.fixElapsedNanos(sampled, now, elapsed),
+                LocationSnapshot.fixElapsedNanos(sampled, now, elapsed));
+    }
 }

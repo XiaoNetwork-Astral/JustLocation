@@ -252,6 +252,34 @@ fn step_counters_survive_restart_and_disk_failure_cannot_prevent_stop() {
 }
 
 #[test]
+fn a_delivered_position_states_when_it_was_sampled_and_reading_it_again_does_not_refresh_it() {
+    let mut control = Control::default();
+    let start = control.handle_at(&static_start(), Instant::now());
+    assert!(start.ok);
+    let sampled = start.state.position_sampled_ms.expect("a started session reports a sample time");
+    assert!(sampled > 0);
+    // The same position read again keeps its sample time: a cache read is not a new fix.
+    let later = control.handle_at(r#"{"version":1,"op":"status"}"#, Instant::now());
+    assert_eq!(later.state.position_sampled_ms, Some(sampled));
+    // Leased movement produces a new position, so the sample time advances.
+    assert!(control.handle(r#"{"version":1,"op":"drive","speed":1.5,"bearing":90}"#).ok);
+    let moved = control.handle(r#"{"version":1,"op":"status"}"#);
+    let moved_at = moved.state.position_sampled_ms.expect("a moving session reports a sample time");
+    assert!(moved_at >= sampled);
+    // An explicit position change is a new sample as well.
+    assert!(
+        control
+            .handle(r#"{"version":1,"op":"update","position":{"latitude":31.5,"longitude":121.5,"altitude":0,"accuracy":5,"speed":0,"bearing":0}}"#)
+            .ok
+    );
+    let updated = control.handle(r#"{"version":1,"op":"status"}"#);
+    assert!(updated.state.position_sampled_ms.is_some());
+    // Nothing is being delivered after a stop, so there is no sample time to report.
+    assert!(control.handle(r#"{"version":1,"op":"stop"}"#).ok);
+    assert_eq!(control.handle(r#"{"version":1,"op":"status"}"#).state.position_sampled_ms, None);
+}
+
+#[test]
 fn recording_collects_points_and_hands_them_over_for_replay() {
     let mut control = Control::default();
     assert!(control.handle(r#"{"version":1,"op":"record_start"}"#).ok);

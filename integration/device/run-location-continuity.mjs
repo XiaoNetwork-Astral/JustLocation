@@ -151,6 +151,15 @@ try {
     // and treats the fix as simulated. A network fix is not a satellite solution, so it must never
     // claim one.
     const extras = active.map((s) => s.extras_satellites);
+    // A delivered fix must state its sample age instead of looking freshly produced by the read.
+    const ages = active.map((s) => s.fix_age_ms).filter((age) => Number.isFinite(age));
+    assert.ok(ages.length > 0, `${provider}: no fix reported a sample age`);
+    assert.ok(
+      ages.every((age) => age >= 0 && age <= 20_000),
+      `${provider}: sample age outside the heartbeat window (${Math.min(...ages)}..${Math.max(
+        ...ages,
+      )} ms)`,
+    );
     if (provider === 'gps') {
       assert.ok(
         extras.some((count) => count > 0),

@@ -14,11 +14,18 @@ final class LocationSnapshot {
     final float accuracy, speed, bearing;
     /** Missing satellite settings default to disabled. */
     final boolean gnssEnabled, nmeaEnabled;
+    /**
+     * Wall-clock time the backend computed this position, or null for a heartbeat that predates the
+     * field. Every read of one heartbeat reports the same sample time, so reading a position again
+     * cannot make it look newly sampled.
+     */
+    final Long sampledMs;
     LocationSnapshot(SessionSnapshot scope, JSONObject position, boolean gnssEnabled,
-            boolean nmeaEnabled) throws Exception {
+            boolean nmeaEnabled, Long sampledMs) throws Exception {
         this.scope = scope;
         this.gnssEnabled = gnssEnabled;
         this.nmeaEnabled = nmeaEnabled;
+        this.sampledMs = sampledMs;
         latitude = position.getDouble("latitude");
         longitude = position.getDouble("longitude");
         altitude = position.getDouble("altitude");
@@ -50,8 +57,44 @@ final class LocationSnapshot {
             gnssEnabled = gnss.optBoolean("gnss_enabled", false);
             nmeaEnabled = gnss.optBoolean("nmea_enabled", false);
         }
+        // A daemon without the field reports a fix time as unknown, never as "now".
+        Long sampledMs =
+                state.has("position_sampled_ms") && !state.isNull("position_sampled_ms")
+                        ? state.getLong("position_sampled_ms")
+                        : null;
+        if (sampledMs != null && sampledMs <= 0)
+            sampledMs = null;
         return new LocationSnapshot(selection.snapshot(SystemClock.elapsedRealtime()),
-                config.getJSONObject("position"), gnssEnabled, nmeaEnabled);
+                config.getJSONObject("position"), gnssEnabled, nmeaEnabled, sampledMs);
+    }
+
+    /**
+     * The fix time this heartbeat reports. Without a backend sample time, the fix is stamped when
+     * the heartbeat was received rather than when it happens to be read.
+     */
+    long fixTimeMs() {
+        return fixTime(sampledMs, System.currentTimeMillis());
+    }
+
+    /**
+     * A sample time is reused as-is, while a timestamp outside the heartbeat window is replaced by
+     * the read time: a position older than the snapshot that carries it cannot be delivered as a
+     * current fix, and a clock step must not turn into a fix from the future.
+     */
+    static long fixTime(Long sampledMs, long nowMs) {
+        if (sampledMs == null || sampledMs <= 0)
+            return nowMs;
+        long age = nowMs - sampledMs;
+        return age >= 0 && age < SessionSnapshot.MAX_AGE_MS ? sampledMs : nowMs;
+    }
+
+    /**
+     * Monotonic timestamp for the same sample. `Location.getElapsedRealtimeNanos` must stay
+     * comparable with `SystemClock.elapsedRealtimeNanos`, so the age of the sample is subtracted
+     * from the current monotonic clock.
+     */
+    static long fixElapsedNanos(long sampledMs, long nowMs, long elapsedNanos) {
+        return elapsedNanos + (sampledMs - nowMs) * 1_000_000L;
     }
 
     /**
@@ -82,11 +125,15 @@ final class LocationSnapshot {
         result.setAccuracy(accuracy);
         result.setSpeed(speed);
         result.setBearing(bearing);
+        // Both timestamps describe the sample, not the read: a consumer that asks again sees the
+        // same fix age instead of a fix that was just produced by their own query.
+        long sampled = fixTimeMs();
         long now = System.currentTimeMillis();
-        result.setTime(now);
-        result.setElapsedRealtimeNanos(SystemClock.elapsedRealtimeNanos());
+        result.setTime(sampled);
+        result.setElapsedRealtimeNanos(
+                fixElapsedNanos(sampled, now, SystemClock.elapsedRealtimeNanos()));
         if (carriesSatellites(provider, gnssEnabled))
-            extras(result, satelliteCount(latitude, longitude, altitude, speed, bearing, now));
+            extras(result, satelliteCount(latitude, longitude, altitude, speed, bearing, sampled));
         return result;
     }
 

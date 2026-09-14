@@ -18,6 +18,15 @@ use std::time::{Duration, Instant};
 pub const VERSION: u32 = 1;
 pub const MAX_FRAME: u64 = 65_536;
 
+/// Wall-clock milliseconds for sample times reported to consumers. Falling back to zero keeps the
+/// protocol working on a device without a sane clock instead of failing the request.
+fn wall_clock_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 mod message;
 #[cfg(test)]
 mod scope_tests;
@@ -80,6 +89,9 @@ pub struct Control {
     step_seen: Option<Instant>,
     step_installed: bool,
     step_events: u64,
+    /// Wall-clock instant the current position was computed, reported so a consumer can tell a
+    /// fresh fix from a cached one.
+    position_sampled_ms: Option<u64>,
 }
 
 impl Control {
@@ -89,6 +101,9 @@ impl Control {
         let elapsed = now.saturating_duration_since(from).as_secs_f64();
         let mut moving_seconds = 0.0;
         let mut speed = 0.0;
+        // A new position was computed for this response, so its sample time is this moment.
+        // Reading the same position again must not make it look newly sampled.
+        let mut sampled = false;
         if let Some(motion) = &mut self.session.motion {
             moving_seconds = motion.moving_seconds(from, now);
             let travelled = motion.travelled();
@@ -106,6 +121,7 @@ impl Control {
             } else {
                 0.0
             };
+            sampled = true;
         }
         if let Some(route) = &mut self.session.route {
             let travelled = route.travelled();
@@ -119,6 +135,10 @@ impl Control {
             } else {
                 0.0
             };
+            sampled = true;
+        }
+        if sampled {
+            self.position_sampled_ms = Some(wall_clock_ms());
         }
         self.step_updated = Some(now);
         let config = self.session.steps;
@@ -467,6 +487,7 @@ impl Control {
                     Change::Clear => next.wifi = WifiConfig::default(),
                 }
                 self.session = next;
+                self.position_sampled_ms = Some(wall_clock_ms());
                 Ok(())
             }
             Command::Start { config } => {
@@ -477,6 +498,7 @@ impl Control {
                 self.session.engine.start(config).map_err(str::to_owned)?;
                 self.session.scopes.position = scope;
                 self.session.realism.reset(now);
+                self.position_sampled_ms = Some(wall_clock_ms());
                 Ok(())
             }
             Command::StartRoute { route, scope } => {
@@ -497,6 +519,7 @@ impl Control {
                 self.session.scopes.route = scope;
                 self.session.route = Some(route);
                 self.session.realism.reset(now);
+                self.position_sampled_ms = Some(wall_clock_ms());
                 Ok(())
             }
             Command::PauseRoute | Command::ResumeRoute => {
@@ -512,6 +535,7 @@ impl Control {
                 }
                 self.session.engine.update_position(position).map_err(str::to_owned)?;
                 self.session.motion = None;
+                self.position_sampled_ms = Some(wall_clock_ms());
                 Ok(())
             }
             Command::Drive { speed, bearing } => {
@@ -537,6 +561,7 @@ impl Control {
                     ))
                     .map_err(str::to_owned)?;
                 self.session.motion = if speed == 0.0 { None } else { Some(motion) };
+                self.position_sampled_ms = Some(wall_clock_ms());
                 Ok(())
             }
             Command::Shutdown => {
@@ -648,6 +673,9 @@ impl Control {
             .virtual_sim_publication
             .borrow_mut()
             .update(telephony_output.as_ref(), &self.session.scopes.sim);
+        // The sample time belongs to a delivered position only.
+        let position_sampled_ms =
+            if self.session.engine.is_running() { self.position_sampled_ms } else { None };
         Response {
             version: VERSION,
             page: if error.is_none() { self.page.clone() } else { None },
@@ -657,6 +685,7 @@ impl Control {
             state: State {
                 requested_active: self.session.engine.is_running(),
                 config: output,
+                position_sampled_ms,
                 scopes: self.session.scopes.clone(),
                 realism: self.session.realism.config,
                 hook_connected,
