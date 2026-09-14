@@ -297,6 +297,70 @@ fn the_raw_motion_channel_mirrors_the_delivered_motion_state() {
 }
 
 #[test]
+fn a_paused_route_keeps_its_distance_and_does_not_count_the_pause_as_movement() {
+    let mut control = Control::default();
+    let start = Instant::now();
+    assert!(control.handle_at(&set_steps(true), start).ok);
+    // Two hundred metres northwards at two metres per second: a hundred seconds of travel.
+    assert!(control.handle_at(&route_start(&[(31.0, 121.0), (31.0018, 121.0)], 2.0), start).ok);
+    let played = control.handle_at(r#"{"version":1,"op":"status"}"#, start + Duration::from_secs(10));
+    assert!(
+        (played.state.route.as_ref().unwrap().distance - 20.0).abs() < 1.0,
+        "ten seconds at 2 m/s travelled {}m",
+        played.state.route.as_ref().unwrap().distance
+    );
+    assert!(played.state.step_count.total > 0, "a playing route must count steps");
+
+    // A pause holds the position, the distance and the count, however long it lasts. The pause and
+    // the first paused read happen at the same instant, so the interval between them is zero.
+    let paused = control.handle_at(r#"{"version":1,"op":"pause_route"}"#, start + Duration::from_secs(11));
+    assert!(paused.ok);
+    let travelled = paused.state.route.as_ref().unwrap().distance;
+    let steps = paused.state.step_count.total;
+    let paused = control.handle_at(r#"{"version":1,"op":"status"}"#, start + Duration::from_secs(11));
+    let held = paused.state.route.as_ref().unwrap();
+    assert!(held.paused);
+    assert!(
+        (held.distance - travelled).abs() < 0.01,
+        "a paused route moved from {travelled}m to {}m",
+        held.distance
+    );
+    let later = control.handle_at(r#"{"version":1,"op":"status"}"#, start + Duration::from_secs(60));
+    assert!(
+        (later.state.route.as_ref().unwrap().distance - travelled).abs() < 0.01,
+        "a paused route kept moving while the clock advanced"
+    );
+    assert_eq!(later.state.step_count.total, steps, "a paused route must not count steps");
+    assert_eq!(later.state.config.clone().unwrap().position.speed, 0.0);
+
+    // Resuming continues from where it stopped instead of jumping over the pause: fifty seconds
+    // later it has travelled the extra fifty seconds, not the ninety-nine that the clock advanced.
+    assert!(control.handle_at(r#"{"version":1,"op":"resume_route"}"#, start + Duration::from_secs(60)).ok);
+    let resumed = control.handle_at(r#"{"version":1,"op":"status"}"#, start + Duration::from_secs(110));
+    let after = resumed.state.route.as_ref().unwrap().distance;
+    let expected = travelled + 50.0 * 2.0;
+    assert!(
+        (after - expected).abs() < 2.0,
+        "resumed distance {after}m should be about {expected}m, so the pause was skipped"
+    );
+    assert!(resumed.state.step_count.total > steps, "a resumed route must count again");
+
+    // Arrival holds the position and stops both counting and movement.
+    let arrived = control.handle_at(r#"{"version":1,"op":"status"}"#, start + Duration::from_secs(400));
+    let arrival = arrived.state.route.as_ref().unwrap();
+    assert!(arrival.completed, "the route should have finished");
+    let settled = control.handle_at(r#"{"version":1,"op":"status"}"#, start + Duration::from_secs(900));
+    assert_eq!(
+        settled.state.step_count.total, arrived.state.step_count.total,
+        "a finished route must not keep counting"
+    );
+    assert_eq!(
+        settled.state.config.clone().unwrap().position.longitude,
+        arrived.state.config.clone().unwrap().position.longitude
+    );
+}
+
+#[test]
 fn steps_follow_the_same_motion_as_the_position_and_stop_when_it_does() {
     let mut control = Control::default();
     let start = Instant::now();
